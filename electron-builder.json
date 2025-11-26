@@ -1,0 +1,30 @@
+{
+    "appId": "com.jam.desktop",
+    "files": [
+        "dist-electron",
+        "dist-react"
+    ],
+    "icon": "desktopIcon.png",
+    "mac": {
+        "target": "dmg"
+    },
+    "linux": {
+        "target": "AppImage",
+        "category": "Audio"
+    },
+    "win": {
+        "target": [
+            {
+                "target": "msi",
+                "arch": [
+                    "x64"
+                ]
+            }
+        ]
+    },
+    "msi": {
+        "oneClick": false,
+        "perMachine": false,
+        "runAfterFinish": true
+    }
+}
