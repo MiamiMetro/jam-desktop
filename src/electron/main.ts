@@ -6,6 +6,8 @@ app.on('ready', () => {
     const mainWindow = new BrowserWindow({
         width: 1280,
         height: 720,
+        minWidth: 384,
+        minHeight: 216,
     });
     if (isDev()) {
         mainWindow.loadURL('http://localhost:5123');
