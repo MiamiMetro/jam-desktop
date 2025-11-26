@@ -25,7 +25,7 @@ export default function Home() {
 
   return (
     <div className="flex flex-col items-center justify-center py-16">
-      <div className="flex gap-8 mb-8">
+      <div className="flex gap-8 mb-4">
         <a
           href="https://react.dev"
           target="_blank"
@@ -35,7 +35,7 @@ export default function Home() {
         </a>
       </div>
 
-      <h1 className="text-4xl font-bold mb-12">Vite + React</h1>
+      <h1 className="text-4xl font-bold mb-4">Vite + React</h1>
 
       <div className="bg-gray-800 rounded-lg p-8 mb-8 shadow-xl flex flex-col items-center max-w-md">
         <button
@@ -52,7 +52,7 @@ export default function Home() {
           and save to test HMR
         </p>
 
-        <div className="mt-6 w-full border-t border-gray-700 pt-6">
+        <div className="mt-4 w-full border-t border-gray-700 pt-6">
  
           {isLoading && (
             <p className="text-blue-400 text-center">Loading todo...</p>
@@ -78,10 +78,6 @@ export default function Home() {
           )}
         </div>
       </div>
-
-      <p className="text-gray-500 text-sm">
-        Click on the React logo to learn more
-      </p>
     </div>
   );
 }
