@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import reactLogo from "@/assets/react.svg";
+import { Button } from "@/components/ui/button";
+import { Sun, Moon } from "lucide-react";
 
 interface Todo {
   userId: number;
@@ -11,6 +13,45 @@ interface Todo {
 
 export default function Home() {
   const [count, setCount] = useState(0);
+  const [theme, setTheme] = useState<"light" | "dark" | "system">(() => {
+    const stored = localStorage.getItem("theme") as "light" | "dark" | "system" | null;
+    return stored || "system";
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const applyTheme = () => {
+      if (theme === "system") {
+        const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        root.classList.toggle("dark", systemTheme === "dark");
+      } else {
+        root.classList.toggle("dark", theme === "dark");
+      }
+    };
+
+    applyTheme();
+
+    if (theme === "system") {
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      const handleChange = () => applyTheme();
+      mediaQuery.addEventListener("change", handleChange);
+      return () => mediaQuery.removeEventListener("change", handleChange);
+    }
+  }, [theme]);
+
+  const getCurrentTheme = () => {
+    if (theme === "system") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    return theme;
+  };
+
+  const handleThemeToggle = () => {
+    const currentTheme = getCurrentTheme();
+    const newTheme = currentTheme === "dark" ? "light" : "dark";
+    setTheme(newTheme);
+    localStorage.setItem("theme", newTheme);
+  };
 
   const { data, isLoading, error } = useQuery<Todo>({
     queryKey: ["todo"],
@@ -44,6 +85,25 @@ export default function Home() {
         >
           count is {count}
         </button>
+        {/* Debug Theme Toggle Button */}
+        <Button
+          onClick={handleThemeToggle}
+          variant="outline"
+          size="sm"
+          className="flex items-center gap-2 mt-4"
+        >
+          {getCurrentTheme() === "dark" ? (
+            <>
+              <Sun className="h-4 w-4" />
+              Light
+            </>
+          ) : (
+            <>
+              <Moon className="h-4 w-4" />
+              Dark
+            </>
+          )}
+        </Button>
         <p className="mt-4 text-gray-400">
           Edit{" "}
           <code className="bg-gray-700 px-2 py-1 rounded text-amber-400">

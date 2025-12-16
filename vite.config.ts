@@ -14,6 +14,7 @@ export default defineConfig({
   base: './',
   build: {
     outDir: 'dist-react',
+    chunkSizeWarningLimit: 1000, // Increased for Electron apps (default is 500)
   },
   server: {
     port: 5123,

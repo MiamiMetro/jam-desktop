@@ -1,5 +1,3 @@
-"use client"
-
 import * as React from "react"
 import { useState } from "react"
 
@@ -1262,7 +1260,7 @@ function BadgeExamples() {
   )
 }
 
-function EmptyWithSpinner() {
+export function EmptyWithSpinner() {
   return (
     <Example title="Empty with Spinner">
       <Empty className="w-full border">

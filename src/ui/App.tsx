@@ -1,7 +1,10 @@
 import { Routes, Route, Link } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import Home from "@/pages/Home";
 import About from "@/pages/About";
-import { CoverExample } from "@/components/preview";
+import ExamplePage from "@/pages/ExamplePage";
+
+const CoverExample = lazy(() => import("@/components/preview").then(module => ({ default: module.CoverExample })));
 
 function App() {
   return (
@@ -22,6 +25,13 @@ function App() {
               About
             </Link>
             <Link
+              to="/preview"
+              className="text-gray-300 hover:text-white transition-colors"
+            >
+              Components Preview
+            </Link>
+
+            <Link
               to="/example"
               className="text-gray-300 hover:text-white transition-colors"
             >
@@ -34,7 +44,22 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/about" element={<About />} />
-        <Route path="/example" element={<CoverExample />} />
+        <Route
+          path="/preview"
+          element={
+            <Suspense fallback={<div className="flex items-center justify-center p-8">Loading...</div>}>
+              <CoverExample />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/example"
+          element={
+            <Suspense fallback={<div className="flex items-center justify-center p-8">Loading...</div>}>
+              <ExamplePage />
+            </Suspense>
+          }
+        />
       </Routes>
     </div>
   );

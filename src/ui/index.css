@@ -127,3 +127,52 @@
     @apply font-sans;
     }
 }
+
+/* Hide main body/html scrollbar */
+html, body {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+}
+
+/* Custom scrollbar styles - iPhone-like thin and dark for scrollable containers */
+*:not(html):not(body) {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
+}
+
+*:not(html):not(body)::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+
+*:not(html):not(body)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*:not(html):not(body)::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+  transition: background-color 0.2s ease;
+}
+
+*:not(html):not(body)::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Dark mode scrollbar for containers */
+.dark *:not(html):not(body) {
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.dark *:not(html):not(body)::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.dark *:not(html):not(body)::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
