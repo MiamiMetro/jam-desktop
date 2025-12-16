@@ -1,6 +1,7 @@
 import { Routes, Route, Link } from "react-router-dom";
 import Home from "./pages/Home";
 import About from "./pages/About";
+import { ComponentExample } from "@/components/component-example";
 
 function App() {
   return (
@@ -20,6 +21,12 @@ function App() {
             >
               About
             </Link>
+            <Link
+              to="/example"
+              className="text-gray-300 hover:text-white transition-colors"
+            >
+              Example
+            </Link>
           </div>
         </div>
       </nav>
@@ -27,6 +34,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/about" element={<About />} />
+        <Route path="/example" element={<ComponentExample />} />
       </Routes>
     </div>
   );
