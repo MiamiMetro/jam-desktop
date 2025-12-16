@@ -1,7 +1,7 @@
 import { Routes, Route, Link } from "react-router-dom";
-import Home from "./pages/Home";
-import About from "./pages/About";
-import { ComponentExample } from "@/components/component-example";
+import Home from "@/pages/Home";
+import About from "@/pages/About";
+import { CoverExample } from "@/components/preview";
 
 function App() {
   return (
@@ -34,7 +34,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/about" element={<About />} />
-        <Route path="/example" element={<ComponentExample />} />
+        <Route path="/example" element={<CoverExample />} />
       </Routes>
     </div>
   );

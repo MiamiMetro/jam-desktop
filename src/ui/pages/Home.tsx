@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import reactLogo from "../assets/react.svg";
+import reactLogo from "@/assets/react.svg";
 
 interface Todo {
   userId: number;
@@ -53,7 +53,7 @@ export default function Home() {
         </p>
 
         <div className="mt-4 w-full border-t border-gray-700 pt-6">
- 
+
           {isLoading && (
             <p className="text-blue-400 text-center">Loading todo...</p>
           )}
