@@ -105,7 +105,7 @@ export function ComposePost({
       <div className="flex gap-3">
         <button
           type="button"
-          onClick={() => user && navigate(`/profile/${user.id}`)}
+          onClick={() => user && navigate(`/profile/${user.username}`)}
           className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
         >
           <Avatar size="default" className="pointer-events-none">

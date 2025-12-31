@@ -14,33 +14,24 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
-import { useUser, useAllUsers } from "@/hooks/useUsers";
-import { usePosts } from "@/hooks/usePosts";
+import { useUser } from "@/hooks/useUsers";
+import { useUserPosts } from "@/hooks/usePosts";
+import { useFriends, useRequestFriend } from "@/hooks/useFriends";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
-import { formatDuration } from "@/lib/postUtils";
+import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
 
 function Profile() {
-  const { id } = useParams<{ id: string }>();
+  const { username } = useParams<{ username: string }>();
   const navigate = useNavigate();
   const { user: currentUser, isGuest } = useAuthStore();
-  const { data: profileUser, isLoading } = useUser(id || "");
-  const { data: allPosts = [] } = usePosts();
-  const { data: allUsers = [] } = useAllUsers();
+  const { data: profileUser, isLoading } = useUser(username || "");
+  const { data: userPosts = [] } = useUserPosts(profileUser?.username || "");
+  const { data: friends = [], fetchNextPage: fetchMoreFriends, hasNextPage: hasMoreFriends, isFetchingNextPage: isLoadingMoreFriends } = useFriends();
+  const requestFriendMutation = useRequestFriend();
   const [showFriends, setShowFriends] = useState(false);
   
-  const isOwnProfile = currentUser?.id === id;
-  
-  // Filter posts by this user
-  const userPosts = allPosts.filter(post => post.author.username === profileUser?.username);
-  
-  // Get friends (using conversations as proxy - people they've messaged with)
-  // In a real app, this would be a proper friends list
-  const friends = allUsers.filter(u => {
-    if (u.id === id) return false; // Don't include self
-    // Mock: show first 5 users as "friends" for demo
-    return allUsers.indexOf(u) < 5;
-  });
+  const isOwnProfile = currentUser?.username === profileUser?.username;
   
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -55,24 +46,14 @@ function Profile() {
     }
   };
 
-  const formatTimeAgo = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-    
-    if (days > 0) return `${days}d`;
-    if (hours > 0) return `${hours}h`;
-    if (minutes > 0) return `${minutes}m`;
-    return "now";
-  };
 
-  const handleAddFriend = () => {
-    if (isGuest) return;
-    // TODO: Implement add friend functionality
-    console.log("Add friend:", id);
+  const handleAddFriend = async () => {
+    if (isGuest || !profileUser?.id) return;
+    try {
+      await requestFriendMutation.mutateAsync(profileUser.id);
+    } catch (error) {
+      console.error('Error sending friend request:', error);
+    }
   };
 
   if (isLoading) {
@@ -111,8 +92,13 @@ function Profile() {
       <div className="relative px-4 pb-4 border-b border-border">
         {/* Profile Avatar */}
         <div className="relative -mt-16 mb-4">
-          <div className="h-24 w-24 rounded-full bg-primary flex items-center justify-center text-3xl font-bold text-primary-foreground border-4 border-background">
-            {profileUser.username.substring(0, 2).toUpperCase()}
+          <div className="h-24 w-24 rounded-full border-4 border-background overflow-hidden">
+            <Avatar className="h-full w-full">
+              <AvatarImage src={profileUser.avatar || ""} alt={profileUser.username} />
+              <AvatarFallback className="bg-primary text-primary-foreground text-3xl font-bold h-full w-full">
+                {profileUser.username.substring(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
           </div>
         </div>
 
@@ -152,7 +138,7 @@ function Profile() {
                 size="sm"
                 onClick={() => {
                   // Navigate to DM or open message
-                  navigate(`/profile/${id}`);
+                  navigate(`/profile/${currentUser?.username}`);
                 }}
               >
                 <MessageCircle className="h-4 w-4 mr-2" />
@@ -183,38 +169,51 @@ function Profile() {
           {friends.length === 0 ? (
             <EmptyState icon={UserPlus} title="No friends yet" />
           ) : (
-            <div className="divide-y divide-border">
-              {friends.map((friend) => (
-                <div
-                  key={friend.id}
-                  className="p-4 hover:bg-muted/30 transition-colors cursor-pointer"
-                  onClick={() => {
-                    navigate(`/profile/${friend.id}`);
-                    setShowFriends(false);
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    <Avatar size="sm" className="h-10 w-10">
-                      <AvatarImage src={friend.avatar || ""} alt={friend.username} />
-                      <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-                        {friend.username.substring(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                      <AvatarBadge className={`${getStatusColor(friend.status)} h-3 w-3 border-2 border-background`} />
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm">{friend.username}</div>
-                      <div className="text-xs text-muted-foreground">{friend.status}</div>
-                      {friend.statusMessage && (
-                        <div className="text-xs text-muted-foreground mt-1 truncate">
-                          {friend.statusMessage}
-                        </div>
-                      )}
+            <>
+              <div className="divide-y divide-border">
+                {friends.map((friend) => (
+                  <div
+                    key={friend.id}
+                    className="p-4 hover:bg-muted/30 transition-colors cursor-pointer"
+                    onClick={() => {
+                      navigate(`/profile/${friend.username}`);
+                      setShowFriends(false);
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar size="sm" className="h-10 w-10">
+                        <AvatarImage src={friend.avatar || ""} alt={friend.username} />
+                        <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                          {friend.username.substring(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                        <AvatarBadge className={`${getStatusColor(friend.status || 'Offline')} h-3 w-3 border-2 border-background`} />
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm">{friend.username}</div>
+                        <div className="text-xs text-muted-foreground">{friend.status}</div>
+                        {friend.statusMessage && (
+                          <div className="text-xs text-muted-foreground mt-1 truncate">
+                            {friend.statusMessage}
+                          </div>
+                        )}
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   </div>
+                ))}
+              </div>
+              {hasMoreFriends && (
+                <div className="mt-4 text-center">
+                  <button
+                    onClick={() => fetchMoreFriends()}
+                    disabled={isLoadingMoreFriends}
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {isLoadingMoreFriends ? 'Loading more...' : 'Load more friends'}
+                  </button>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
       ) : (

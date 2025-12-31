@@ -16,9 +16,8 @@ import {
   Upload,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
-import { usePost, useComments, useCreateComment } from "@/hooks/usePosts";
+import { usePost, useComments, useCreateComment, useToggleLike, type FrontendComment } from "@/hooks/usePosts";
 import { useCommunities } from "@/hooks/useCommunities";
-import { useAllUsers } from "@/hooks/useUsers";
 import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/EmptyState";
@@ -32,10 +31,12 @@ function Post() {
   const navigate = useNavigate();
   const { isGuest, user } = useAuthStore();
   const { data: post, isLoading } = usePost(id || "");
-  const { data: comments = [], isLoading: commentsLoading } = useComments(id || "");
+  const commentsQuery = useComments(id || "");
+  const comments = (commentsQuery.data || []) as FrontendComment[];
+  const { isLoading: commentsLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = commentsQuery;
   const createCommentMutation = useCreateComment();
+  const toggleLikeMutation = useToggleLike();
   const { data: communities = [] } = useCommunities();
-  const { data: allUsers = [] } = useAllUsers();
   const [commentContent, setCommentContent] = useState("");
   
   // Audio player for post audio
@@ -59,24 +60,21 @@ function Post() {
   // Audio player for recorded comment audio preview
   const recordedCommentAudioPlayer = useAudioPlayer(recordedCommentAudio?.url);
   
-  const getUserByUsername = (username: string) => {
-    return allUsers.find(u => u.username === username);
-  };
-
   const handleAuthorClick = (username: string) => {
-    const authorUser = getUserByUsername(username);
-    if (authorUser) {
-      navigate(`/profile/${authorUser.id}`);
-    }
+      navigate(`/profile/${username}`);
   };
 
   const handleCommunityClick = (communityId: string) => {
     navigate(`/community/${communityId}`);
   };
 
-  const handleLikePost = () => {
-    if (isGuest) return;
-    // TODO: Implement actual like with API
+  const handleLikePost = async () => {
+    if (isGuest || !id) return;
+    try {
+      await toggleLikeMutation.mutateAsync(id);
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
   };
 
   const handleSubmitComment = () => {
@@ -292,7 +290,7 @@ function Post() {
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => user && navigate(`/profile/${user.id}`)}
+                  onClick={() => user && navigate(`/profile/${user.username}`)}
                   className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
                 >
                   <Avatar size="default" className="pointer-events-none">
@@ -451,14 +449,14 @@ function Post() {
               description="Be the first to comment!"
             />
           ) : (
-            <div className="space-y-4">
-              {comments.map((comment) => {
-                const commentUser = getUserByUsername(comment.author.username);
+            <>
+              <div className="space-y-4">
+                {comments.map((comment) => {
                 return (
                   <div key={comment.id} className="flex gap-3">
                     <button
                       type="button"
-                      onClick={() => commentUser && navigate(`/profile/${commentUser.id}`)}
+                      onClick={() => navigate(`/profile/${comment.author.username}`)}
                       className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
                     >
                       <Avatar size="default" className="pointer-events-none">
@@ -471,7 +469,7 @@ function Post() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <button
-                          onClick={() => commentUser && navigate(`/profile/${commentUser.id}`)}
+                          onClick={() => navigate(`/profile/${comment.author.username}`)}
                           className="font-semibold text-sm hover:underline cursor-pointer"
                         >
                           {comment.author.username}
@@ -493,8 +491,20 @@ function Post() {
                     </div>
                   </div>
                 );
-              })}
-            </div>
+                })}
+              </div>
+              {hasNextPage && (
+                <div className="mt-4 text-center">
+                  <button
+                    onClick={() => fetchNextPage()}
+                    disabled={isFetchingNextPage}
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {isFetchingNextPage ? 'Loading more comments...' : 'Load more comments'}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

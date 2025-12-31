@@ -5,11 +5,12 @@ import {
   Share2,
   Hash as HashIcon,
 } from "lucide-react";
-import type { Post } from "@/lib/api/mock";
 import { PostAudioPlayer } from "@/components/PostAudioPlayer";
 
+import type { FrontendPost } from '@/hooks/usePosts';
+
 interface PostCardProps {
-  post: Post;
+  post: FrontendPost;
   communityName?: string | null;
   isPlaying?: boolean;
   isGuest?: boolean;
@@ -33,18 +34,10 @@ export function PostCard({
   onPostClick,
   onLike,
   onPlayPause,
-  onGuestAction,
+  onGuestAction: _onGuestAction,
   formatTimeAgo,
-  formatDuration,
+  formatDuration: _formatDuration,
 }: PostCardProps) {
-  const handlePlayPause = () => {
-    if (isGuest) {
-      onGuestAction?.();
-      return;
-    }
-    onPlayPause?.();
-  };
-
   return (
     <div className="p-4 hover:bg-muted/30 transition-colors">
       <div className="flex gap-3">

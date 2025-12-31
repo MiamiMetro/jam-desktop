@@ -25,7 +25,8 @@ function JamRoom() {
   const navigate = useNavigate();
   const { user, isGuest } = useAuthStore();
   const { data: room, isLoading } = useJam(id || "");
-  const { data: allUsers = [] } = useAllUsers();
+  // Only fetch users when room is loaded (for participants and message users)
+  const { data: allUsers = [] } = useAllUsers(undefined, !!room && !isLoading);
   const updateActivityMutation = useUpdateRoomActivity();
   const [message, setMessage] = useState("");
   

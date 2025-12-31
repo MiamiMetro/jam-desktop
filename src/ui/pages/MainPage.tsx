@@ -6,7 +6,6 @@ import {
   Moon,
   Music,
   Users as UsersIcon,
-  User,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -86,7 +85,6 @@ function MainPage() {
   const tab = getCurrentTab();
 
   const { theme, setTheme } = useUIStore();
-  const { isGuest } = useAuthStore();
 
   // Restore scroll position when navigating
   useScrollRestoration(scrollContainerRef as React.RefObject<HTMLElement>);
@@ -195,32 +193,12 @@ function MainPage() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              {/* Debug Switch - Toggle Guest/Logged In */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  if (isGuest) {
-                    useAuthStore.getState().login({
-                      id: "1",
-                      username: "Tylobic",
-                      status: "Online",
-                      level: 40,
-                    });
-                  } else {
-                    useAuthStore.getState().logout();
-                  }
-                }}
-                className="h-8 w-8"
-                title={isGuest ? "Switch to logged in mode" : "Switch to guest mode"}
-              >
-                <User className="h-4 w-4" />
-              </Button>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={toggleTheme}
                 className="h-8 w-8"
+                title="Toggle theme"
               >
                 {getCurrentTheme() === "dark" ? (
                   <Sun className="h-4 w-4" />

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSearchParams, useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { 
   Music, 
   Users, 
@@ -12,7 +13,6 @@ import {
 import { useAuthStore } from "@/stores/authStore";
 import { useCommunities, useCommunity } from "@/hooks/useCommunities";
 import { useCommunityPosts } from "@/hooks/usePosts";
-import { useAllUsers } from "@/hooks/useUsers";
 import { PostCard } from "@/components/PostCard";
 import { ComposePost } from "@/components/ComposePost";
 import { EmptyState } from "@/components/EmptyState";
@@ -44,20 +44,12 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
   });
   const { data: selectedCommunity } = useCommunity(communityId || "");
   const { data: communityPosts = [], isLoading: postsLoading } = useCommunityPosts(communityId || "");
-  const { data: allUsers = [] } = useAllUsers();
   const [communitySearchInput, setCommunitySearchInput] = useState(searchQuery);
   const [showFilters, setShowFilters] = useState(false);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   
-  const getUserByUsername = (username: string) => {
-    return allUsers.find(u => u.username === username);
-  };
-  
   const handleAuthorClick = (username: string) => {
-    const authorUser = getUserByUsername(username);
-    if (authorUser) {
-      navigate(`/profile/${authorUser.id}`);
-    }
+    navigate(`/profile/${username}`);
   };
 
   const handleCategoryClick = (category: string) => {
@@ -133,8 +125,13 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
         <div className="relative px-4 pb-4 border-b border-border">
           {/* Community Avatar */}
           <div className="relative -mt-16 mb-4">
-            <div className="h-24 w-24 rounded-full bg-primary flex items-center justify-center text-3xl font-bold text-primary-foreground border-4 border-background">
-              {selectedCommunity.name.substring(0, 2).toUpperCase()}
+            <div className="h-24 w-24 rounded-full border-4 border-background overflow-hidden">
+              <Avatar className="h-full w-full">
+                <AvatarImage src={selectedCommunity.avatar || ""} alt={selectedCommunity.name} />
+                <AvatarFallback className="bg-primary text-primary-foreground text-3xl font-bold h-full w-full">
+                  {selectedCommunity.name.substring(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
             </div>
           </div>
 
@@ -288,8 +285,13 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
                 <div className="flex items-center gap-4">
                   {/* Community Avatar/Icon */}
                   <div className="flex-shrink-0">
-                    <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center text-lg font-bold text-primary-foreground">
-                      {community.name.substring(0, 2).toUpperCase()}
+                    <div className="h-12 w-12 rounded-full overflow-hidden">
+                      <Avatar className="h-full w-full">
+                        <AvatarImage src={community.avatar || ""} alt={community.name} />
+                        <AvatarFallback className="bg-primary text-primary-foreground text-lg font-bold h-full w-full">
+                          {community.name.substring(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
                     </div>
                   </div>
                   

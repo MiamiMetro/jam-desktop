@@ -1,9 +1,10 @@
-import { StrictMode } from "react";
+import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { HashRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./index.css";
 import App from "./App.tsx";
+import { useAuthStore } from "./stores/authStore";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,10 +18,22 @@ const queryClient = new QueryClient({
   },
 });
 
+// Component to check session on mount
+function AuthChecker() {
+  const checkSession = useAuthStore((state) => state.checkSession);
+  
+  useEffect(() => {
+    checkSession();
+  }, [checkSession]);
+  
+  return null;
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <HashRouter>
       <QueryClientProvider client={queryClient}>
+        <AuthChecker />
         <App />
       </QueryClientProvider>
     </HashRouter>

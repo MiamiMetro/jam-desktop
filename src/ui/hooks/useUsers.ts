@@ -1,50 +1,120 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchOnlineUsers, fetchUser, fetchAllUsers, fetchConversations, fetchMessages, sendMessage, type User, type Message, type Conversation } from '@/lib/api/mock';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
+import { usersApi, messagesApi, profilesApi } from '@/lib/api/api';
+import type { User, Message, Conversation } from '@/lib/api/types';
 
 export const useOnlineUsers = () => {
-  return useQuery<User[]>({
+  const query = useInfiniteQuery<User[], Error>({
     queryKey: ['users', 'online'],
-    queryFn: fetchOnlineUsers,
+    queryFn: async ({ pageParam = 0 }) => {
+      const response = await usersApi.getOnlineUsers({ limit: 50, offset: pageParam as number });
+      return response.data;
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
+      if (lastPage.length < 50) return undefined;
+      return (lastPageParam as number) + 50;
+    },
   });
+  
+  return {
+    ...query,
+    data: query.data?.pages.flat() || [],
+  };
 };
 
-export const useUser = (id: string) => {
+export const useUser = (username: string) => {
   return useQuery<User | null>({
-    queryKey: ['users', id],
-    queryFn: () => fetchUser(id),
-    enabled: !!id,
+    queryKey: ['user', username],
+    queryFn: async () => {
+      if (!username) return null;
+      return await profilesApi.getProfile(username);
+    },
+    enabled: !!username,
+    retry: 1,
   });
 };
 
-export const useAllUsers = () => {
-  return useQuery<User[]>({
-    queryKey: ['users', 'all'],
-    queryFn: fetchAllUsers,
+export const useAllUsers = (search?: string, enabled: boolean = true) => {
+  const query = useInfiniteQuery<User[], Error>({
+    queryKey: ['users', 'all', search],
+    queryFn: async ({ pageParam = 0 }) => {
+      const response = await usersApi.getUsers({ 
+        limit: 20, 
+        offset: pageParam as number,
+        search: search || undefined,
+      });
+      return response.data;
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
+      if (lastPage.length < 20) return undefined;
+      return (lastPageParam as number) + 20;
+    },
+    enabled,
   });
+  
+  return {
+    ...query,
+    data: query.data?.pages.flat() || [],
+  };
 };
 
 export const useConversations = (userId: string) => {
-  return useQuery<Conversation[]>({
+  const query = useInfiniteQuery<Conversation[], Error>({
     queryKey: ['conversations', userId],
-    queryFn: () => fetchConversations(userId),
+    queryFn: async ({ pageParam = 0 }) => {
+      const response = await messagesApi.getConversations({ limit: 50, offset: pageParam as number });
+      return response.data;
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
+      if (lastPage.length < 50) return undefined;
+      return (lastPageParam as number) + 50;
+    },
     enabled: !!userId,
   });
+  
+  return {
+    ...query,
+    data: query.data?.pages.flat() || [],
+  };
 };
 
 export const useMessages = (userId: string, partnerId: string) => {
-  return useQuery<Message[]>({
+  const query = useInfiniteQuery<Message[], Error>({
     queryKey: ['messages', userId, partnerId],
-    queryFn: () => fetchMessages(userId, partnerId),
+    queryFn: async ({ pageParam = 0 }) => {
+      const response = await messagesApi.getMessages(partnerId, { limit: 50, offset: pageParam as number });
+      return response.data;
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
+      if (lastPage.length < 50) return undefined;
+      return (lastPageParam as number) + 50;
+    },
     enabled: !!userId && !!partnerId,
   });
+  
+  return {
+    ...query,
+    data: query.data?.pages.flat().reverse() || [], // Reverse to show oldest first
+  };
 };
 
 export const useSendMessage = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: ({ senderId, receiverId, content }: { senderId: string; receiverId: string; content: string }) =>
-      sendMessage(senderId, receiverId, content),
+    mutationFn: async ({ receiverId, content }: { senderId: string; receiverId: string; content: string }) => {
+      // Audio upload is not implemented yet
+      const message = await messagesApi.sendMessage({
+        recipient_id: receiverId,
+        text: content || undefined,
+        audio_url: null,
+      });
+      
+      return message;
+    },
     onSuccess: (_, variables) => {
       // Invalidate and refetch messages
       queryClient.invalidateQueries({ queryKey: ['messages', variables.senderId, variables.receiverId] });
@@ -53,4 +123,3 @@ export const useSendMessage = () => {
     },
   });
 };
-

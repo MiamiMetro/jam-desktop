@@ -1,16 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/authStore";
-import { usePosts } from "@/hooks/usePosts";
+import { usePosts, useCreatePost } from "@/hooks/usePosts";
 import { useCommunities } from "@/hooks/useCommunities";
-import { useAllUsers } from "@/hooks/useUsers";
 import { PostCard } from "@/components/PostCard";
 import { ComposePost } from "@/components/ComposePost";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
 import { Music } from "lucide-react";
-import type { Post } from "@/lib/api/mock";
+// Post type is inferred from usePosts hook
 
 interface FeedTabProps {
   onGuestAction?: () => void;
@@ -18,26 +17,25 @@ interface FeedTabProps {
 
 function FeedTab({ onGuestAction }: FeedTabProps) {
   const navigate = useNavigate();
-  const { isGuest, user } = useAuthStore();
-  const { data: posts = [], isLoading: postsLoading } = usePosts();
+  const { isGuest } = useAuthStore();
+  const { data: posts = [], isLoading: postsLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = usePosts();
   const { data: communities = [] } = useCommunities();
-  const { data: allUsers = [] } = useAllUsers();
-  
-  const getUserByUsername = (username: string) => {
-    return allUsers.find(u => u.username === username);
-  };
+  const createPostMutation = useCreatePost();
   
   const handleAuthorClick = (username: string) => {
-    const authorUser = getUserByUsername(username);
-    if (authorUser) {
-      navigate(`/profile/${authorUser.id}`);
-    }
+    navigate(`/profile/${username}`);
   };
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
 
-  const handleCreatePost = (content: string, audioFile: File | null) => {
-    // TODO: Implement actual post creation with API
-    console.log("Creating post:", { content, audioFile });
+  const handleCreatePost = async (content: string) => {
+    if (isGuest) return;
+    
+    try {
+      // Audio upload is not implemented yet - audioFile is ignored
+      await createPostMutation.mutateAsync({ content });
+    } catch (error) {
+      console.error('Error creating post:', error);
+    }
   };
 
   const handleLikePost = () => {
@@ -45,7 +43,7 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
       onGuestAction?.();
       return;
     }
-    // TODO: Implement actual like with API
+    // TODO: Implement actual like with API (will be done in PostCard/Post component)
   };
 
   const getCommunityName = (communityId?: string) => {
@@ -82,7 +80,8 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
             description="Be the first to share something!"
           />
         ) : (
-          posts.map((post: Post) => {
+          <>
+            {posts.map((post) => {
             const communityName = getCommunityName(post.community);
             return (
               <PostCard
@@ -101,7 +100,19 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
                 formatDuration={formatDuration}
               />
             );
-          })
+            })}
+            {hasNextPage && (
+              <div className="p-4 text-center">
+                <button
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {isFetchingNextPage ? 'Loading more...' : 'Load more posts'}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </>

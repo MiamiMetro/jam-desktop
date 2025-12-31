@@ -46,7 +46,9 @@ function Sidebar() {
   const { isGuest, user } = useAuthStore();
   const { theme, setTheme } = useUIStore();
   const { data: onlineUsers = [] } = useOnlineUsers();
-  const { data: allUsers = [] } = useAllUsers();
+  // Only fetch all users when searching globally or when we need to find a chat partner
+  const shouldFetchAllUsers = showSearchUsers || !!selectedChatPartner;
+  const { data: allUsers = [] } = useAllUsers(userSearchQuery || undefined, shouldFetchAllUsers);
   const { data: conversations = [] } = useConversations(user?.id || "");
   const { data: messages = [] } = useMessages(user?.id || "", selectedChatPartner || "");
   const sendMessageMutation = useSendMessage();
@@ -98,29 +100,25 @@ function Sidebar() {
     setUsername("");
   };
 
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLogin) {
-      // TODO: Implement actual login
-      useAuthStore.getState().login({
-        id: "1",
-        username: email.split("@")[0] || "User",
-        status: "Online",
-        level: 1,
-      });
-    } else {
-      // TODO: Implement actual signup
-      useAuthStore.getState().login({
-        id: "1",
-        username: username || email.split("@")[0] || "User",
-        status: "Online",
-        level: 1,
-      });
+    const { loginWithCredentials, registerWithCredentials } = useAuthStore.getState();
+    
+    try {
+      if (isLogin) {
+        await loginWithCredentials(email, password);
+      } else {
+        await registerWithCredentials(email, password, username);
+      }
+      setShowAuthForm(false);
+      setEmail("");
+      setPassword("");
+      setUsername("");
+    } catch (error) {
+      // Error handling - could show toast notification here
+      console.error('Auth error:', error);
+      // For now, just log the error
     }
-    setShowAuthForm(false);
-    setEmail("");
-    setPassword("");
-    setUsername("");
   };
 
   const handleBackToButtons = () => {
@@ -137,7 +135,7 @@ function Sidebar() {
         <div className="flex items-center gap-3">
           {!isGuest && user ? (
             <button
-              onClick={() => navigate(`/profile/${user.id}`)}
+              onClick={() => user.username && navigate(`/profile/${user.username}`)}
               className="relative cursor-pointer hover:opacity-80 transition-opacity"
             >
               <Avatar size="lg" className="relative ring-2 ring-primary">
@@ -166,8 +164,9 @@ function Sidebar() {
           <div className="flex-1 min-w-0">
             {!isGuest && user ? (
               <button
-                onClick={() => navigate(`/profile/${user.id}`)}
+                onClick={() => user.username && navigate(`/profile/${user.username}`)}
                 className="font-semibold text-sm truncate text-sidebar-foreground hover:underline cursor-pointer block w-full text-left"
+                disabled={!user.username}
               >
                 {user.username || "User"}
               </button>
@@ -188,7 +187,7 @@ function Sidebar() {
                 </Button>
               } />
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => user && navigate(`/profile/${user.id}`)}>
+                <DropdownMenuItem onClick={() => user?.username && navigate(`/profile/${user.username}`)} disabled={!user?.username}>
                   Profile
                 </DropdownMenuItem>
                 <DropdownMenuItem>Settings</DropdownMenuItem>
@@ -361,7 +360,7 @@ function Sidebar() {
                             key={searchUser.id}
                             className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-sidebar-accent/50 cursor-pointer group transition-colors"
                             onClick={() => {
-                              navigate(`/profile/${searchUser.id}`);
+                              navigate(`/profile/${searchUser.username}`);
                               // Keep search view open for continued searching
                             }}
                           >
@@ -370,7 +369,7 @@ function Sidebar() {
                               <AvatarFallback className="bg-muted text-muted-foreground text-xs">
                                 {searchUser.username.substring(0, 2).toUpperCase()}
                               </AvatarFallback>
-                              <AvatarBadge className={getStatusColor(searchUser.status)} />
+                              <AvatarBadge className={getStatusColor(searchUser.status || 'Offline')} />
                             </Avatar>
                             <div className="flex-1 min-w-0">
                               <div className="text-sm font-medium truncate">{searchUser.username}</div>
@@ -394,7 +393,7 @@ function Sidebar() {
               /* DM Interface */
               <>
                 {(() => {
-                  const chatPartner = allUsers.find(u => u.id === selectedChatPartner);
+                  const chatPartner = allUsers.find((u: { id: string }) => u.id === selectedChatPartner);
                   const formatTime = (date: Date) => {
                     const now = new Date();
                     const diff = now.getTime() - date.getTime();
@@ -435,7 +434,7 @@ function Sidebar() {
                           {chatPartner && (
                             <>
                               <button
-                                onClick={() => navigate(`/profile/${chatPartner.id}`)}
+                                onClick={() => navigate(`/profile/${chatPartner.username}`)}
                                 className="cursor-pointer hover:opacity-80 transition-opacity"
                               >
                                 <Avatar size="sm" className="relative">
@@ -443,12 +442,12 @@ function Sidebar() {
                                   <AvatarFallback className="bg-muted text-muted-foreground text-xs">
                                     {chatPartner.username.substring(0, 2).toUpperCase()}
                                   </AvatarFallback>
-                                  <AvatarBadge className={getStatusColor(chatPartner.status)} />
+                                  <AvatarBadge className={getStatusColor(chatPartner?.status || 'Offline')} />
                                 </Avatar>
                               </button>
                               <div className="flex-1 min-w-0">
                                 <button
-                                  onClick={() => navigate(`/profile/${chatPartner.id}`)}
+                                  onClick={() => navigate(`/profile/${chatPartner.username}`)}
                                   className="text-sm font-medium truncate hover:underline cursor-pointer block w-full text-left"
                                 >
                                   {chatPartner.username}
@@ -483,7 +482,7 @@ function Sidebar() {
                                   <div className={`text-[10px] mt-1 ${
                                     isOwn ? "text-primary-foreground/70" : "text-muted-foreground"
                                   }`}>
-                                    {formatTime(message.timestamp)}
+                                    {formatTime(new Date(message.timestamp))}
                                   </div>
                                 </div>
                               </div>
@@ -570,7 +569,7 @@ function Sidebar() {
                       ONLINE ({showFriendsSearch && userSearchQuery.trim() ? getSearchUsers().length : onlineUsers.length})
                     </div>
                     <div className="space-y-1">
-                      {(showFriendsSearch && userSearchQuery.trim() ? getSearchUsers() : onlineUsers).map((onlineUser) => {
+                      {(showFriendsSearch && userSearchQuery.trim() ? getSearchUsers().slice(0, 50) : onlineUsers.slice(0, 100)).map((onlineUser) => {
                         const conversation = conversations.find(c => c.userId === onlineUser.id);
                         return (
                           <div
@@ -588,7 +587,7 @@ function Sidebar() {
                               <AvatarFallback className="bg-muted text-muted-foreground text-xs">
                                 {onlineUser.username.substring(0, 2).toUpperCase()}
                               </AvatarFallback>
-                              <AvatarBadge className={getStatusColor(onlineUser.status)} />
+                              <AvatarBadge className={getStatusColor(onlineUser.status || 'Offline')} />
                             </Avatar>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1">
