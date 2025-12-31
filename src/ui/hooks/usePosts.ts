@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchPosts, fetchCommunityPosts, fetchGlobalPosts, type Post } from '@/lib/api/mock';
+import { fetchPosts, fetchCommunityPosts, fetchGlobalPosts, fetchPost, type Post } from '@/lib/api/mock';
 import { useAuthStore } from '@/stores/authStore';
 
 export const usePosts = () => {
@@ -48,6 +48,14 @@ export const useGlobalPosts = () => {
   return useQuery<Post[]>({
     queryKey: ['posts', 'global'],
     queryFn: fetchGlobalPosts,
+  });
+};
+
+export const usePost = (postId: string) => {
+  return useQuery<Post | null>({
+    queryKey: ['post', postId],
+    queryFn: () => fetchPost(postId),
+    enabled: !!postId,
   });
 };
 

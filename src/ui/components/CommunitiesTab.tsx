@@ -8,21 +8,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { 
   Music, 
   Users, 
-  Hash, 
   Search,
-  Play,
-  Pause,
-  Heart,
-  MessageCircle,
-  Share2,
   Upload,
   MoreVertical,
   Filter,
   X,
+  ArrowLeft,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useCommunities, useCommunity } from "@/hooks/useCommunities";
 import { useCommunityPosts } from "@/hooks/usePosts";
+import { useAllUsers } from "@/hooks/useUsers";
+import { PostCard } from "@/components/PostCard";
+import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
 import type { Post } from "@/lib/api/mock";
 
 const CATEGORIES = [
@@ -48,6 +46,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
   });
   const { data: selectedCommunity } = useCommunity(communityId || "");
   const { data: communityPosts = [], isLoading: postsLoading } = useCommunityPosts(communityId || "");
+  const { data: allUsers = [] } = useAllUsers();
   const [communitySearchInput, setCommunitySearchInput] = useState(searchQuery);
   const [showFilters, setShowFilters] = useState(false);
   const [newPost, setNewPost] = useState({
@@ -55,6 +54,17 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
     audioFile: null as File | null,
   });
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  
+  const getUserByUsername = (username: string) => {
+    return allUsers.find(u => u.username === username);
+  };
+  
+  const handleAuthorClick = (username: string) => {
+    const authorUser = getUserByUsername(username);
+    if (authorUser) {
+      navigate(`/profile/${authorUser.id}`);
+    }
+  };
 
   const handleCategoryClick = (category: string) => {
     if (categoryFilter === category) {
@@ -80,6 +90,10 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
 
   const handleCommunityClick = (communityId: string) => {
     navigate(`/community/${communityId}`);
+  };
+
+  const handlePostClick = (postId: string) => {
+    navigate(`/post/${postId}`);
   };
 
   const handleJoin = (communityId: string) => {
@@ -112,41 +126,6 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
     // TODO: Implement actual like with API
   };
 
-  const formatTimeAgo = (date: Date) => {
-    const now = new Date().getTime();
-    const seconds = Math.floor((now - date.getTime()) / 1000);
-    if (seconds < 60) return `${seconds}s ago`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-  };
-
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Get entry ramp communities
-  const newAndActive = communities
-    .filter(c => c.activeCount > 15)
-    .slice(0, 2);
-  const liveJams = communities
-    .filter(c => c.isLive)
-    .slice(0, 2);
-  const trending = communities
-    .sort((a, b) => b.activeCount - a.activeCount)
-    .slice(0, 1);
-
-  const entryRamps = [
-    ...newAndActive.map(c => ({ ...c, label: "New & Active" })),
-    ...liveJams.map(c => ({ ...c, label: "Live Jams Now" })),
-    ...trending.map(c => ({ ...c, label: "Trending This Week" })),
-  ].slice(0, 5);
-
   if (selectedCommunity) {
     return (
       <>
@@ -154,6 +133,17 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
         <div className="bg-gradient-to-r from-primary/20 to-primary/10 border-b border-border">
           <div className="p-6">
             <div className="flex items-start gap-4">
+              {/* Back Button */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="flex-shrink-0"
+                onClick={() => navigate(-1)}
+                title="Go back"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              
               {/* Community Avatar */}
               <div className="flex-shrink-0">
                 <div className="h-20 w-20 rounded-full bg-primary flex items-center justify-center text-2xl font-bold text-primary-foreground">
@@ -282,94 +272,21 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
             </div>
           ) : (
             communityPosts.map((post: Post) => (
-              <div key={post.id} className="p-4 hover:bg-muted/30 transition-colors">
-                <div className="flex gap-3">
-                  <Avatar size="default" className="flex-shrink-0">
-                    <AvatarImage src={post.author.avatar || ""} alt={post.author.username} />
-                    <AvatarFallback className="bg-muted text-muted-foreground">
-                      {post.author.username.substring(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="font-semibold text-sm">{post.author.username}</span>
-                      <span className="text-xs text-muted-foreground">
-                        • {formatTimeAgo(post.timestamp)}
-                      </span>
-                    </div>
-                    {post.content && (
-                      <p className="text-sm mb-3 whitespace-pre-wrap">{post.content}</p>
-                    )}
-                    {post.audioFile && (
-                      <div className="mb-3 p-3 bg-muted rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-10 w-10 rounded-full"
-                            onClick={() => {
-                              if (isGuest) {
-                                onGuestAction?.();
-                                return;
-                              }
-                              setPlayingAudioId(playingAudioId === post.id ? null : post.id);
-                            }}
-                          >
-                            {playingAudioId === post.id ? (
-                              <Pause className="h-5 w-5" />
-                            ) : (
-                              <Play className="h-5 w-5" />
-                            )}
-                          </Button>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Music className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                              <span className="text-sm font-medium truncate">
-                                {post.audioFile.title}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 h-1.5 bg-muted-foreground/20 rounded-full overflow-hidden">
-                                <div 
-                                  className="h-full bg-primary transition-all"
-                                  style={{ width: playingAudioId === post.id ? "45%" : "0%" }}
-                                />
-                              </div>
-                              <span className="text-xs text-muted-foreground">
-                                {formatDuration(post.audioFile.duration)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-6 mt-3">
-                      <button
-                        onClick={handleLikePost}
-                        className={`flex items-center gap-2 text-sm transition-colors ${
-                          post.isLiked
-                            ? "text-red-500 hover:text-red-600"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        <Heart className={`h-4 w-4 ${post.isLiked ? "fill-current" : ""}`} />
-                        <span>{post.likes}</span>
-                      </button>
-                      <button 
-                        onClick={() => isGuest && onGuestAction?.()}
-                        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        <MessageCircle className="h-4 w-4" />
-                        <span>{post.comments}</span>
-                      </button>
-                      <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                        <Share2 className="h-4 w-4" />
-                        <span>{post.shares}</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <PostCard
+                key={post.id}
+                post={post}
+                communityName={null}
+                isPlaying={playingAudioId === post.id}
+                isGuest={isGuest}
+                onAuthorClick={handleAuthorClick}
+                onCommunityClick={handleCommunityClick}
+                onPostClick={handlePostClick}
+                onLike={handleLikePost}
+                onPlayPause={() => setPlayingAudioId(playingAudioId === post.id ? null : post.id)}
+                onGuestAction={onGuestAction}
+                formatTimeAgo={formatTimeAgo}
+                formatDuration={formatDuration}
+              />
             ))
           )}
         </div>
@@ -380,7 +297,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
   return (
     <div className="p-4">
       <div>
-        <h2 className="text-lg font-semibold mb-6">Communities</h2>
+        <h2 className="text-lg font-semibold mb-4">Communities</h2>
 
         {/* Search and Filter Toggle */}
         <div className="mb-4">

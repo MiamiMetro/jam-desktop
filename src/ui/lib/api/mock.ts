@@ -18,7 +18,11 @@ export type Room = {
   isPrivate: boolean;
   hostAvatar?: string;
   hostName: string;
+  hostId: string; // ID of the room owner
   communityId?: string;
+  isEnabled: boolean; // Whether room is active and visible
+  lastActiveAt: Date; // Last time room had activity (participants or messages)
+  createdAt: Date; // When room was created
 };
 
 export type Post = {
@@ -56,18 +60,32 @@ export type Community = {
 
 // Mock data
 const mockUsers: User[] = [
-  { id: "1", username: "XeFOs", status: "Online", statusMessage: "Olala.", avatar: null },
-  { id: "2", username: "Akuma chun", status: "In Game", statusMessage: "Jamming", avatar: null },
-  { id: "3", username: "AnataBakka", status: "In Queue", statusMessage: "Waiting for jam", avatar: null },
-  { id: "4", username: "TDTN Kira", status: "In Game", statusMessage: "Playing", avatar: null },
-  { id: "5", username: "zebuto", status: "In Game", statusMessage: "Jamming", avatar: null },
-  { id: "6", username: "DesertStark", status: "Away", statusMessage: "Mobile", avatar: null },
-  { id: "7", username: "LEBOVIM", status: "Away", statusMessage: "Mobile", avatar: null },
-  { id: "8", username: "MadsNado", status: "Away", statusMessage: "Mobile", avatar: null },
-  { id: "9", username: "ThatGuyDan", status: "Away", statusMessage: "Mobile", avatar: null },
-  { id: "10", username: "OhmyDOG", status: "Away", statusMessage: "Away", avatar: null },
+  { id: "1", username: "XeFOs", status: "Online", statusMessage: "Olala.", avatar: undefined },
+  { id: "2", username: "Akuma chun", status: "In Game", statusMessage: "Jamming", avatar: undefined },
+  { id: "3", username: "AnataBakka", status: "In Queue", statusMessage: "Waiting for jam", avatar: undefined },
+  { id: "4", username: "TDTN Kira", status: "In Game", statusMessage: "Playing", avatar: undefined },
+  { id: "5", username: "zebuto", status: "In Game", statusMessage: "Jamming", avatar: undefined },
+  { id: "6", username: "DesertStark", status: "Away", statusMessage: "Mobile", avatar: undefined },
+  { id: "7", username: "LEBOVIM", status: "Away", statusMessage: "Mobile", avatar: undefined },
+  { id: "8", username: "MadsNado", status: "Away", statusMessage: "Mobile", avatar: undefined },
+  { id: "9", username: "ThatGuyDan", status: "Away", statusMessage: "Mobile", avatar: undefined },
+  { id: "10", username: "OhmyDOG", status: "Away", statusMessage: "Away", avatar: undefined },
 ];
 
+// In-memory storage for user rooms (simulating database)
+// In real app, this would be in a database
+const userRooms = new Map<string, Room>();
+
+// Helper to check if room should be auto-disabled (24 hours of inactivity)
+const INACTIVITY_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+const shouldAutoDisable = (room: Room): boolean => {
+  if (!room.isEnabled) return false; // Already disabled
+  const timeSinceActive = Date.now() - room.lastActiveAt.getTime();
+  return timeSinceActive > INACTIVITY_THRESHOLD_MS;
+};
+
+// Initialize with one example room
 const mockRooms: Room[] = [
   {
     id: "1",
@@ -78,160 +96,11 @@ const mockRooms: Room[] = [
     maxParticipants: 8,
     isPrivate: false,
     hostName: "Tylobic",
+    hostId: "99", // Example host ID
     communityId: "lofi",
-  },
-  {
-    id: "2",
-    name: "Rock Jam Session",
-    description: "Let's rock out!",
-    genre: "Rock",
-    participants: 5,
-    maxParticipants: 6,
-    isPrivate: false,
-    hostName: "XeFOs",
-    communityId: "rock",
-  },
-  {
-    id: "3",
-    name: "Electronic Dreams",
-    description: "EDM and electronic music",
-    genre: "Electronic",
-    participants: 2,
-    maxParticipants: 10,
-    isPrivate: false,
-    hostName: "Akuma chun",
-    communityId: "electronic",
-  },
-  {
-    id: "4",
-    name: "Jazz Lounge",
-    description: "Smooth jazz and improvisation",
-    genre: "Jazz",
-    participants: 4,
-    maxParticipants: 8,
-    isPrivate: false,
-    hostName: "zebuto",
-    communityId: "jazz",
-  },
-  {
-    id: "5",
-    name: "Hip Hop Cypher",
-    description: "Freestyle and beats",
-    genre: "Hip Hop",
-    participants: 6,
-    maxParticipants: 12,
-    isPrivate: false,
-    hostName: "TDTN Kira",
-    communityId: "hiphop",
-  },
-  {
-    id: "6",
-    name: "Acoustic Sessions",
-    description: "Intimate acoustic performances",
-    genre: "Acoustic",
-    participants: 2,
-    maxParticipants: 6,
-    isPrivate: true,
-    hostName: "AnataBakka",
-  },
-  {
-    id: "7",
-    name: "Metal Mayhem",
-    description: "Heavy riffs and powerful drums",
-    genre: "Metal",
-    participants: 7,
-    maxParticipants: 10,
-    isPrivate: false,
-    hostName: "DesertStark",
-    communityId: "metal",
-  },
-  {
-    id: "8",
-    name: "Indie Vibes",
-    description: "Alternative and indie rock",
-    genre: "Indie",
-    participants: 3,
-    maxParticipants: 8,
-    isPrivate: false,
-    hostName: "LEBOVIM",
-    communityId: "indie",
-  },
-  {
-    id: "9",
-    name: "Classical Harmony",
-    description: "Orchestral and classical compositions",
-    genre: "Classical",
-    participants: 1,
-    maxParticipants: 5,
-    isPrivate: false,
-    hostName: "MadsNado",
-    communityId: "classical",
-  },
-  {
-    id: "10",
-    name: "R&B Soul",
-    description: "Smooth R&B and soulful melodies",
-    genre: "R&B",
-    participants: 4,
-    maxParticipants: 8,
-    isPrivate: false,
-    hostName: "ThatGuyDan",
-    communityId: "rnb",
-  },
-  {
-    id: "11",
-    name: "Reggae Roots",
-    description: "Island vibes and reggae beats",
-    genre: "Reggae",
-    participants: 5,
-    maxParticipants: 10,
-    isPrivate: false,
-    hostName: "OhmyDOG",
-    communityId: "reggae",
-  },
-  {
-    id: "12",
-    name: "Country Roads",
-    description: "Country and folk music",
-    genre: "Country",
-    participants: 2,
-    maxParticipants: 6,
-    isPrivate: false,
-    hostName: "XeFOs",
-    communityId: "country",
-  },
-  {
-    id: "13",
-    name: "Techno Underground",
-    description: "Deep techno and underground sounds",
-    genre: "Techno",
-    participants: 8,
-    maxParticipants: 15,
-    isPrivate: false,
-    hostName: "Akuma chun",
-    communityId: "techno",
-  },
-  {
-    id: "14",
-    name: "Blues Brothers",
-    description: "Classic blues and soul",
-    genre: "Blues",
-    participants: 3,
-    maxParticipants: 7,
-    isPrivate: false,
-    hostName: "Tylobic",
-    communityId: "blues",
-  },
-  {
-    id: "15",
-    name: "Pop Hits",
-    description: "Latest pop hits and covers",
-    genre: "Pop",
-    participants: 6,
-    maxParticipants: 12,
-    isPrivate: false,
-    hostName: "zebuto",
-    communityId: "pop",
+    isEnabled: true,
+    lastActiveAt: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
   },
 ];
 
@@ -256,7 +125,7 @@ const mockCommunities: Community[] = [
     totalMembers: 320,
     isLive: true,
     recentPosts: [],
-    recentJam: mockRooms[1],
+    recentJam: mockRooms[0],
   },
   {
     id: "electronic",
@@ -267,7 +136,7 @@ const mockCommunities: Community[] = [
     totalMembers: 580,
     isLive: true,
     recentPosts: [],
-    recentJam: mockRooms[2],
+    recentJam: mockRooms[0],
   },
   {
     id: "jazz",
@@ -278,7 +147,7 @@ const mockCommunities: Community[] = [
     totalMembers: 210,
     isLive: false,
     recentPosts: [],
-    recentJam: mockRooms[3],
+    recentJam: mockRooms[0],
   },
   {
     id: "hiphop",
@@ -289,7 +158,7 @@ const mockCommunities: Community[] = [
     totalMembers: 520,
     isLive: true,
     recentPosts: [],
-    recentJam: mockRooms[4],
+    recentJam: mockRooms[0],
   },
   {
     id: "metal",
@@ -300,7 +169,7 @@ const mockCommunities: Community[] = [
     totalMembers: 280,
     isLive: true,
     recentPosts: [],
-    recentJam: mockRooms[6],
+    recentJam: mockRooms[0],
   },
   {
     id: "indie",
@@ -311,7 +180,7 @@ const mockCommunities: Community[] = [
     totalMembers: 340,
     isLive: false,
     recentPosts: [],
-    recentJam: mockRooms[7],
+    recentJam: mockRooms[0],
   },
   {
     id: "classical",
@@ -322,7 +191,7 @@ const mockCommunities: Community[] = [
     totalMembers: 150,
     isLive: false,
     recentPosts: [],
-    recentJam: mockRooms[8],
+    recentJam: mockRooms[0],
   },
   {
     id: "rnb",
@@ -333,7 +202,7 @@ const mockCommunities: Community[] = [
     totalMembers: 260,
     isLive: false,
     recentPosts: [],
-    recentJam: mockRooms[9],
+    recentJam: mockRooms[0],
   },
   {
     id: "reggae",
@@ -344,7 +213,7 @@ const mockCommunities: Community[] = [
     totalMembers: 190,
     isLive: false,
     recentPosts: [],
-    recentJam: mockRooms[10],
+    recentJam: mockRooms[0],
   },
 ];
 
@@ -490,6 +359,11 @@ export const fetchGlobalPosts = async (): Promise<Post[]> => {
   return mockPosts.filter(post => post.isGlobal === true);
 };
 
+export const fetchPost = async (id: string): Promise<Post | null> => {
+  await new Promise(resolve => setTimeout(resolve, 300));
+  return mockPosts.find(post => post.id === id) || null;
+};
+
 export const fetchCommunities = async (filters?: { category?: string; search?: string }): Promise<Community[]> => {
   await new Promise(resolve => setTimeout(resolve, 300));
   let filtered = [...mockCommunities];
@@ -524,12 +398,185 @@ export const fetchJoinedCommunities = async (): Promise<Community[]> => {
 
 export const fetchJams = async (): Promise<Room[]> => {
   await new Promise(resolve => setTimeout(resolve, 300));
-  return [...mockRooms];
+  // Combine mock rooms and user rooms, filter out disabled rooms
+  const allRooms = [...mockRooms, ...Array.from(userRooms.values())];
+  return allRooms.filter(room => {
+    // Auto-disable inactive rooms
+    if (shouldAutoDisable(room)) {
+      room.isEnabled = false;
+    }
+    // Only return enabled rooms for public listing
+    return room.isEnabled;
+  });
 };
 
 export const fetchJam = async (id: string): Promise<Room | null> => {
   await new Promise(resolve => setTimeout(resolve, 300));
-  return mockRooms.find(room => room.id === id) || null;
+  // Check both mock rooms and user rooms
+  const room = mockRooms.find(room => room.id === id) || userRooms.get(id);
+  if (!room) return null;
+  
+  // Auto-disable if inactive
+  if (shouldAutoDisable(room)) {
+    room.isEnabled = false;
+  }
+  
+  return room;
+};
+
+// Get user's own room (if they have one)
+export const getMyRoom = async (userId: string): Promise<Room | null> => {
+  await new Promise(resolve => setTimeout(resolve, 300));
+  const room = Array.from(userRooms.values()).find(r => r.hostId === userId);
+  if (!room) return null;
+  
+  // Auto-disable if inactive
+  if (shouldAutoDisable(room)) {
+    room.isEnabled = false;
+  }
+  
+  return room;
+};
+
+// Create a new room for a user (only one room per user)
+export const createRoom = async (
+  userId: string,
+  hostName: string,
+  hostAvatar: string | undefined,
+  roomData: {
+    name: string;
+    description?: string;
+    genre?: string;
+    maxParticipants: number;
+    isPrivate: boolean;
+  }
+): Promise<Room> => {
+  await new Promise(resolve => setTimeout(resolve, 300));
+  
+  // Check if user already has a room
+  const existingRoom = Array.from(userRooms.values()).find(r => r.hostId === userId);
+  if (existingRoom) {
+    throw new Error("User already has a room. Update existing room instead.");
+  }
+  
+  const newRoom: Room = {
+    id: `room-${Date.now()}`,
+    name: roomData.name,
+    description: roomData.description,
+    genre: roomData.genre,
+    participants: 1, // Host is first participant
+    maxParticipants: roomData.maxParticipants,
+    isPrivate: roomData.isPrivate,
+    hostName,
+    hostAvatar,
+    hostId: userId,
+    isEnabled: true,
+    lastActiveAt: new Date(),
+    createdAt: new Date(),
+  };
+  
+  userRooms.set(newRoom.id, newRoom);
+  return newRoom;
+};
+
+// Update room settings
+export const updateRoom = async (
+  roomId: string,
+  userId: string,
+  updates: {
+    name?: string;
+    description?: string;
+    genre?: string;
+    maxParticipants?: number;
+    isPrivate?: boolean;
+  }
+): Promise<Room> => {
+  await new Promise(resolve => setTimeout(resolve, 300));
+  
+  const room = userRooms.get(roomId) || mockRooms.find(r => r.id === roomId);
+  if (!room) {
+    throw new Error("Room not found");
+  }
+  
+  if (room.hostId !== userId) {
+    throw new Error("Only room host can update room settings");
+  }
+  
+  // Update fields
+  if (updates.name !== undefined) room.name = updates.name;
+  if (updates.description !== undefined) room.description = updates.description;
+  if (updates.genre !== undefined) room.genre = updates.genre;
+  if (updates.maxParticipants !== undefined) room.maxParticipants = updates.maxParticipants;
+  if (updates.isPrivate !== undefined) room.isPrivate = updates.isPrivate;
+  
+  // Update in storage
+  if (userRooms.has(roomId)) {
+    userRooms.set(roomId, room);
+  }
+  
+  return room;
+};
+
+// Activate a disabled room
+export const activateRoom = async (roomId: string, userId: string): Promise<Room> => {
+  await new Promise(resolve => setTimeout(resolve, 300));
+  
+  const room = userRooms.get(roomId) || mockRooms.find(r => r.id === roomId);
+  if (!room) {
+    throw new Error("Room not found");
+  }
+  
+  if (room.hostId !== userId) {
+    throw new Error("Only room host can activate room");
+  }
+  
+  room.isEnabled = true;
+  room.lastActiveAt = new Date();
+  
+  if (userRooms.has(roomId)) {
+    userRooms.set(roomId, room);
+  }
+  
+  return room;
+};
+
+// Deactivate a room
+export const deactivateRoom = async (roomId: string, userId: string): Promise<Room> => {
+  await new Promise(resolve => setTimeout(resolve, 300));
+  
+  const room = userRooms.get(roomId) || mockRooms.find(r => r.id === roomId);
+  if (!room) {
+    throw new Error("Room not found");
+  }
+  
+  if (room.hostId !== userId) {
+    throw new Error("Only room host can deactivate room");
+  }
+  
+  room.isEnabled = false;
+  
+  if (userRooms.has(roomId)) {
+    userRooms.set(roomId, room);
+  }
+  
+  return room;
+};
+
+// Update room activity (called when user enters room or sends message)
+export const updateRoomActivity = async (roomId: string): Promise<void> => {
+  await new Promise(resolve => setTimeout(resolve, 100));
+  
+  const room = userRooms.get(roomId) || mockRooms.find(r => r.id === roomId);
+  if (room) {
+    room.lastActiveAt = new Date();
+    // Auto-enable if it was disabled
+    if (!room.isEnabled) {
+      room.isEnabled = true;
+    }
+    if (userRooms.has(roomId)) {
+      userRooms.set(roomId, room);
+    }
+  }
 };
 
 export const fetchOnlineUsers = async (): Promise<User[]> => {
@@ -537,5 +584,126 @@ export const fetchOnlineUsers = async (): Promise<User[]> => {
   return mockUsers.filter(user => 
     user.status === "Online" || user.status === "In Game" || user.status === "In Queue"
   );
+};
+
+export const fetchUser = async (id: string): Promise<User | null> => {
+  await new Promise(resolve => setTimeout(resolve, 300));
+  return mockUsers.find(user => user.id === id) || null;
+};
+
+export const fetchAllUsers = async (): Promise<User[]> => {
+  await new Promise(resolve => setTimeout(resolve, 300));
+  return [...mockUsers];
+};
+
+export type Message = {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  content: string;
+  timestamp: Date;
+  isRead: boolean;
+};
+
+export type Conversation = {
+  id: string;
+  userId: string;
+  lastMessage?: Message;
+  unreadCount: number;
+};
+
+// Mock messages
+const mockMessages: Message[] = [
+  {
+    id: "1",
+    senderId: "2",
+    receiverId: "1",
+    content: "Hey! Want to jam together?",
+    timestamp: new Date(Date.now() - 1000 * 60 * 30),
+    isRead: true,
+  },
+  {
+    id: "2",
+    senderId: "1",
+    receiverId: "2",
+    content: "Sure! What are you thinking?",
+    timestamp: new Date(Date.now() - 1000 * 60 * 25),
+    isRead: true,
+  },
+  {
+    id: "3",
+    senderId: "2",
+    receiverId: "1",
+    content: "Maybe some electronic vibes?",
+    timestamp: new Date(Date.now() - 1000 * 60 * 20),
+    isRead: true,
+  },
+  {
+    id: "4",
+    senderId: "3",
+    receiverId: "1",
+    content: "Check out my new track!",
+    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
+    isRead: false,
+  },
+];
+
+export const fetchConversations = async (userId: string): Promise<Conversation[]> => {
+  await new Promise(resolve => setTimeout(resolve, 300));
+  // Get unique conversation partners
+  const partnerIds = new Set<string>();
+  mockMessages.forEach(msg => {
+    if (msg.senderId === userId) partnerIds.add(msg.receiverId);
+    if (msg.receiverId === userId) partnerIds.add(msg.senderId);
+  });
+  
+  return Array.from(partnerIds).map(partnerId => {
+    const conversationMessages = mockMessages
+      .filter(msg => 
+        (msg.senderId === userId && msg.receiverId === partnerId) ||
+        (msg.senderId === partnerId && msg.receiverId === userId)
+      )
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    
+    const unreadCount = conversationMessages.filter(
+      msg => msg.receiverId === userId && !msg.isRead
+    ).length;
+    
+    return {
+      id: partnerId,
+      userId: partnerId,
+      lastMessage: conversationMessages[0],
+      unreadCount,
+    };
+  }).sort((a, b) => {
+    // Sort by last message timestamp
+    const aTime = a.lastMessage?.timestamp.getTime() || 0;
+    const bTime = b.lastMessage?.timestamp.getTime() || 0;
+    return bTime - aTime;
+  });
+};
+
+export const fetchMessages = async (userId: string, partnerId: string): Promise<Message[]> => {
+  await new Promise(resolve => setTimeout(resolve, 300));
+  return mockMessages
+    .filter(msg => 
+      (msg.senderId === userId && msg.receiverId === partnerId) ||
+      (msg.senderId === partnerId && msg.receiverId === userId)
+    )
+    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+};
+
+export const sendMessage = async (senderId: string, receiverId: string, content: string): Promise<Message> => {
+  await new Promise(resolve => setTimeout(resolve, 200));
+  const newMessage: Message = {
+    id: Date.now().toString(),
+    senderId,
+    receiverId,
+    content,
+    timestamp: new Date(),
+    isRead: false,
+  };
+  mockMessages.push(newMessage);
+  return newMessage;
 };
 
