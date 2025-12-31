@@ -116,7 +116,7 @@ const mockRooms: Room[] = [
     hostId: "99", // Example host ID
     communityId: "lofi",
     isEnabled: true,
-    streamUrl: "https://example.com/hls/stream.m3u8", // Example HLS stream URL
+    streamUrl: "http://jam.welor.fun:8080/hls/stream.m3u8", // Example HLS stream URL
     lastActiveAt: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
   },

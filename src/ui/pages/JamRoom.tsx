@@ -258,7 +258,7 @@ function JamRoom() {
                             />
                           </div>
                           <span className="text-xs text-muted-foreground">
-                            {hlsPlayer.isPlaying ? "LIVE" : "OFFLINE"}
+                            {hlsPlayer.isPlaying ? "LIVE" : hlsPlayer.isReady ? "PAUSED" : "OFFLINE"}
                           </span>
                         </div>
                       )}
