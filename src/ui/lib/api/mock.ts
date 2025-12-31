@@ -23,6 +23,7 @@ export type Room = {
   isEnabled: boolean; // Whether room is active and visible
   lastActiveAt: Date; // Last time room had activity (participants or messages)
   createdAt: Date; // When room was created
+  streamUrl?: string; // HLS stream URL (e.g., "https://example.com/hls/stream.m3u8")
 };
 
 export type Post = {
@@ -44,6 +45,22 @@ export type Post = {
   comments: number;
   community?: string; // Community ID or name
   isGlobal?: boolean; // Flag for global discovery content
+};
+
+export type Comment = {
+  id: string;
+  postId: string;
+  author: {
+    username: string;
+    avatar?: string;
+  };
+  content: string;
+  audioFile?: {
+    url: string;
+    title: string;
+    duration: number;
+  };
+  timestamp: Date;
 };
 
 export type Community = {
@@ -99,6 +116,7 @@ const mockRooms: Room[] = [
     hostId: "99", // Example host ID
     communityId: "lofi",
     isEnabled: true,
+    streamUrl: "https://example.com/hls/stream.m3u8", // Example HLS stream URL
     lastActiveAt: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
   },
@@ -473,6 +491,7 @@ export const createRoom = async (
     isEnabled: true,
     lastActiveAt: new Date(),
     createdAt: new Date(),
+    streamUrl: `https://example.com/hls/${userId}/stream.m3u8`, // Generate HLS stream URL
   };
   
   userRooms.set(newRoom.id, newRoom);
@@ -705,5 +724,81 @@ export const sendMessage = async (senderId: string, receiverId: string, content:
   };
   mockMessages.push(newMessage);
   return newMessage;
+};
+
+// Mock comments storage
+const mockComments: Comment[] = [
+  {
+    id: "1",
+    postId: "1",
+    author: { username: "Akuma chun" },
+    content: "This is amazing! Great work!",
+    timestamp: new Date(Date.now() - 1000 * 60 * 30),
+  },
+  {
+    id: "2",
+    postId: "1",
+    author: { username: "AnataBakka" },
+    content: "Love the vibes here!",
+    timestamp: new Date(Date.now() - 1000 * 60 * 20),
+  },
+];
+
+export const fetchComments = async (postId: string): Promise<Comment[]> => {
+  await new Promise(resolve => setTimeout(resolve, 300));
+  return mockComments
+    .filter(comment => comment.postId === postId)
+    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+};
+
+export const createComment = async (postId: string, userId: string, content: string, audioFile?: File): Promise<Comment> => {
+  await new Promise(resolve => setTimeout(resolve, 200));
+  const user = mockUsers.find(u => u.id === userId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+  
+  // If audio file provided, create audio metadata
+  let audioFileData: { url: string; title: string; duration: number } | undefined;
+  if (audioFile) {
+    // In a real app, you'd upload the file and get a URL
+    // For now, we'll create a blob URL
+    const audioUrl = URL.createObjectURL(audioFile);
+    const audio = new Audio(audioUrl);
+    
+    // Wait for metadata to load
+    await new Promise<void>((resolve) => {
+      audio.addEventListener("loadedmetadata", () => {
+        audioFileData = {
+          url: audioUrl,
+          title: audioFile.name || "Voice Recording",
+          duration: audio.duration,
+        };
+        resolve();
+      });
+      audio.load();
+    });
+  }
+  
+  const newComment: Comment = {
+    id: Date.now().toString(),
+    postId,
+    author: {
+      username: user.username,
+      avatar: user.avatar,
+    },
+    content,
+    audioFile: audioFileData,
+    timestamp: new Date(),
+  };
+  mockComments.push(newComment);
+  
+  // Update post comment count
+  const post = mockPosts.find(p => p.id === postId);
+  if (post) {
+    post.comments += 1;
+  }
+  
+  return newComment;
 };
 

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { SearchInput } from "@/components/SearchInput";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +21,6 @@ import {
   Users,
   Hash,
   Plus,
-  Search,
   Settings,
   Power,
   PowerOff,
@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useJams, useMyRoom, useCreateRoom, useUpdateRoom, useActivateRoom, useDeactivateRoom } from "@/hooks/useJams";
+import { EmptyState } from "@/components/EmptyState";
+import { LoadingState } from "@/components/LoadingState";
 
 interface JamsTabProps {
   onGuestAction?: () => void;
@@ -438,21 +440,12 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
       )}
 
       {/* Search */}
-      <form onSubmit={handleJamSearch} className="mb-4">
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search jams..."
-              value={jamSearchInput}
-              onChange={(e) => setJamSearchInput(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          <Button type="submit">Search</Button>
-        </div>
-      </form>
+      <SearchInput
+        placeholder="Search jams..."
+        value={jamSearchInput}
+        onChange={setJamSearchInput}
+        onSubmit={handleJamSearch}
+      />
 
       {/* Other Jams Grid */}
       <div className="mb-2">
@@ -462,20 +455,18 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {roomsLoading ? (
-          <div className="col-span-full p-8 text-center text-muted-foreground">
-            <p className="text-sm">Loading jams...</p>
+          <div className="col-span-full">
+            <LoadingState message="Loading jams..." />
           </div>
         ) : filteredRooms.length === 0 ? (
-          <div className="col-span-full p-8 text-center text-muted-foreground">
-            <Music className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p className="text-sm">
-              {searchQuery ? "No jams found" : "No active jams"}
-            </p>
-            <p className="text-xs mt-1">
-              {searchQuery 
+          <div className="col-span-full">
+            <EmptyState
+              icon={Music}
+              title={searchQuery ? "No jams found" : "No active jams"}
+              description={searchQuery 
                 ? "Try adjusting your search"
                 : "Create your room to start jamming!"}
-            </p>
+            />
           </div>
         ) : (
           filteredRooms.map((room) => (

@@ -1,16 +1,10 @@
 import { useState } from "react";
 import { useSearchParams, useParams, useNavigate } from "react-router-dom";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import { 
   Music, 
   Users, 
-  Search,
-  Upload,
-  MoreVertical,
   Filter,
   X,
   ArrowLeft,
@@ -20,6 +14,10 @@ import { useCommunities, useCommunity } from "@/hooks/useCommunities";
 import { useCommunityPosts } from "@/hooks/usePosts";
 import { useAllUsers } from "@/hooks/useUsers";
 import { PostCard } from "@/components/PostCard";
+import { ComposePost } from "@/components/ComposePost";
+import { EmptyState } from "@/components/EmptyState";
+import { LoadingState } from "@/components/LoadingState";
+import { SearchInput } from "@/components/SearchInput";
 import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
 import type { Post } from "@/lib/api/mock";
 
@@ -49,10 +47,6 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
   const { data: allUsers = [] } = useAllUsers();
   const [communitySearchInput, setCommunitySearchInput] = useState(searchQuery);
   const [showFilters, setShowFilters] = useState(false);
-  const [newPost, setNewPost] = useState({
-    content: "",
-    audioFile: null as File | null,
-  });
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   
   const getUserByUsername = (username: string) => {
@@ -105,17 +99,9 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
     console.log("Join community:", communityId);
   };
 
-  const handleCreatePost = () => {
-    if (isGuest) {
-      onGuestAction?.();
-      return;
-    }
-    if (!newPost.content.trim() && !newPost.audioFile) return;
+  const handleCreatePost = (content: string, audioFile: File | null) => {
     // TODO: Implement actual post creation with API
-    setNewPost({
-      content: "",
-      audioFile: null,
-    });
+    console.log("Creating post to community:", { communityId, content, audioFile });
   };
 
   const handleLikePost = () => {
@@ -130,146 +116,79 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
     return (
       <>
         {/* Community Header Banner */}
-        <div className="bg-gradient-to-r from-primary/20 to-primary/10 border-b border-border">
-          <div className="p-6">
-            <div className="flex items-start gap-4">
-              {/* Back Button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="flex-shrink-0"
-                onClick={() => navigate(-1)}
-                title="Go back"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              
-              {/* Community Avatar */}
-              <div className="flex-shrink-0">
-                <div className="h-20 w-20 rounded-full bg-primary flex items-center justify-center text-2xl font-bold text-primary-foreground">
-                  {selectedCommunity.name.substring(0, 2).toUpperCase()}
-                </div>
+        <div className="relative h-40 bg-gradient-to-r from-primary/20 to-primary/10 border-b border-border">
+          {/* Back Button - positioned absolutely */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-4 left-4 z-10 bg-background/80 backdrop-blur-sm hover:bg-background"
+            onClick={() => navigate(-1)}
+            title="Go back"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Community Content */}
+        <div className="relative px-4 pb-4 border-b border-border">
+          {/* Community Avatar */}
+          <div className="relative -mt-16 mb-4">
+            <div className="h-24 w-24 rounded-full bg-primary flex items-center justify-center text-3xl font-bold text-primary-foreground border-4 border-background">
+              {selectedCommunity.name.substring(0, 2).toUpperCase()}
+            </div>
+          </div>
+
+          {/* Community Info */}
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <h1 className="text-2xl font-bold">{selectedCommunity.name}</h1>
+            </div>
+            <p className="text-muted-foreground mb-3">{selectedCommunity.description}</p>
+            <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
+              <div className="flex items-center gap-1">
+                <Users className="h-4 w-4" />
+                <span>{selectedCommunity.activeCount} active</span>
               </div>
-              
-              {/* Community Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-2">
-                  <h1 className="text-2xl font-bold">{selectedCommunity.name}</h1>
-                </div>
-                <p className="text-muted-foreground mb-3">{selectedCommunity.description}</p>
-                <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
-                  <div className="flex items-center gap-1">
-                    <Users className="h-4 w-4" />
-                    <span>{selectedCommunity.activeCount} active</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span>{selectedCommunity.totalMembers} members</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap mb-3">
-                  {selectedCommunity.category.map((cat) => (
-                    <span
-                      key={cat}
-                      className="text-xs px-2 py-1 rounded bg-muted"
-                    >
-                      {cat}
-                    </span>
-                  ))}
-                </div>
-                <Button
-                  onClick={() => handleJoin(selectedCommunity.id)}
-                  size="sm"
-                >
-                  Join Community
-                </Button>
+              <div className="flex items-center gap-1">
+                <span>{selectedCommunity.totalMembers} members</span>
               </div>
             </div>
+            <div className="flex items-center gap-2 flex-wrap mb-3">
+              {selectedCommunity.category.map((cat) => (
+                <span
+                  key={cat}
+                  className="text-xs px-2 py-1 rounded bg-muted"
+                >
+                  {cat}
+                </span>
+              ))}
+            </div>
+            <Button
+              onClick={() => handleJoin(selectedCommunity.id)}
+              size="sm"
+            >
+              Join Community
+            </Button>
           </div>
         </div>
 
         {/* Compose Post Area */}
-        {!isGuest && (
-          <div className="border-b border-border p-4 bg-background">
-            <div className="flex gap-3">
-              <Avatar size="default" className="flex-shrink-0">
-                <AvatarImage src={user?.avatar || ""} alt={user?.username || "You"} />
-                <AvatarFallback className="bg-primary text-primary-foreground">
-                  {user?.username?.substring(0, 2).toUpperCase() || "U"}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 space-y-3">
-                <Textarea
-                  placeholder={`Post to ${selectedCommunity.name}...`}
-                  value={newPost.content}
-                  onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
-                  className="min-h-[100px] resize-none border-border"
-                  rows={4}
-                />
-                {newPost.audioFile && (
-                  <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
-                    <Music className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm flex-1 truncate">{newPost.audioFile.name}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      className="h-6 w-6"
-                      onClick={() => setNewPost({ ...newPost, audioFile: null })}
-                    >
-                      <MoreVertical className="h-3 w-3" />
-                    </Button>
-                  </div>
-                )}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <label htmlFor="community-audio-upload" className="cursor-pointer">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        type="button"
-                        className="text-muted-foreground hover:text-foreground"
-                      >
-                        <Upload className="h-4 w-4 mr-2" />
-                        Upload Audio
-                      </Button>
-                      <input
-                        id="community-audio-upload"
-                        type="file"
-                        accept="audio/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            setNewPost({ ...newPost, audioFile: file });
-                          }
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <Button
-                    onClick={handleCreatePost}
-                    disabled={!newPost.content.trim() && !newPost.audioFile}
-                    size="sm"
-                  >
-                    Post
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <ComposePost
+          placeholder={selectedCommunity ? `Post to ${selectedCommunity.name}...` : "What's on your mind? Share a message or upload audio..."}
+          onSubmit={handleCreatePost}
+          onGuestAction={onGuestAction}
+        />
 
         {/* Posts Feed */}
         <div className="divide-y divide-border">
           {postsLoading ? (
-            <div className="p-8 text-center text-muted-foreground">
-              <p className="text-sm">Loading posts...</p>
-            </div>
+            <LoadingState message="Loading posts..." />
           ) : communityPosts.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              <Music className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p className="text-sm">No posts yet</p>
-              <p className="text-xs mt-1">Be the first to share something!</p>
-            </div>
+            <EmptyState 
+              icon={Music} 
+              title="No posts yet" 
+              description="Be the first to share something!"
+            />
           ) : (
             communityPosts.map((post: Post) => (
               <PostCard
@@ -300,19 +219,12 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
         <h2 className="text-lg font-semibold mb-4">Communities</h2>
 
         {/* Search and Filter Toggle */}
-        <div className="mb-4">
-          <form onSubmit={handleCommunitySearch} className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Search communities..."
-                value={communitySearchInput}
-                onChange={(e) => setCommunitySearchInput(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Button type="submit">Search</Button>
+        <SearchInput
+          placeholder="Search communities..."
+          value={communitySearchInput}
+          onChange={setCommunitySearchInput}
+          onSubmit={handleCommunitySearch}
+          extraButtons={
             <Button
               type="button"
               variant={showFilters ? "default" : "outline"}
@@ -321,8 +233,8 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
               <Filter className="h-4 w-4 mr-2" />
               Filters
             </Button>
-          </form>
-        </div>
+          }
+        />
 
         {/* Category Filters - Toggleable */}
         {showFilters && (
@@ -358,15 +270,13 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
 
         {/* Communities List - One per row */}
         {communities.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <Music className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p className="text-sm">No communities found</p>
-            <p className="text-xs mt-1">
-              {searchQuery || categoryFilter 
-                ? "Try adjusting your filters"
-                : "No communities available yet"}
-            </p>
-          </div>
+          <EmptyState
+            icon={Music}
+            title="No communities found"
+            description={searchQuery || categoryFilter 
+              ? "Try adjusting your filters"
+              : "No communities available yet"}
+          />
         ) : (
           <div className="space-y-3">
             {communities.map((community) => (

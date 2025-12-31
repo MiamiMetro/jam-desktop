@@ -13,11 +13,13 @@ import {
   Pause,
   LogOut,
   Settings,
+  RefreshCw,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useJam, useUpdateRoomActivity } from "@/hooks/useJams";
 import { useAllUsers } from "@/hooks/useUsers";
 import { formatDuration } from "@/lib/postUtils";
+import { useHLSPlayer } from "@/hooks/useHLSPlayer";
 
 function JamRoom() {
   const { id } = useParams<{ id: string }>();
@@ -27,7 +29,9 @@ function JamRoom() {
   const { data: allUsers = [] } = useAllUsers();
   const updateActivityMutation = useUpdateRoomActivity();
   const [message, setMessage] = useState("");
-  const [playingAudio, setPlayingAudio] = useState(false);
+  
+  // HLS stream player
+  const hlsPlayer = useHLSPlayer(room?.streamUrl);
   const [messages, setMessages] = useState<Array<{
     id: string;
     userId: string;
@@ -52,11 +56,6 @@ function JamRoom() {
     }
   }, [id, isGuest, updateActivityMutation]);
   
-  // Mock audio track data
-  const audioTrack = {
-    title: "Live Jam Session",
-    duration: 180, // 3 minutes
-  };
   
   // Mock participants (using first few users as participants)
   const participants = allUsers.slice(0, room?.participants || 3);
@@ -202,41 +201,75 @@ function JamRoom() {
           {/* Audio Track Section */}
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <div className="mb-4 flex-shrink-0">
-              <h3 className="text-sm font-semibold mb-3">Live Audio</h3>
+              <h3 className="text-sm font-semibold mb-3">Live Audio Stream</h3>
               <div className="p-4 bg-muted rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-12 w-12 rounded-full"
-                    onClick={() => setPlayingAudio(!playingAudio)}
-                  >
-                    {playingAudio ? (
-                      <Pause className="h-6 w-6" />
-                    ) : (
-                      <Play className="h-6 w-6" />
-                    )}
-                  </Button>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Music className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      <span className="text-sm font-medium truncate">
-                        {audioTrack.title}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-2 bg-muted-foreground/20 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-primary transition-all"
-                          style={{ width: playingAudio ? "45%" : "0%" }}
-                        />
+                {room.streamUrl ? (
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-12 w-12 rounded-full"
+                      onClick={() => hlsPlayer.togglePlayPause()}
+                      disabled={hlsPlayer.isLoading}
+                    >
+                      {hlsPlayer.isLoading ? (
+                        <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      ) : hlsPlayer.isPlaying ? (
+                        <Pause className="h-6 w-6" />
+                      ) : (
+                        <Play className="h-6 w-6" />
+                      )}
+                    </Button>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Music className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <span className="text-sm font-medium truncate">
+                          Live Jam Session
+                        </span>
+                        {hlsPlayer.isPlaying && (
+                          <span className="h-2 w-2 bg-red-500 rounded-full animate-pulse" />
+                        )}
                       </div>
-                      <span className="text-xs text-muted-foreground">
-                        {formatDuration(audioTrack.duration)}
-                      </span>
+                      {hlsPlayer.error ? (
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-red-500 flex-1">{hlsPlayer.error}</p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              hlsPlayer.retry();
+                              setTimeout(() => {
+                                hlsPlayer.play();
+                              }, 200);
+                            }}
+                            className="h-7 text-xs"
+                            disabled={hlsPlayer.isLoading}
+                          >
+                            <RefreshCw className="h-3 w-3 mr-1" />
+                            Retry
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-muted-foreground/20 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-primary transition-all"
+                              style={{ width: hlsPlayer.isPlaying ? "100%" : "0%" }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {hlsPlayer.isPlaying ? "LIVE" : "OFFLINE"}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <p className="text-sm">No stream available</p>
+                    <p className="text-xs mt-1">Stream will start when the host begins jamming</p>
+                  </div>
+                )}
               </div>
             </div>
             

@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { fetchPosts, fetchCommunityPosts, fetchGlobalPosts, fetchPost, type Post } from '@/lib/api/mock';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { fetchPosts, fetchCommunityPosts, fetchGlobalPosts, fetchPost, fetchComments, createComment, type Post, type Comment } from '@/lib/api/mock';
 import { useAuthStore } from '@/stores/authStore';
 
 export const usePosts = () => {
@@ -56,6 +56,32 @@ export const usePost = (postId: string) => {
     queryKey: ['post', postId],
     queryFn: () => fetchPost(postId),
     enabled: !!postId,
+  });
+};
+
+export const useComments = (postId: string) => {
+  return useQuery<Comment[]>({
+    queryKey: ['comments', postId],
+    queryFn: () => fetchComments(postId),
+    enabled: !!postId,
+  });
+};
+
+export const useCreateComment = () => {
+  const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  
+  return useMutation({
+    mutationFn: ({ postId, content, audioFile }: { postId: string; content: string; audioFile?: File }) => {
+      if (!user) throw new Error('User not authenticated');
+      return createComment(postId, user.id, content, audioFile);
+    },
+    onSuccess: (_, variables) => {
+      // Invalidate comments for this post
+      queryClient.invalidateQueries({ queryKey: ['comments', variables.postId] });
+      // Invalidate the post to update comment count
+      queryClient.invalidateQueries({ queryKey: ['post', variables.postId] });
+    },
   });
 };
 
