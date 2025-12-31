@@ -80,17 +80,21 @@ export interface Post {
   isGlobal?: boolean;
 }
 
-// Backend Comment response type (snake_case)
+// Backend Comment response type (may have snake_case or camelCase fields)
 export interface BackendComment {
   id: string;
   post_id?: string;
+  postId?: string;
   text?: string;
+  content?: string; // API may return content directly
   audio_url?: string | null;
-  created_at: string;
+  created_at?: string;
+  timestamp?: string; // API may return timestamp directly
   author: {
     id: string;
     username: string;
     avatar_url?: string;
+    avatar?: string; // API may return avatar directly
     display_name?: string;
   };
   [key: string]: unknown;
@@ -116,13 +120,19 @@ export interface Comment {
 
 export interface Message {
   id: string;
-  senderId: string;
-  receiverId: string;
+  senderId?: string;
+  sender_id?: string; // Backend may use snake_case
+  receiverId?: string;
+  receiver_id?: string; // Backend may use snake_case
   content?: string;
   text?: string; // Backend uses 'text'
   audio_url?: string | null;
-  timestamp: string; // ISO date string from backend
+  audioUrl?: string | null; // Backend may use camelCase
+  timestamp?: string; // ISO date string from backend
+  createdAt?: string; // Backend may use createdAt
+  created_at?: string; // Backend may use created_at
   isRead?: boolean;
+  [key: string]: unknown; // Allow other fields from backend
 }
 
 export interface Conversation {
@@ -157,23 +167,32 @@ export function normalizePost(backendPost: BackendPost): Post {
 export function normalizeComment(backendComment: BackendComment): Comment {
   return {
     id: backendComment.id,
-    postId: backendComment.post_id || backendComment.id, // Fallback if post_id is missing
+    postId: backendComment.post_id || backendComment.postId || backendComment.id, // Fallback if post_id is missing
     author: {
       username: backendComment.author.username,
-      avatar: backendComment.author.avatar_url || undefined, // Convert avatar_url to avatar
+      avatar: backendComment.author.avatar || backendComment.author.avatar_url || undefined, // Handle both formats
     },
-    content: backendComment.text, // Map text to content for frontend
+    content: backendComment.content || backendComment.text || '', // Handle both content and text fields
     audio_url: backendComment.audio_url || null,
-    timestamp: backendComment.created_at, // Map created_at to timestamp
+    timestamp: backendComment.timestamp || backendComment.created_at || '', // Handle both timestamp and created_at
   };
 }
 
 // Helper function to convert backend Message to frontend Message format
 export function normalizeMessage(message: Message): Message {
-  // Message is already in the right format from API, just ensure content is set
+  // Normalize message fields from backend format (may have snake_case or camelCase)
+  const senderId = message.senderId || (message.sender_id as string) || '';
+  const receiverId = message.receiverId || (message.receiver_id as string) || '';
+  const timestamp = message.timestamp || (message.createdAt as string) || (message.created_at as string) || '';
+  
   return {
-    ...message,
-    content: message.content || message.text || '',
+    id: message.id,
+    senderId,
+    receiverId,
+    content: message.content || (message.text as string) || '',
+    audio_url: message.audio_url || (message.audioUrl as string | null) || null,
+    timestamp,
+    isRead: message.isRead,
   };
 }
 

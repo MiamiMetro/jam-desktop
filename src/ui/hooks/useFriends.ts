@@ -65,6 +65,17 @@ export const useAcceptFriend = () => {
   });
 };
 
+export const useDeclineFriend = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: (userId: string) => friendsApi.deleteFriend(userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['friends', 'requests'] });
+    },
+  });
+};
+
 export const useDeleteFriend = () => {
   const queryClient = useQueryClient();
   

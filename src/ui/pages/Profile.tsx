@@ -4,7 +4,6 @@ import { Avatar, AvatarImage, AvatarFallback, AvatarBadge } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { 
   UserPlus,
-  MessageCircle,
   ArrowLeft,
   Music,
   Heart,
@@ -32,6 +31,7 @@ function Profile() {
   const [showFriends, setShowFriends] = useState(false);
   
   const isOwnProfile = currentUser?.username === profileUser?.username;
+  const isFriend = friends.some(friend => friend.id === profileUser?.id);
   
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -123,7 +123,7 @@ function Profile() {
               <span>Friends</span>
             </button>
           </div>
-          {!isOwnProfile && !isGuest && (
+          {!isOwnProfile && !isGuest && !isFriend && (
             <div className="flex items-center gap-2 flex-wrap">
               <Button
                 onClick={handleAddFriend}
@@ -132,17 +132,6 @@ function Profile() {
               >
                 <UserPlus className="h-4 w-4 mr-2" />
                 Add Friend
-              </Button>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => {
-                  // Navigate to DM or open message
-                  navigate(`/profile/${currentUser?.username}`);
-                }}
-              >
-                <MessageCircle className="h-4 w-4 mr-2" />
-                Message
               </Button>
             </div>
           )}

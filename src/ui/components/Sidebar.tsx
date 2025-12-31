@@ -8,27 +8,25 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { 
   Search, 
-  Settings, 
   MoreVertical,
-  Sun,
-  Moon,
-  Monitor,
+
   LogIn,
   UserPlus,
   ArrowLeft,
   Plus,
   X,
   Send,
+  Check,
+  UserCheck,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
-import { useUIStore } from "@/stores/uiStore";
 import { useOnlineUsers, useAllUsers, useConversations, useMessages, useSendMessage } from "@/hooks/useUsers";
+import { useFriends, useFriendRequests, useAcceptFriend, useDeclineFriend } from "@/hooks/useFriends";
 
 function Sidebar() {
   const navigate = useNavigate();
@@ -39,12 +37,12 @@ function Sidebar() {
   const [username, setUsername] = useState("");
   const [showSearchUsers, setShowSearchUsers] = useState(false);
   const [showFriendsSearch, setShowFriendsSearch] = useState(false);
+  const [showFriendRequests, setShowFriendRequests] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [selectedChatPartner, setSelectedChatPartner] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isGuest, user } = useAuthStore();
-  const { theme, setTheme } = useUIStore();
   const { data: onlineUsers = [] } = useOnlineUsers();
   // Only fetch all users when searching globally or when we need to find a chat partner
   const shouldFetchAllUsers = showSearchUsers || !!selectedChatPartner;
@@ -52,6 +50,10 @@ function Sidebar() {
   const { data: conversations = [] } = useConversations(user?.id || "");
   const { data: messages = [] } = useMessages(user?.id || "", selectedChatPartner || "");
   const sendMessageMutation = useSendMessage();
+  const { data: friends = [] } = useFriends();
+  const { data: friendRequests = [] } = useFriendRequests();
+  const acceptFriendMutation = useAcceptFriend();
+  const declineFriendMutation = useDeclineFriend();
   
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -71,8 +73,8 @@ function Sidebar() {
         user.username.toLowerCase().includes(userSearchQuery.toLowerCase())
       );
     } else if (showFriendsSearch) {
-      // Friends search - only online users (friends)
-      return onlineUsers.filter(user => 
+      // Friends search - filter friends list
+      return friends.filter(user => 
         user.username.toLowerCase().includes(userSearchQuery.toLowerCase())
       );
     }
@@ -394,9 +396,11 @@ function Sidebar() {
               <>
                 {(() => {
                   const chatPartner = allUsers.find((u: { id: string }) => u.id === selectedChatPartner);
-                  const formatTime = (date: Date) => {
+                  const formatTime = (date: Date | string) => {
+                    const dateObj = date instanceof Date ? date : new Date(date);
+                    if (isNaN(dateObj.getTime())) return "now"; // Handle invalid dates
                     const now = new Date();
-                    const diff = now.getTime() - date.getTime();
+                    const diff = now.getTime() - dateObj.getTime();
                     const minutes = Math.floor(diff / 60000);
                     if (minutes < 1) return "now";
                     if (minutes < 60) return `${minutes}m ago`;
@@ -478,11 +482,11 @@ function Sidebar() {
                                       : "bg-muted text-foreground"
                                   }`}
                                 >
-                                  <div>{message.content}</div>
+                                  <div>{message.content || ''}</div>
                                   <div className={`text-[10px] mt-1 ${
                                     isOwn ? "text-primary-foreground/70" : "text-muted-foreground"
                                   }`}>
-                                    {formatTime(new Date(message.timestamp))}
+                                    {message.timestamp ? formatTime(message.timestamp) : 'now'}
                                   </div>
                                 </div>
                               </div>
@@ -523,6 +527,77 @@ function Sidebar() {
                     </>
                   );
                 })()}
+              </>
+            ) : showFriendRequests ? (
+              /* Friend Requests Interface */
+              <>
+                <div className="px-3 py-2 border-b border-sidebar-border">
+                  <div className="flex items-center justify-between mb-0">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        className="h-6 w-6"
+                        onClick={() => setShowFriendRequests(false)}
+                        title="Back to friends"
+                      >
+                        <ArrowLeft className="h-3 w-3" />
+                      </Button>
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-sidebar-foreground">
+                        Friend Requests
+                      </h3>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  <div className="px-3 py-2">
+                    {friendRequests.length === 0 ? (
+                      <div className="text-center py-4 text-xs text-muted-foreground">
+                        No pending friend requests
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {friendRequests.map((requestUser) => (
+                          <div
+                            key={requestUser.id}
+                            className="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-sidebar-accent/50 group transition-colors"
+                          >
+                            <Avatar size="sm" className="relative">
+                              <AvatarImage src={requestUser.avatar || ""} alt={requestUser.username} />
+                              <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                                {requestUser.username.substring(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                              <AvatarBadge className={getStatusColor(requestUser.status || 'Offline')} />
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">{requestUser.username}</div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              className="h-6 w-6 text-green-600 hover:text-green-700 hover:bg-green-500/20"
+                              onClick={() => acceptFriendMutation.mutate(requestUser.id)}
+                              disabled={acceptFriendMutation.isPending || declineFriendMutation.isPending}
+                              title="Accept request"
+                            >
+                              <Check className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              className="h-6 w-6 text-red-600 hover:text-red-700 hover:bg-red-500/20"
+                              onClick={() => declineFriendMutation.mutate(requestUser.id)}
+                              disabled={acceptFriendMutation.isPending || declineFriendMutation.isPending}
+                              title="Decline request"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </>
             ) : (
               /* Friends/Chat Interface */
@@ -566,32 +641,32 @@ function Sidebar() {
                 <div className="flex-1 overflow-y-auto">
                   <div className="px-3 py-2">
                     <div className="text-xs font-medium text-muted-foreground mb-2">
-                      ONLINE ({showFriendsSearch && userSearchQuery.trim() ? getSearchUsers().length : onlineUsers.length})
+                      FRIENDS ({showFriendsSearch && userSearchQuery.trim() ? getSearchUsers().length : friends.length})
                     </div>
                     <div className="space-y-1">
-                      {(showFriendsSearch && userSearchQuery.trim() ? getSearchUsers().slice(0, 50) : onlineUsers.slice(0, 100)).map((onlineUser) => {
-                        const conversation = conversations.find(c => c.userId === onlineUser.id);
+                      {(showFriendsSearch && userSearchQuery.trim() ? getSearchUsers().slice(0, 50) : friends.slice(0, 100)).map((friend) => {
+                        const conversation = conversations.find(c => c.userId === friend.id);
                         return (
                           <div
-                            key={onlineUser.id}
+                            key={friend.id}
                             className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-sidebar-accent/50 cursor-pointer group transition-colors"
                             onClick={() => {
-                              setSelectedChatPartner(onlineUser.id);
+                              setSelectedChatPartner(friend.id);
                               setShowSearchUsers(false);
                               setShowFriendsSearch(false);
                               setUserSearchQuery("");
                             }}
                           >
                             <Avatar size="sm" className="relative">
-                              <AvatarImage src={onlineUser.avatar || ""} alt={onlineUser.username} />
+                              <AvatarImage src={friend.avatar || ""} alt={friend.username} />
                               <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-                                {onlineUser.username.substring(0, 2).toUpperCase()}
+                                {friend.username.substring(0, 2).toUpperCase()}
                               </AvatarFallback>
-                              <AvatarBadge className={getStatusColor(onlineUser.status || 'Offline')} />
+                              <AvatarBadge className={getStatusColor(friend.status || 'Offline')} />
                             </Avatar>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1">
-                                <div className="text-sm font-medium truncate">{onlineUser.username}</div>
+                                <div className="text-sm font-medium truncate">{friend.username}</div>
                                 {conversation && conversation.unreadCount > 0 && (
                                   <span className="bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                                     {conversation.unreadCount}
@@ -610,6 +685,11 @@ function Sidebar() {
                       {showFriendsSearch && userSearchQuery.trim() && getSearchUsers().length === 0 && (
                         <div className="text-center py-4 text-xs text-muted-foreground">
                           No friends found
+                        </div>
+                      )}
+                      {!showFriendsSearch && !userSearchQuery.trim() && friends.length === 0 && (
+                        <div className="text-center py-4 text-xs text-muted-foreground">
+                          No friends yet
                         </div>
                       )}
                     </div>
@@ -638,46 +718,24 @@ function Sidebar() {
               </Button>
             </div>
             <div className="text-xs text-muted-foreground">v0.0.1</div>
-            <DropdownMenu>
-              <DropdownMenuTrigger render={
-                <Button variant="ghost" size="icon-xs" className="h-6 w-6">
-                  <Settings className="h-3 w-3" />
+            <div className="flex items-center gap-1">
+              {!isGuest && (
+                <Button 
+                  variant="ghost" 
+                  size="icon-xs" 
+                  className="h-6 w-6 relative"
+                  onClick={() => setShowFriendRequests(true)}
+                  title="Friend requests"
+                >
+                  <UserCheck className="h-3 w-3" />
+                  {friendRequests.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] px-1 rounded-full min-w-[16px] text-center">
+                      {friendRequests.length}
+                    </span>
+                  )}
                 </Button>
-              } />
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Appearance</DropdownMenuLabel>
-                <DropdownMenuItem
-                  onClick={() => setTheme("light")}
-                  className="flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2">
-                    <Sun className="h-4 w-4" />
-                    Light
-                  </div>
-                  {theme === "light" && <span className="text-xs">✓</span>}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setTheme("dark")}
-                  className="flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2">
-                    <Moon className="h-4 w-4" />
-                    Dark
-                  </div>
-                  {theme === "dark" && <span className="text-xs">✓</span>}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setTheme("system")}
-                  className="flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2">
-                    <Monitor className="h-4 w-4" />
-                    System
-                  </div>
-                  {theme === "system" && <span className="text-xs">✓</span>}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              )}
+            </div>
           </div>
         </div>
       </div>

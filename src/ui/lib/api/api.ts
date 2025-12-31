@@ -1,7 +1,7 @@
 // API endpoint functions
 import { apiGet, apiPost, apiPatch, apiDelete, type PaginatedResponse } from './client';
 import type { User, Post, Comment, Message, Conversation, BackendPost, BackendUser, BackendComment } from './types';
-import { normalizePost, normalizeUser, normalizeComment } from './types';
+import { normalizePost, normalizeUser, normalizeComment, normalizeMessage } from './types';
 
 // Auth endpoints
 export interface LoginDto {
@@ -151,8 +151,13 @@ export const messagesApi = {
   getConversations: (params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Conversation>> => 
     apiGet<PaginatedResponse<Conversation>>('/messages/conversations', params),
   
-  getMessages: (userId: string, params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Message>> => 
-    apiGet<PaginatedResponse<Message>>(`/messages/conversation/${userId}`, params),
+  getMessages: async (userId: string, params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Message>> => {
+    const response = await apiGet<PaginatedResponse<Message>>(`/messages/conversation/${userId}`, params);
+    return {
+      ...response,
+      data: response.data.map(normalizeMessage),
+    };
+  },
   
   deleteMessage: (messageId: string): Promise<void> => 
     apiDelete(`/messages/${messageId}`),
