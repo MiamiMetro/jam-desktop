@@ -1,67 +1,27 @@
-import { Routes, Route, Link } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { lazy, Suspense } from "react";
-import Home from "@/pages/Home";
-import About from "@/pages/About";
-import ExamplePage from "@/pages/ExamplePage";
+import MainPage from "@/pages/MainPage";
 
 const CoverExample = lazy(() => import("@/components/preview").then(module => ({ default: module.CoverExample })));
 
 function App() {
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <nav className="bg-gray-800 border-b border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex gap-6">
-            <Link
-              to="/"
-              className="text-gray-300 hover:text-white transition-colors"
-            >
-              Home
-            </Link>
-            <Link
-              to="/about"
-              className="text-gray-300 hover:text-white transition-colors"
-            >
-              About
-            </Link>
-            <Link
-              to="/preview"
-              className="text-gray-300 hover:text-white transition-colors"
-            >
-              Components Preview
-            </Link>
-
-            <Link
-              to="/example"
-              className="text-gray-300 hover:text-white transition-colors"
-            >
-              Example
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/about" element={<About />} />
-        <Route
-          path="/preview"
-          element={
-            <Suspense fallback={<div className="flex items-center justify-center p-8">Loading...</div>}>
-              <CoverExample />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/example"
-          element={
-            <Suspense fallback={<div className="flex items-center justify-center p-8">Loading...</div>}>
-              <ExamplePage />
-            </Suspense>
-          }
-        />
-      </Routes>
-    </div>
+    <Routes>
+      <Route path="/" element={<Navigate to="/feed" replace />} />
+      <Route path="/feed" element={<MainPage />} />
+      <Route path="/jams" element={<MainPage />} />
+      <Route path="/communities" element={<MainPage />} />
+      <Route path="/community/:id" element={<MainPage />} />
+      {/* Debug routes - accessible via direct URL but not shown in UI */}
+      <Route
+        path="/preview"
+        element={
+          <Suspense fallback={<div className="flex items-center justify-center p-8">Loading...</div>}>
+            <CoverExample />
+          </Suspense>
+        }
+      />
+    </Routes>
   );
 }
 
