@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, startTransition } from "react";
 import Hls from "hls.js";
 
 export function useHLSPlayer(streamUrl?: string) {
@@ -23,17 +23,21 @@ export function useHLSPlayer(streamUrl?: string) {
         audioRef.current.src = "";
         audioRef.current = null;
       }
-      setError(null);
-      setIsLoading(false);
-      setIsPlaying(false);
+      startTransition(() => {
+        setError(null);
+        setIsLoading(false);
+        setIsPlaying(false);
+      });
       return;
     }
 
     // Reset error state when stream URL changes or retry is triggered
-    setError(null);
-    setIsLoading(false);
-    setIsPlaying(false);
-    setIsReady(false);
+    startTransition(() => {
+      setError(null);
+      setIsLoading(false);
+      setIsPlaying(false);
+      setIsReady(false);
+    });
     manifestReadyRef.current = false;
 
     const audio = document.createElement("audio");
@@ -149,8 +153,10 @@ export function useHLSPlayer(streamUrl?: string) {
         setIsLoading(false);
       });
     } else {
-      setError("HLS is not supported in this browser");
-      setIsLoading(false);
+      startTransition(() => {
+        setError("HLS is not supported in this browser");
+        setIsLoading(false);
+      });
     }
 
     return () => {

@@ -6,7 +6,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { 
   Music,
   Upload,
-  MoreVertical,
   Mic,
   Trash2,
   Play,

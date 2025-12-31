@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, startTransition } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { 
+import {
   Sun,
   Moon,
   Music,
@@ -24,19 +24,19 @@ function MainPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  
+
   // Check if we're in a jam room from URL
   const jamRoomMatch = location.pathname.match(/^\/jam\/(.+)$/);
   const urlRoomId = jamRoomMatch ? jamRoomMatch[1] : null;
-  
+
   // Get persisted room ID from localStorage
   const [persistedRoomId, setPersistedRoomId] = useState<string | null>(() => {
     return localStorage.getItem("currentJamRoomId");
   });
-  
+
   // Use URL room ID if present, otherwise use persisted
   const jamRoomId = urlRoomId || persistedRoomId;
-  
+
   // Update persisted room ID when URL changes (joining a room)
   useEffect(() => {
     if (urlRoomId) {
@@ -44,29 +44,33 @@ function MainPage() {
       // This will automatically replace the old room tab with the new one
       if (urlRoomId !== persistedRoomId) {
         localStorage.setItem("currentJamRoomId", urlRoomId);
-        setPersistedRoomId(urlRoomId);
+        startTransition(() => {
+          setPersistedRoomId(urlRoomId);
+        });
       }
     }
   }, [urlRoomId, persistedRoomId]);
-  
+
   // Sync persisted room ID with localStorage (for when leaving room)
   // This ensures the tab is removed when localStorage is cleared
   useEffect(() => {
     const storedRoomId = localStorage.getItem("currentJamRoomId");
     // Update state if localStorage value differs (handles leaving room)
     if (storedRoomId !== persistedRoomId) {
-      setPersistedRoomId(storedRoomId);
+      startTransition(() => {
+        setPersistedRoomId(storedRoomId);
+      });
     }
   }, [location.pathname]);
-  
+
   const { data: currentRoom } = useJam(jamRoomId || "");
-  
+
   // Function to clear room (when leaving)
   const clearRoom = () => {
     localStorage.removeItem("currentJamRoomId");
     setPersistedRoomId(null);
   };
-  
+
   // Determine current tab from pathname
   // Room tab is only selected when actually viewing the room page
   const getCurrentTab = () => {
@@ -78,14 +82,14 @@ function MainPage() {
     if (location.pathname === "/communities") return "communities";
     return "feed"; // default to feed
   };
-  
+
   const tab = getCurrentTab();
-  
+
   const { theme, setTheme } = useUIStore();
   const { isGuest } = useAuthStore();
-  
+
   // Restore scroll position when navigating
-  useScrollRestoration(scrollContainerRef);
+  useScrollRestoration(scrollContainerRef as React.RefObject<HTMLElement>);
 
   // Theme management
   useEffect(() => {
@@ -132,7 +136,7 @@ function MainPage() {
       navigate(`/jam/${jamRoomId}`);
     }
   };
-  
+
   // Expose clearRoom function to child components via context or prop
   // For now, we'll pass it through navigate state or use a different approach
 
@@ -146,32 +150,29 @@ function MainPage() {
             <div className="flex items-center gap-4">
               <button
                 onClick={() => handleTabChange("feed")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                  tab === "feed"
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${tab === "feed"
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-muted"
-                }`}
+                  }`}
               >
                 Feed
               </button>
               <button
                 onClick={() => handleTabChange("jams")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 cursor-pointer ${
-                  tab === "jams"
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 cursor-pointer ${tab === "jams"
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-muted"
-                }`}
+                  }`}
               >
                 <Music className="h-4 w-4" />
                 Jams
               </button>
               <button
                 onClick={() => handleTabChange("communities")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 cursor-pointer ${
-                  tab === "communities"
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 cursor-pointer ${tab === "communities"
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-muted"
-                }`}
+                  }`}
               >
                 <UsersIcon className="h-4 w-4" />
                 Communities
@@ -179,11 +180,10 @@ function MainPage() {
               {currentRoom && (
                 <button
                   onClick={handleRoomTabClick}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 cursor-pointer relative ${
-                    tab === "room"
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 cursor-pointer relative ${tab === "room"
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-muted"
-                  }`}
+                    }`}
                 >
                   <Music className="h-4 w-4" />
                   {currentRoom.name}

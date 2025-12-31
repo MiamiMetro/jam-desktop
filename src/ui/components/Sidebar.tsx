@@ -30,9 +30,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useOnlineUsers, useAllUsers, useConversations, useMessages, useSendMessage } from "@/hooks/useUsers";
 
-interface SidebarProps {}
-
-function Sidebar({}: SidebarProps) {
+function Sidebar() {
   const navigate = useNavigate();
   const [showAuthForm, setShowAuthForm] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
@@ -640,7 +638,7 @@ function Sidebar({}: SidebarProps) {
                 <Plus className="h-3 w-3" />
               </Button>
             </div>
-            <div className="text-xs text-muted-foreground">v1.0.0</div>
+            <div className="text-xs text-muted-foreground">v0.0.1</div>
             <DropdownMenu>
               <DropdownMenuTrigger render={
                 <Button variant="ghost" size="icon-xs" className="h-6 w-6">

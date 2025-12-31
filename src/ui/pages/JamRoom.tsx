@@ -18,7 +18,6 @@ import {
 import { useAuthStore } from "@/stores/authStore";
 import { useJam, useUpdateRoomActivity } from "@/hooks/useJams";
 import { useAllUsers } from "@/hooks/useUsers";
-import { formatDuration } from "@/lib/postUtils";
 import { useHLSPlayer } from "@/hooks/useHLSPlayer";
 
 function JamRoom() {
