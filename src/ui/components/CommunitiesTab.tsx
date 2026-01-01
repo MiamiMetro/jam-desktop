@@ -19,7 +19,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { SearchInput } from "@/components/SearchInput";
 import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
-import type { Post } from "@/lib/api/mock";
+import type { Post } from "@/lib/api/types";
+import type { FrontendPost } from "@/hooks/usePosts";
 
 const CATEGORIES = [
   "LoFi", "Metal", "Electronic", "Jazz", "Hip Hop", "Indie", 
@@ -37,7 +38,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
   const navigate = useNavigate();
   const categoryFilter = searchParams.get("category") || "";
   const searchQuery = searchParams.get("search") || "";
-  const { isGuest, user } = useAuthStore();
+  const { isGuest } = useAuthStore();
   const { data: communities = [] } = useCommunities({ 
     category: categoryFilter || undefined,
     search: searchQuery || undefined,
@@ -132,7 +133,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
           <div className="relative -mt-16 mb-4">
             <div className="h-24 w-24 rounded-full border-4 border-background overflow-hidden">
               <Avatar className="h-full w-full">
-                <AvatarImage src={selectedCommunity.avatar || ""} alt={selectedCommunity.name} />
+                <AvatarImage src="" alt={selectedCommunity.name} />
                 <AvatarFallback className="bg-primary text-primary-foreground text-3xl font-bold h-full w-full">
                   {selectedCommunity.name.substring(0, 2).toUpperCase()}
                 </AvatarFallback>
@@ -192,23 +193,43 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
               description="Be the first to share something!"
             />
           ) : (
-            communityPosts.map((post: Post) => (
-              <PostCard
-                key={post.id}
-                post={post}
-                communityName={null}
-                isPlaying={playingAudioId === post.id}
-                isGuest={isGuest}
-                onAuthorClick={handleAuthorClick}
-                onCommunityClick={handleCommunityClick}
-                onPostClick={handlePostClick}
-                onLike={handleLikePost}
-                onPlayPause={() => setPlayingAudioId(playingAudioId === post.id ? null : post.id)}
-                onGuestAction={onGuestAction}
-                formatTimeAgo={formatTimeAgo}
-                formatDuration={formatDuration}
-              />
-            ))
+            communityPosts.map((post: Post) => {
+              // Convert Post (timestamp: string) to FrontendPost (timestamp: Date)
+              const frontendPost: FrontendPost = {
+                id: post.id,
+                author: post.author,
+                content: post.content || post.text || '',
+                timestamp: new Date(post.timestamp),
+                likes: post.likes,
+                isLiked: post.isLiked,
+                shares: post.shares || 0,
+                comments: post.comments || 0,
+                community: post.community,
+                isGlobal: post.isGlobal,
+                audioFile: post.audio_url ? {
+                  url: post.audio_url,
+                  title: 'Audio',
+                  duration: 0,
+                } : post.audioFile,
+              };
+              return (
+                <PostCard
+                  key={post.id}
+                  post={frontendPost}
+                  communityName={null}
+                  isPlaying={playingAudioId === post.id}
+                  isGuest={isGuest}
+                  onAuthorClick={handleAuthorClick}
+                  onCommunityClick={handleCommunityClick}
+                  onPostClick={handlePostClick}
+                  onLike={handleLikePost}
+                  onPlayPause={() => setPlayingAudioId(playingAudioId === post.id ? null : post.id)}
+                  onGuestAction={onGuestAction}
+                  formatTimeAgo={formatTimeAgo}
+                  formatDuration={formatDuration}
+                />
+              );
+            })
           )}
         </div>
       </>
@@ -292,7 +313,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
                   <div className="flex-shrink-0">
                     <div className="h-12 w-12 rounded-full overflow-hidden">
                       <Avatar className="h-full w-full">
-                        <AvatarImage src={community.avatar || ""} alt={community.name} />
+                        <AvatarImage src="" alt={community.name} />
                         <AvatarFallback className="bg-primary text-primary-foreground text-lg font-bold h-full w-full">
                           {community.name.substring(0, 2).toUpperCase()}
                         </AvatarFallback>

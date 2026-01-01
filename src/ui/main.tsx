@@ -18,12 +18,15 @@ const queryClient = new QueryClient({
   },
 });
 
-// Component to check session on mount
+// Component to check session on mount (non-blocking)
 function AuthChecker() {
   const checkSession = useAuthStore((state) => state.checkSession);
   
   useEffect(() => {
-    checkSession();
+    // Don't block rendering - check session asynchronously
+    checkSession().catch(() => {
+      // Silently handle errors - they're already handled in the store
+    });
   }, [checkSession]);
   
   return null;

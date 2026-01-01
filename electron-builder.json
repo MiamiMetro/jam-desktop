@@ -4,7 +4,12 @@
         "dist-electron",
         "dist-react"
     ],
+    "directories": {
+        "output": "dist"
+    },
     "icon": "desktopIcon.png",
+    "asar": true,
+    "npmRebuild": false,
     "mac": {
         "target": "dmg"
     },

@@ -55,7 +55,6 @@ function convertComment(post: FrontendPost): FrontendComment {
 }
 
 export const usePosts = () => {
-  const { isGuest } = useAuthStore();
   
   const query = useInfiniteQuery<FrontendPost[], Error>({
     queryKey: ['posts', 'feed'],

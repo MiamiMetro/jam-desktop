@@ -25,7 +25,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
-import { useOnlineUsers, useAllUsers, useConversations, useMessages, useSendMessage } from "@/hooks/useUsers";
+import { useAllUsers, useConversations, useMessages, useSendMessage } from "@/hooks/useUsers";
 import { useFriends, useFriendRequests, useAcceptFriend, useDeclineFriend } from "@/hooks/useFriends";
 
 function Sidebar() {
@@ -45,7 +45,6 @@ function Sidebar() {
   const MAX_MESSAGE_LENGTH = 1000;
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isGuest, user } = useAuthStore();
-  const { data: onlineUsers = [] } = useOnlineUsers();
   // Only fetch all users when searching globally or when we need to find a chat partner
   const shouldFetchAllUsers = showSearchUsers || !!selectedChatPartner;
   const { data: allUsers = [] } = useAllUsers(userSearchQuery || undefined, shouldFetchAllUsers);

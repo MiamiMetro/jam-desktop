@@ -16,7 +16,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
-import { usePost, useComments, useCreateComment, useToggleLike, type FrontendComment, type FrontendPost } from "@/hooks/usePosts";
+import { usePost, useComments, useCreateComment, useToggleLike, type FrontendComment } from "@/hooks/usePosts";
 import { useCommunities } from "@/hooks/useCommunities";
 import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
 import { Textarea } from "@/components/ui/textarea";

@@ -55,7 +55,7 @@ export const useScrollRestoration = (scrollContainerRef: React.RefObject<HTMLEle
     }
 
     // Save scroll position while scrolling
-    let scrollTimeout: NodeJS.Timeout;
+    let scrollTimeout: ReturnType<typeof setTimeout>;
     const handleScroll = () => {
       if (!isRestoringRef.current) {
         clearTimeout(scrollTimeout);

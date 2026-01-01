@@ -7,7 +7,6 @@ import {
   Music,
   Users as UsersIcon,
 } from "lucide-react";
-import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
 import Sidebar from "@/components/Sidebar";
 import FeedTab from "@/components/FeedTab";
@@ -63,12 +62,6 @@ function MainPage() {
   }, [location.pathname]);
 
   const { data: currentRoom } = useJam(jamRoomId || "");
-
-  // Function to clear room (when leaving)
-  const clearRoom = () => {
-    localStorage.removeItem("currentJamRoomId");
-    setPersistedRoomId(null);
-  };
 
   // Determine current tab from pathname
   // Room tab is only selected when actually viewing the room page

@@ -15,6 +15,14 @@ export default defineConfig({
   build: {
     outDir: 'dist-react',
     chunkSizeWarningLimit: 1000, // Increased for Electron apps (default is 500)
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'query-vendor': ['@tanstack/react-query'],
+        },
+      },
+    },
   },
   server: {
     port: 5123,

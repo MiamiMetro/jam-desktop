@@ -107,12 +107,7 @@ export function useAudioRecorder() {
         
         // Try to load to trigger metadata
         try {
-          const loadResult = audio.load();
-          if (loadResult && typeof loadResult.catch === 'function') {
-            loadResult.catch((err: Error) => {
-              console.error("Error loading audio:", err);
-            });
-          }
+          audio.load();
         } catch (err) {
           console.error("Error loading audio:", err);
         }
