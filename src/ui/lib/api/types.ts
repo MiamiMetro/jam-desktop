@@ -45,6 +45,7 @@ export interface BackendPost {
   audio_url?: string | null;
   created_at: string;
   likes_count: number;
+  comments_count?: number;
   is_liked?: boolean;
   author: {
     id: string;
@@ -157,7 +158,7 @@ export function normalizePost(backendPost: BackendPost): Post {
     likes: backendPost.likes_count || 0, // Map likes_count to likes
     isLiked: backendPost.is_liked || false, // Map is_liked to isLiked
     shares: 0, // Not in backend response
-    comments: 0, // Not in backend response
+    comments: backendPost.comments_count || 0, // Map comments_count to comments
     community: undefined, // Backend doesn't return this yet
     isGlobal: true, // Default to true for feed posts (backend doesn't return this field)
   };
