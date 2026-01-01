@@ -10,7 +10,15 @@ export function useHLSPlayer(streamUrl?: string) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const manifestReadyRef = useRef(false);
+  const initializedRef = useRef(false);
+  const currentStreamUrlRef = useRef<string | undefined>(streamUrl);
 
+  // Update current stream URL ref when it changes
+  useEffect(() => {
+    currentStreamUrlRef.current = streamUrl;
+  }, [streamUrl]);
+
+  // Cleanup when streamUrl changes or component unmounts
   useEffect(() => {
     if (!streamUrl) {
       // Cleanup if no stream URL
@@ -23,15 +31,62 @@ export function useHLSPlayer(streamUrl?: string) {
         audioRef.current.src = "";
         audioRef.current = null;
       }
+      initializedRef.current = false;
+      manifestReadyRef.current = false;
       startTransition(() => {
         setError(null);
         setIsLoading(false);
         setIsPlaying(false);
+        setIsReady(false);
       });
       return;
     }
 
-    // Reset error state when stream URL changes or retry is triggered
+    // Reset initialized state when streamUrl changes (will re-initialize on next play)
+    if (currentStreamUrlRef.current !== streamUrl) {
+      // Cleanup old instance
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = "";
+        audioRef.current = null;
+      }
+      initializedRef.current = false;
+      manifestReadyRef.current = false;
+      startTransition(() => {
+        setError(null);
+        setIsLoading(false);
+        setIsPlaying(false);
+        setIsReady(false);
+      });
+    }
+
+    return () => {
+      // Cleanup on unmount
+      if (hlsRef.current) {
+        hlsRef.current.stopLoad();
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = "";
+        audioRef.current = null;
+      }
+    };
+  }, [streamUrl, retryKey]);
+
+  const initializeHLS = useCallback(() => {
+    if (!currentStreamUrlRef.current || initializedRef.current) {
+      return;
+    }
+
+    const streamUrlToUse = currentStreamUrlRef.current;
+
+    // Reset error state
     startTransition(() => {
       setError(null);
       setIsLoading(false);
@@ -68,7 +123,7 @@ export function useHLSPlayer(streamUrl?: string) {
       });
       hlsRef.current = hls;
 
-      hls.loadSource(streamUrl);
+      hls.loadSource(streamUrlToUse);
       hls.attachMedia(audio);
 
       // Use a ref to track playing state for event handlers
@@ -143,10 +198,11 @@ export function useHLSPlayer(streamUrl?: string) {
       });
     } else if (audio.canPlayType("application/vnd.apple.mpegurl")) {
       // Native HLS support (Safari)
-      audio.src = streamUrl;
+      audio.src = streamUrlToUse;
       audio.addEventListener("loadedmetadata", () => {
         setIsLoading(false);
         setError(null);
+        setIsReady(true);
       });
       audio.addEventListener("error", () => {
         setError("Failed to load stream");
@@ -157,23 +213,22 @@ export function useHLSPlayer(streamUrl?: string) {
         setError("HLS is not supported in this browser");
         setIsLoading(false);
       });
+      return;
     }
 
-    return () => {
-      if (hlsRef.current) {
-        hlsRef.current.stopLoad();
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = "";
-        audioRef.current = null;
-      }
-    };
-  }, [streamUrl, retryKey]);
+    initializedRef.current = true;
+  }, []);
 
   const play = useCallback(async () => {
+    if (!currentStreamUrlRef.current) return;
+
+    // Initialize HLS/audio if not already initialized
+    if (!initializedRef.current) {
+      initializeHLS();
+      // Wait a bit for initialization
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
     if (!audioRef.current) return;
     
     try {
@@ -238,7 +293,7 @@ export function useHLSPlayer(streamUrl?: string) {
       const playingRef = (audioRef.current as any).__playingRef;
       if (playingRef) playingRef.current = false;
     }
-  }, []);
+  }, [initializeHLS]);
 
   const pause = useCallback(() => {
     if (audioRef.current) {
@@ -269,6 +324,7 @@ export function useHLSPlayer(streamUrl?: string) {
     setIsPlaying(false);
     // Trigger re-initialization by incrementing retry key
     setRetryKey(prev => prev + 1);
+    initializedRef.current = false;
   }, []);
 
   return {
@@ -282,4 +338,3 @@ export function useHLSPlayer(streamUrl?: string) {
     retry,
   };
 }
-

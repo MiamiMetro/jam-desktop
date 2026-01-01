@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, startTransition } from "react";
+import { useEffect, useRef, useState, startTransition, lazy, Suspense, useMemo, useCallback, memo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,14 +9,17 @@ import {
 } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import Sidebar from "@/components/Sidebar";
-import FeedTab from "@/components/FeedTab";
-import JamsTab from "@/components/JamsTab";
-import CommunitiesTab from "@/components/CommunitiesTab";
-import Profile from "@/pages/Profile";
-import Post from "@/pages/Post";
-import JamRoom from "@/pages/JamRoom";
+import { Spinner } from "@/components/ui/spinner";
 import { useScrollRestoration } from "@/hooks/useScrollRestoration";
 import { useJam } from "@/hooks/useJams";
+
+// Lazy load all tab components for code splitting
+const FeedTab = lazy(() => import("@/components/FeedTab"));
+const JamsTab = lazy(() => import("@/components/JamsTab"));
+const CommunitiesTab = lazy(() => import("@/components/CommunitiesTab"));
+const Profile = lazy(() => import("@/pages/Profile"));
+const Post = lazy(() => import("@/pages/Post"));
+const JamRoom = lazy(() => import("@/pages/JamRoom"));
 
 function MainPage() {
   const location = useLocation();
@@ -63,9 +66,9 @@ function MainPage() {
 
   const { data: currentRoom } = useJam(jamRoomId || "");
 
-  // Determine current tab from pathname
+  // Determine current tab from pathname (memoized)
   // Room tab is only selected when actually viewing the room page
-  const getCurrentTab = () => {
+  const tab = useMemo(() => {
     if (location.pathname.startsWith("/profile/")) return null; // No tab selected for profile
     if (location.pathname.startsWith("/post/")) return null; // No tab selected for post
     if (location.pathname.startsWith("/jam/")) return "room"; // Room tab selected only when viewing room
@@ -73,9 +76,7 @@ function MainPage() {
     if (location.pathname === "/jams") return "jams";
     if (location.pathname === "/communities") return "communities";
     return "feed"; // default to feed
-  };
-
-  const tab = getCurrentTab();
+  }, [location.pathname]);
 
   const { theme, setTheme } = useUIStore();
 
@@ -104,29 +105,24 @@ function MainPage() {
     }
   }, [theme]);
 
-  const getCurrentTheme = () => {
-    if (theme === "system") {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
-    return theme;
-  };
-
-  const toggleTheme = () => {
-    const currentTheme = getCurrentTheme();
+  const toggleTheme = useCallback(() => {
+    const currentTheme = theme === "system" 
+      ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+      : theme;
     setTheme(currentTheme === "dark" ? "light" : "dark");
-  };
+  }, [theme, setTheme]);
 
-  const handleTabChange = (newTab: "feed" | "jams" | "communities") => {
+  const handleTabChange = useCallback((newTab: "feed" | "jams" | "communities") => {
     // If we're in a room, navigate to the tab but keep the room tab visible
     // The room tab will stay selected because tab === "room" when jamRoomId exists
     navigate(`/${newTab}`);
-  };
+  }, [navigate]);
 
-  const handleRoomTabClick = () => {
+  const handleRoomTabClick = useCallback(() => {
     if (jamRoomId) {
       navigate(`/jam/${jamRoomId}`);
     }
-  };
+  }, [jamRoomId, navigate]);
 
   // Expose clearRoom function to child components via context or prop
   // For now, we'll pass it through navigate state or use a different approach
@@ -193,7 +189,7 @@ function MainPage() {
                 className="h-8 w-8"
                 title="Toggle theme"
               >
-                {getCurrentTheme() === "dark" ? (
+                {theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches) ? (
                   <Sun className="h-4 w-4" />
                 ) : (
                   <Moon className="h-4 w-4" />
@@ -204,29 +200,35 @@ function MainPage() {
         </div>
 
         {/* Tab Content - Keep all components mounted to preserve state and data */}
-        {location.pathname.startsWith("/jam/") ? (
-          <div className="flex-1 overflow-hidden">
-            <JamRoom />
+        <Suspense fallback={
+          <div className="flex-1 flex items-center justify-center">
+            <Spinner className="size-6" />
           </div>
-        ) : (
-          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
-            <div style={{ display: location.pathname.startsWith("/profile/") || location.pathname.startsWith("/post/") ? "none" : location.pathname === "/feed" ? "block" : "none" }}>
-              <FeedTab />
+        }>
+          <div className="flex-1 relative">
+            {/* Other tabs container */}
+            <div 
+              ref={scrollContainerRef} 
+              className="absolute inset-0 overflow-y-auto"
+              style={{ display: location.pathname.startsWith("/jam/") ? "none" : "block" }}
+            >
+              {location.pathname === "/feed" && <FeedTab />}
+              {location.pathname === "/jams" && <JamsTab />}
+              {(location.pathname.startsWith("/community/") || location.pathname === "/communities") && <CommunitiesTab />}
+              {location.pathname.startsWith("/profile/") && <Profile />}
+              {location.pathname.startsWith("/post/") && <Post />}
             </div>
-            <div style={{ display: location.pathname.startsWith("/profile/") || location.pathname.startsWith("/post/") ? "none" : location.pathname === "/jams" ? "block" : "none" }}>
-              <JamsTab />
-            </div>
-            <div style={{ display: location.pathname.startsWith("/profile/") || location.pathname.startsWith("/post/") ? "none" : location.pathname.startsWith("/community/") || location.pathname === "/communities" ? "block" : "none" }}>
-              <CommunitiesTab />
-            </div>
-            <div style={{ display: location.pathname.startsWith("/profile/") ? "block" : "none" }}>
-              <Profile />
-            </div>
-            <div style={{ display: location.pathname.startsWith("/post/") ? "block" : "none" }}>
-              <Post />
-            </div>
+            {/* JamRoom - kept mounted when jamRoomId exists, hidden when not on /jam/ route */}
+            {jamRoomId && (
+              <div 
+                className="absolute inset-0 overflow-hidden"
+                style={{ display: location.pathname.startsWith("/jam/") ? "block" : "none" }}
+              >
+                <JamRoom roomId={jamRoomId} />
+              </div>
+            )}
           </div>
-        )}
+        </Suspense>
       </div>
 
       {/* Sidebar */}
@@ -235,5 +237,5 @@ function MainPage() {
   );
 }
 
-export default MainPage;
+export default memo(MainPage);
 

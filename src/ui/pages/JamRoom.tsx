@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -20,11 +20,16 @@ import { useJam, useUpdateRoomActivity } from "@/hooks/useJams";
 import { useAllUsers } from "@/hooks/useUsers";
 import { useHLSPlayer } from "@/hooks/useHLSPlayer";
 
-function JamRoom() {
-  const { id } = useParams<{ id: string }>();
+interface JamRoomProps {
+  roomId?: string;
+}
+
+function JamRoom({ roomId }: JamRoomProps = {}) {
+  const paramsId = useParams<{ id: string }>()?.id;
+  const roomIdToUse = roomId ?? paramsId;
   const navigate = useNavigate();
   const { user, isGuest } = useAuthStore();
-  const { data: room, isLoading } = useJam(id || "");
+  const { data: room, isLoading } = useJam(roomIdToUse || "");
   // Only fetch users when room is loaded (for participants and message users)
   const { data: allUsers = [] } = useAllUsers(undefined, !!room && !isLoading);
   const updateActivityMutation = useUpdateRoomActivity();
@@ -44,29 +49,32 @@ function JamRoom() {
   
   // Track activity when user enters room
   useEffect(() => {
-    if (id && !isGuest) {
+    if (roomIdToUse && !isGuest) {
       // Update activity on mount
-      updateActivityMutation.mutate(id);
+      updateActivityMutation.mutate(roomIdToUse);
       
       // Update activity every 5 minutes while in room
       const interval = setInterval(() => {
-        updateActivityMutation.mutate(id);
+        updateActivityMutation.mutate(roomIdToUse);
       }, 5 * 60 * 1000);
       
       return () => clearInterval(interval);
     }
-  }, [id, isGuest, updateActivityMutation]);
+  }, [roomIdToUse, isGuest, updateActivityMutation]);
   
   
-  // Mock participants (using first few users as participants)
-  const participants = allUsers.slice(0, room?.participants || 3);
+  // Mock participants (using first few users as participants) - memoized
+  const participants = useMemo(
+    () => allUsers.slice(0, room?.participants || 3),
+    [allUsers, room?.participants]
+  );
   
   // Check if current user is the host
   const isHost = !isGuest && user && room && room.hostId === user.id;
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = useCallback((e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || isGuest || !id) return; // Guests can't send messages
+    if (!message.trim() || isGuest || !roomIdToUse) return; // Guests can't send messages
     
     const newMessage = {
       id: Date.now().toString(),
@@ -77,20 +85,20 @@ function JamRoom() {
       timestamp: new Date(),
     };
     
-    setMessages([...messages, newMessage]);
+    setMessages(prev => [...prev, newMessage]);
     setMessage("");
     
     // Update room activity when message is sent
-    updateActivityMutation.mutate(id);
-  };
+    updateActivityMutation.mutate(roomIdToUse);
+  }, [message, isGuest, roomIdToUse, user, updateActivityMutation]);
   
-  const handleLeaveRoom = () => {
+  const handleLeaveRoom = useCallback(() => {
     // Clear persisted room ID
     localStorage.removeItem("currentJamRoomId");
     navigate("/jams");
-  };
+  }, [navigate]);
 
-  const handleJoinClient = async () => {
+  const handleJoinClient = useCallback(async () => {
     try {
       setClientError(null);
       if (!window.electron) {
@@ -105,7 +113,7 @@ function JamRoom() {
     } catch (error) {
       setClientError(error instanceof Error ? error.message : "Unknown error occurred");
     }
-  };
+  }, []);
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -402,5 +410,5 @@ function JamRoom() {
   );
 }
 
-export default JamRoom;
+export default memo(JamRoom);
 
