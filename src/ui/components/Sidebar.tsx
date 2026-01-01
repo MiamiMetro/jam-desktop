@@ -704,18 +704,20 @@ function Sidebar() {
         <div className="border-t border-sidebar-border p-2">
           <div className="flex items-center justify-between mb-0">
             <div className="flex items-center gap-1">
-              <Button 
-                variant="ghost" 
-                size="icon-xs" 
-                className="h-6 w-6"
-                onClick={() => {
-                  setShowSearchUsers(true);
-                  setShowFriendsSearch(false);
-                }}
-                title="Search all users"
-              >
-                <Plus className="h-3 w-3" />
-              </Button>
+              {!isGuest && (
+                <Button 
+                  variant="ghost" 
+                  size="icon-xs" 
+                  className="h-6 w-6"
+                  onClick={() => {
+                    setShowSearchUsers(true);
+                    setShowFriendsSearch(false);
+                  }}
+                  title="Search all users"
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              )}
             </div>
             <div className="text-xs text-muted-foreground">v0.0.1</div>
             <div className="flex items-center gap-1">

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/authStore";
-import { usePosts, useCreatePost } from "@/hooks/usePosts";
+import { usePosts, useCreatePost, useToggleLike } from "@/hooks/usePosts";
 import { useCommunities } from "@/hooks/useCommunities";
 import { PostCard } from "@/components/PostCard";
 import { ComposePost } from "@/components/ComposePost";
@@ -21,6 +21,7 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
   const { data: posts = [], isLoading: postsLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = usePosts();
   const { data: communities = [] } = useCommunities();
   const createPostMutation = useCreatePost();
+  const toggleLikeMutation = useToggleLike();
   
   const handleAuthorClick = (username: string) => {
     navigate(`/profile/${username}`);
@@ -38,12 +39,16 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
     }
   };
 
-  const handleLikePost = () => {
+  const handleLikePost = async (postId: string) => {
     if (isGuest) {
       onGuestAction?.();
       return;
     }
-    // TODO: Implement actual like with API (will be done in PostCard/Post component)
+    try {
+      await toggleLikeMutation.mutateAsync(postId);
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
   };
 
   const getCommunityName = (communityId?: string) => {

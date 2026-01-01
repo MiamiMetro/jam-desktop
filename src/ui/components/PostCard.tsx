@@ -17,7 +17,7 @@ interface PostCardProps {
   onAuthorClick?: (username: string) => void;
   onCommunityClick?: (communityId: string) => void;
   onPostClick?: (postId: string) => void;
-  onLike?: () => void;
+  onLike?: (postId: string) => void;
   onPlayPause?: () => void;
   onGuestAction?: () => void;
   formatTimeAgo: (date: Date) => string;
@@ -90,15 +90,21 @@ export function PostCard({
           )}
           <div className="flex items-center gap-6 mt-3">
             <button
-              onClick={onLike}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onLike) {
+                  onLike(post.id);
+                }
+              }}
               className={`flex items-center gap-2 text-sm transition-colors cursor-pointer ${
                 post.isLiked
                   ? "text-red-500 hover:text-red-600"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <Heart className={`h-4 w-4 ${post.isLiked ? "fill-current" : ""}`} />
-              <span>{post.likes}</span>
+              <Heart className={`h-4 w-4 ${post.isLiked ? "fill-current" : ""} pointer-events-none`} />
+              <span className="pointer-events-none">{post.likes}</span>
             </button>
             <button 
               onClick={() => onPostClick?.(post.id)}

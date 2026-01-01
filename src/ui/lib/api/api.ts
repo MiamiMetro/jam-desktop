@@ -63,8 +63,10 @@ export const postsApi = {
   deletePost: (postId: string): Promise<void> => 
     apiDelete(`/posts/${postId}`),
   
-  toggleLike: (postId: string): Promise<void> => 
-    apiPost(`/posts/${postId}/like`),
+  toggleLike: async (postId: string): Promise<Post> => {
+    const backendPost = await apiPost<BackendPost>(`/posts/${postId}/like`);
+    return normalizePost(backendPost);
+  },
   
   getPostLikes: async (postId: string): Promise<User[]> => {
     const backendUsers = await apiGet<BackendUser[]>(`/posts/${postId}/likes`);

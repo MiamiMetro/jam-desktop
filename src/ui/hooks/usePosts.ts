@@ -209,9 +209,91 @@ export const useToggleLike = () => {
   
   return useMutation({
     mutationFn: (postId: string) => postsApi.toggleLike(postId),
-    onSuccess: (_, postId) => {
-      queryClient.invalidateQueries({ queryKey: ['post', postId] });
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
+    onMutate: async (postId) => {
+      // Cancel any outgoing refetches to avoid overwriting optimistic update
+      await queryClient.cancelQueries({ queryKey: ['posts'] });
+      await queryClient.cancelQueries({ queryKey: ['post', postId] });
+
+      // Snapshot previous values for rollback
+      const previousQueries: Record<string, unknown> = {};
+      
+      // Get all post-related queries and snapshot them
+      queryClient.getQueryCache().findAll({ queryKey: ['posts'] }).forEach(query => {
+        previousQueries[query.queryKey.join('.')] = query.state.data;
+      });
+
+      // Optimistically update all infinite post queries (feed, user posts, community posts)
+      queryClient.setQueriesData(
+        { queryKey: ['posts'] },
+        (old: any) => {
+          if (!old || !old.pages) return old;
+          
+          return {
+            ...old,
+            pages: old.pages.map((page: FrontendPost[]) =>
+              page.map((post: FrontendPost) => {
+                if (post.id === postId) {
+                  return {
+                    ...post,
+                    isLiked: !post.isLiked,
+                    likes: post.isLiked ? post.likes - 1 : post.likes + 1,
+                  };
+                }
+                return post;
+              })
+            ),
+          };
+        }
+      );
+
+      // Update the specific post detail if it exists
+      queryClient.setQueryData<FrontendPost>(['post', postId], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          isLiked: !old.isLiked,
+          likes: old.isLiked ? old.likes - 1 : old.likes + 1,
+        };
+      });
+
+      return { previousQueries };
+    },
+    onSuccess: (updatedPost, postId) => {
+      // Use the server response to update the cache with the exact state
+      // This ensures we have the correct like count and state from the server
+      const normalizedPost = convertPost(updatedPost);
+      
+      // Update all infinite post queries with the server response
+      queryClient.setQueriesData(
+        { queryKey: ['posts'] },
+        (old: any) => {
+          if (!old || !old.pages) return old;
+          
+          return {
+            ...old,
+            pages: old.pages.map((page: FrontendPost[]) =>
+              page.map((post: FrontendPost) => {
+                if (post.id === postId) {
+                  return normalizedPost;
+                }
+                return post;
+              })
+            ),
+          };
+        }
+      );
+
+      // Update the specific post detail with the server response
+      queryClient.setQueryData<FrontendPost>(['post', postId], normalizedPost);
+    },
+    onError: (err, postId, context) => {
+      // Rollback all queries on error
+      if (context?.previousQueries) {
+        Object.entries(context.previousQueries).forEach(([key, data]) => {
+          const queryKey = key.split('.');
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
     },
   });
 };

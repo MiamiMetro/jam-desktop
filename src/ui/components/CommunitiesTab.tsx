@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useCommunities, useCommunity } from "@/hooks/useCommunities";
-import { useCommunityPosts } from "@/hooks/usePosts";
+import { useCommunityPosts, useToggleLike } from "@/hooks/usePosts";
 import { PostCard } from "@/components/PostCard";
 import { ComposePost } from "@/components/ComposePost";
 import { EmptyState } from "@/components/EmptyState";
@@ -44,6 +44,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
   });
   const { data: selectedCommunity } = useCommunity(communityId || "");
   const { data: communityPosts = [], isLoading: postsLoading } = useCommunityPosts(communityId || "");
+  const toggleLikeMutation = useToggleLike();
   const [communitySearchInput, setCommunitySearchInput] = useState(searchQuery);
   const [showFilters, setShowFilters] = useState(false);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
@@ -96,12 +97,16 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
     console.log("Creating post to community:", { communityId, content, audioFile });
   };
 
-  const handleLikePost = () => {
+  const handleLikePost = async (postId: string) => {
     if (isGuest) {
       onGuestAction?.();
       return;
     }
-    // TODO: Implement actual like with API
+    try {
+      await toggleLikeMutation.mutateAsync(postId);
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
   };
 
   if (selectedCommunity) {
