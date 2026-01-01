@@ -4,6 +4,13 @@
         "dist-electron",
         "dist-react"
     ],
+    "extraResources": [
+        {
+            "from": "resources/client",
+            "to": "client",
+            "filter": ["**/*"]
+        }
+    ],
     "directories": {
         "output": "dist"
     },

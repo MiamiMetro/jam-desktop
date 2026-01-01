@@ -1,6 +1,16 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import { spawn, ChildProcess } from 'child_process';
+import { existsSync } from 'fs';
 import { isDev } from './util.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Track the spawned client process
+let clientProcess: ChildProcess | null = null;
 
 // Prevent multiple instances
 const gotTheLock = app.requestSingleInstanceLock();
@@ -21,7 +31,80 @@ if (!gotTheLock) {
 
     let mainWindow: BrowserWindow | null = null;
 
+    // IPC handler for spawning client.exe
+    ipcMain.handle('spawn-client', async () => {
+        try {
+            // Check if client is already running
+            if (clientProcess) {
+                // Check if the process is still alive
+                try {
+                    // On Windows, killed processes throw an error when checking exitCode
+                    if (clientProcess.exitCode === null && clientProcess.pid) {
+                        // Process is still running
+                        return { success: false, error: 'Client is already running' };
+                    }
+                } catch (e) {
+                    // Process might have been killed, continue to spawn new one
+                    clientProcess = null;
+                }
+            }
+
+            let clientPath: string;
+            
+            if (isDev()) {
+                // In development, look for client.exe in resources/client relative to project root
+                clientPath = path.join(process.cwd(), 'resources', 'client', 'client.exe');
+            } else {
+                // In production, extraResources are placed in process.resourcesPath
+                // Try the expected path first
+                clientPath = path.join(process.resourcesPath, 'client', 'client.exe');
+                
+                // If not found, try alternative path (in case electron-builder nests it)
+                if (!existsSync(clientPath)) {
+                    const altPath = path.join(process.resourcesPath, 'resources', 'client', 'client.exe');
+                    if (existsSync(altPath)) {
+                        clientPath = altPath;
+                    }
+                }
+            }
+
+            // Check if file exists
+            if (!existsSync(clientPath)) {
+                return { success: false, error: `client.exe not found at ${clientPath}` };
+            }
+
+            // Spawn the client executable
+            clientProcess = spawn(clientPath, [], {
+                detached: true,
+                stdio: 'ignore',
+            });
+
+            // Handle process exit to clear the reference
+            clientProcess.on('exit', () => {
+                clientProcess = null;
+            });
+
+            clientProcess.on('error', () => {
+                clientProcess = null;
+            });
+
+            clientProcess.unref();
+
+            return { success: true };
+        } catch (error) {
+            clientProcess = null;
+            return { 
+                success: false, 
+                error: error instanceof Error ? error.message : 'Unknown error' 
+            };
+        }
+    });
+
     app.on('ready', () => {
+        const preloadPath = isDev() 
+            ? path.join(process.cwd(), 'dist-electron', 'preload.js')
+            : path.join(__dirname, 'preload.js');
+
         mainWindow = new BrowserWindow({
             width: 1280,
             height: 720,
@@ -29,6 +112,11 @@ if (!gotTheLock) {
             minHeight: 216,
             show: false, // Don't show until ready
             backgroundColor: '#ffffff', // Match your app background
+            webPreferences: {
+                preload: preloadPath,
+                nodeIntegration: false,
+                contextIsolation: true,
+            },
         });
 
         // Show window when ready to prevent white screen flash

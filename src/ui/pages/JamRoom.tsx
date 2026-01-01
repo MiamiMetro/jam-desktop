@@ -29,6 +29,7 @@ function JamRoom() {
   const { data: allUsers = [] } = useAllUsers(undefined, !!room && !isLoading);
   const updateActivityMutation = useUpdateRoomActivity();
   const [message, setMessage] = useState("");
+  const [clientError, setClientError] = useState<string | null>(null);
   
   // HLS stream player
   const hlsPlayer = useHLSPlayer(room?.streamUrl);
@@ -87,6 +88,23 @@ function JamRoom() {
     // Clear persisted room ID
     localStorage.removeItem("currentJamRoomId");
     navigate("/jams");
+  };
+
+  const handleJoinClient = async () => {
+    try {
+      setClientError(null);
+      if (!window.electron) {
+        setClientError("Electron API not available");
+        return;
+      }
+
+      const result = await window.electron.spawnClient();
+      if (!result.success) {
+        setClientError(result.error || "Failed to launch client");
+      }
+    } catch (error) {
+      setClientError(error instanceof Error ? error.message : "Unknown error occurred");
+    }
   };
 
   const formatTime = (date: Date) => {
@@ -170,28 +188,42 @@ function JamRoom() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              {isHost && (
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={clientError ? "destructive" : "default"}
+                  size="sm"
+                  onClick={handleJoinClient}
+                  className="flex items-center gap-2"
+                  title={clientError ? "Client not available" : "Join with client"}
+                >
+                  Jam
+                </Button>
+                {isHost && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate("/jams")}
+                    className="flex items-center gap-2"
+                    title="Manage room settings"
+                  >
+                    <Settings className="h-4 w-4" />
+                    Manage
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => navigate("/jams")}
+                  onClick={handleLeaveRoom}
                   className="flex items-center gap-2"
-                  title="Manage room settings"
                 >
-                  <Settings className="h-4 w-4" />
-                  Manage
+                  <LogOut className="h-4 w-4" />
+                  Leave
                 </Button>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLeaveRoom}
-                className="flex items-center gap-2"
-              >
-                <LogOut className="h-4 w-4" />
-                Leave
-              </Button>
+              </div>
+              <div className="h-4 text-xs text-destructive">
+                {clientError && clientError}
+              </div>
             </div>
           </div>
         </div>

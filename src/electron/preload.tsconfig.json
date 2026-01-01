@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "strict": true,
+        "target": "ES2020",
+        "module": "CommonJS",
+        "moduleResolution": "node",
+        "outDir": "../../dist-electron",
+        "skipLibCheck": true,
+        "esModuleInterop": true
+    },
+    "include": ["preload.ts"]
+}
+
