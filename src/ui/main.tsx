@@ -37,7 +37,7 @@ function AuthChecker() {
   // Invalidate friends queries when user logs in
   useEffect(() => {
     const wasGuest = prevIsGuestRef.current;
-    const wasLoggedIn = prevUserRef.current !== null;
+    // const wasLoggedIn = prevUserRef.current !== null;
     const isNowLoggedIn = !isGuest && user !== null;
     
     // If user just logged in (was guest, now logged in), invalidate friends queries
