@@ -20,6 +20,13 @@ interface ComposePostProps {
   placeholder?: string;
   onSubmit: (content: string, audioFile: File | null) => void;
   onGuestAction?: () => void;
+  submitButtonText?: string;
+  textareaRows?: number;
+  textareaMinHeight?: string;
+  maxLength?: number;
+  wrapperClassName?: string;
+  inputId?: string;
+  isSubmitting?: boolean;
 }
 
 const MAX_POST_LENGTH = 1000;
@@ -27,7 +34,14 @@ const MAX_POST_LENGTH = 1000;
 export function ComposePost({ 
   placeholder = "What's on your mind? Share a message or upload audio...",
   onSubmit,
-  onGuestAction 
+  onGuestAction,
+  submitButtonText = "Post",
+  textareaRows = 4,
+  textareaMinHeight = "100px",
+  maxLength = MAX_POST_LENGTH,
+  wrapperClassName = "border-b border-border p-4 bg-background",
+  inputId = "audio-upload",
+  isSubmitting = false,
 }: ComposePostProps) {
   const navigate = useNavigate();
   const { isGuest, user } = useAuthStore();
@@ -103,12 +117,13 @@ export function ComposePost({
   if (isGuest) return null;
 
   return (
-    <div className="border-b border-border p-4 bg-background">
+    <div className={wrapperClassName}>
       <div className="flex gap-3">
         <button
           type="button"
           onClick={() => user && navigate(`/profile/${user.username}`)}
-          className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+          className="flex-shrink-0 p-0 m-0 border-0 bg-transparent cursor-pointer hover:opacity-80 transition-opacity self-start"
+          aria-label="Go to profile"
         >
           <Avatar size="default" className="pointer-events-none">
             <AvatarImage src={user?.avatar || ""} alt={user?.username || "You"} />
@@ -122,9 +137,10 @@ export function ComposePost({
             placeholder={placeholder}
             value={newPost.content}
             onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
-            className="min-h-[100px] resize-none border-border w-full overflow-wrap-anywhere"
-            rows={4}
-            maxLength={MAX_POST_LENGTH}
+            className="resize-none border-border w-full overflow-wrap-anywhere"
+            style={{ minHeight: textareaMinHeight }}
+            rows={textareaRows}
+            maxLength={maxLength}
             wrap="soft"
           />
           {/* Recorded Audio Preview */}
@@ -200,7 +216,7 @@ export function ComposePost({
               {!newPost.audioFile && !recordedAudio && (
                 <>
                   {/* Upload Audio Button */}
-                  <label htmlFor="audio-upload" className="cursor-pointer">
+                  <label htmlFor={inputId} className="cursor-pointer">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -212,7 +228,7 @@ export function ComposePost({
                       Upload Audio
                     </Button>
                     <input
-                      id="audio-upload"
+                      id={inputId}
                       type="file"
                       accept="audio/*"
                       className="hidden"
@@ -246,10 +262,10 @@ export function ComposePost({
             </div>
             <Button
               onClick={handleCreatePost}
-              disabled={(!newPost.content.trim() && !newPost.audioFile && !recordedAudio) || isRecording}
+              disabled={(!newPost.content.trim() && !newPost.audioFile && !recordedAudio) || isRecording || isSubmitting}
               size="sm"
             >
-              Post
+              {isSubmitting ? "Posting..." : submitButtonText}
             </Button>
           </div>
         </div>

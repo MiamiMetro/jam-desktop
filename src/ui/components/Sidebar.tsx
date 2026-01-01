@@ -143,9 +143,10 @@ function Sidebar() {
           {!isGuest && user ? (
             <button
               onClick={() => user.username && navigate(`/profile/${user.username}`)}
-              className="relative cursor-pointer hover:opacity-80 transition-opacity"
+              className="relative p-0 m-0 border-0 bg-transparent cursor-pointer hover:opacity-80 transition-opacity"
+              aria-label="Go to profile"
             >
-              <Avatar size="lg" className="relative ring-2 ring-primary">
+              <Avatar size="lg" className="relative ring-2 ring-primary pointer-events-none">
                 <AvatarImage src={user?.avatar || ""} alt={user?.username || "Profile"} />
                 <AvatarFallback className="bg-muted text-muted-foreground">
                   {user?.username?.substring(0, 2).toUpperCase() || "U"}
@@ -462,9 +463,10 @@ function Sidebar() {
                             <>
                               <button
                                 onClick={() => navigate(`/profile/${chatPartner.username}`)}
-                                className="cursor-pointer hover:opacity-80 transition-opacity"
+                                className="p-0 m-0 border-0 bg-transparent cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0"
+                                aria-label={`Go to ${chatPartner.username}'s profile`}
                               >
-                                <Avatar size="sm" className="relative">
+                                <Avatar size="sm" className="relative pointer-events-none">
                                   <AvatarImage src={chatPartner.avatar || ""} alt={chatPartner.username} />
                                   <AvatarFallback className="bg-muted text-muted-foreground text-xs">
                                     {chatPartner.username.substring(0, 2).toUpperCase()}

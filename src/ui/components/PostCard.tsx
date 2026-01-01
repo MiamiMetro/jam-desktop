@@ -43,9 +43,10 @@ export function PostCard({
       <div className="flex gap-3">
         <button
           onClick={() => onAuthorClick?.(post.author.username)}
-          className="flex-shrink-0 cursor-pointer p-0 border-0 bg-transparent hover:opacity-80 transition-opacity self-start"
+          className="flex-shrink-0 cursor-pointer p-0 m-0 border-0 bg-transparent hover:opacity-80 transition-opacity self-start"
+          aria-label={`Go to ${post.author.username}'s profile`}
         >
-          <Avatar size="default">
+          <Avatar size="default" className="pointer-events-none">
             <AvatarImage src={post.author.avatar || ""} alt={post.author.username} />
             <AvatarFallback className="bg-muted text-muted-foreground">
               {post.author.username.substring(0, 2).toUpperCase()}

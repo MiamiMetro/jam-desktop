@@ -11,25 +11,21 @@ import {
   MessageCircle,
   Share2,
   Hash as HashIcon,
-  Mic,
-  Trash2,
-  Upload,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { usePost, useComments, useCreateComment, useToggleLike, type FrontendComment } from "@/hooks/usePosts";
 import { useCommunities } from "@/hooks/useCommunities";
 import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
-import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
-import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useAudioPlayer } from "@/hooks/useAudioPlayer";
 import { CommentAudioPlayer } from "@/components/CommentAudioPlayer";
+import { ComposePost } from "@/components/ComposePost";
 
 function Post() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isGuest, user } = useAuthStore();
+  const { isGuest } = useAuthStore();
   const { data: post, isLoading } = usePost(id || "");
   const commentsQuery = useComments(id || "");
   const comments = (commentsQuery.data || []) as FrontendComment[];
@@ -37,8 +33,6 @@ function Post() {
   const createCommentMutation = useCreateComment();
   const toggleLikeMutation = useToggleLike();
   const { data: communities = [] } = useCommunities();
-  const [commentContent, setCommentContent] = useState("");
-  const MAX_COMMENT_LENGTH = 1000; // Same as posts
   
   // Audio player for post audio
   const postAudioUrl = post?.audioFile?.url;
@@ -46,20 +40,6 @@ function Post() {
   
   // Track which comment audio is playing
   const [playingCommentId, setPlayingCommentId] = useState<string | null>(null);
-  const [commentAudioFile, setCommentAudioFile] = useState<File | null>(null);
-  
-  const {
-    isRecording: isRecordingComment,
-    recordedAudio: recordedCommentAudio,
-    recordingTime: commentRecordingTime,
-    startRecording: startCommentRecording,
-    stopRecording: stopCommentRecording,
-    deleteRecording: deleteCommentRecording,
-    getAudioFile: getCommentAudioFile,
-  } = useAudioRecorder();
-  
-  // Audio player for recorded comment audio preview
-  const recordedCommentAudioPlayer = useAudioPlayer(recordedCommentAudio?.url);
   
   const handleAuthorClick = (username: string) => {
       navigate(`/profile/${username}`);
@@ -87,49 +67,17 @@ function Post() {
     }
   };
 
-  const handleSubmitComment = () => {
-    if (!id || (!commentContent.trim() && !commentAudioFile && !recordedCommentAudio) || isGuest) return;
-    
-    const audioFile = recordedCommentAudio ? getCommentAudioFile() : commentAudioFile;
+  const handleSubmitComment = (content: string, audioFile: File | null) => {
+    if (!id || (!content.trim() && !audioFile) || isGuest) return;
     
     createCommentMutation.mutate(
-      { postId: id, content: commentContent.trim() || "", audioFile: audioFile || undefined },
+      { postId: id, content: content.trim() || "", audioFile: audioFile || undefined },
       {
         onSuccess: () => {
-          setCommentContent("");
-          setCommentAudioFile(null);
-          if (recordedCommentAudio) {
-            deleteCommentRecording();
-          }
+          // State is managed by ComposePost, so we don't need to reset it here
         },
       }
     );
-  };
-
-  const handleCommentUploadAudio = (file: File) => {
-    if (recordedCommentAudio) {
-      deleteCommentRecording();
-    }
-    setCommentAudioFile(file);
-  };
-
-  const handleDeleteCommentUploadedAudio = () => {
-    setCommentAudioFile(null);
-  };
-
-  const handleStartCommentRecording = () => {
-    if (commentAudioFile) {
-      setCommentAudioFile(null);
-    }
-    startCommentRecording();
-  };
-
-  const handleStopCommentRecording = () => {
-    stopCommentRecording();
-  };
-
-  const handleDeleteCommentRecording = () => {
-    deleteCommentRecording();
   };
 
 
@@ -296,158 +244,18 @@ function Post() {
           
           {/* Comment Form */}
           {!isGuest && (
-            <div className="mb-6 pb-6 border-b border-border">
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => user && navigate(`/profile/${user.username}`)}
-                  className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-                >
-                  <Avatar size="default" className="pointer-events-none">
-                    <AvatarImage src={user?.avatar || ""} alt={user?.username || "You"} />
-                    <AvatarFallback className="bg-primary text-primary-foreground">
-                      {user?.username?.substring(0, 2).toUpperCase() || "U"}
-                    </AvatarFallback>
-                  </Avatar>
-                </button>
-                <div className="flex-1 space-y-3 min-w-0">
-                  <Textarea
-                    placeholder="Write a comment..."
-                    value={commentContent}
-                    onChange={(e) => setCommentContent(e.target.value)}
-                    className="min-h-[80px] resize-none border-border w-full overflow-wrap-anywhere"
-                    rows={3}
-                    maxLength={MAX_COMMENT_LENGTH}
-                    wrap="soft"
-                  />
-                  
-                  {/* Recorded Audio Preview */}
-                  {recordedCommentAudio && (
-                    <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-10 w-10 rounded-full"
-                        onClick={() => recordedCommentAudioPlayer.togglePlayPause()}
-                      >
-                        {recordedCommentAudioPlayer.isPlaying ? (
-                          <Pause className="h-5 w-5" />
-                        ) : (
-                          <Play className="h-5 w-5" />
-                        )}
-                      </Button>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Music className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                          <span className="text-sm font-medium truncate">Voice Recording</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="flex-1 h-1.5 bg-muted-foreground/20 rounded-full overflow-hidden cursor-pointer"
-                            onClick={(e) => {
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              const x = e.clientX - rect.left;
-                              const percentage = (x / rect.width) * 100;
-                              recordedCommentAudioPlayer.seek(percentage);
-                            }}
-                          >
-                            <div 
-                              className="h-full bg-primary transition-all"
-                              style={{ width: `${recordedCommentAudioPlayer.progress}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-muted-foreground">
-                            {formatDuration(recordedCommentAudio.duration)}
-                          </span>
-                        </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        className="h-6 w-6"
-                        onClick={handleDeleteCommentRecording}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  )}
-
-                  {/* Uploaded Audio Preview */}
-                  {commentAudioFile && !recordedCommentAudio && (
-                    <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
-                      <Music className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm flex-1 truncate">{commentAudioFile.name}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        className="h-6 w-6"
-                        onClick={handleDeleteCommentUploadedAudio}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {/* Only show buttons when no audio is selected */}
-                      {!commentAudioFile && !recordedCommentAudio && (
-                        <>
-                          {/* Upload Audio Button */}
-                          <label htmlFor="comment-audio-upload" className="cursor-pointer">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              type="button"
-                              className="text-muted-foreground hover:text-foreground"
-                              disabled={isRecordingComment}
-                            >
-                              <Upload className="h-4 w-4 mr-2" />
-                              Upload Audio
-                            </Button>
-                            <input
-                              id="comment-audio-upload"
-                              type="file"
-                              accept="audio/*"
-                              className="hidden"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  handleCommentUploadAudio(file);
-                                }
-                              }}
-                            />
-                          </label>
-                          
-                          {/* Microphone Button */}
-                          <Button
-                            variant={isRecordingComment ? "default" : "ghost"}
-                            size="sm"
-                            type="button"
-                            onClick={isRecordingComment ? handleStopCommentRecording : handleStartCommentRecording}
-                            className={isRecordingComment ? "bg-red-500 hover:bg-red-600 text-white" : "text-muted-foreground hover:text-foreground"}
-                          >
-                            <Mic className="h-4 w-4 mr-2" />
-                            {isRecordingComment ? "Stop" : "Record"}
-                            {isRecordingComment && (
-                              <span className="ml-2 text-xs">
-                                {formatDuration(commentRecordingTime)}
-                              </span>
-                            )}
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                    <Button
-                      onClick={handleSubmitComment}
-                      disabled={(!commentContent.trim() && !commentAudioFile && !recordedCommentAudio) || createCommentMutation.isPending || isRecordingComment}
-                      size="sm"
-                    >
-                      {createCommentMutation.isPending ? "Posting..." : "Post Comment"}
-                    </Button>
-                  </div>
-                </div>
-              </div>
+            <div className="mb-6 pb-6">
+              <ComposePost
+                placeholder="Write a comment..."
+                onSubmit={handleSubmitComment}
+                submitButtonText="Post Comment"
+                textareaRows={3}
+                textareaMinHeight="80px"
+                maxLength={1000}
+                wrapperClassName="border-b border-border pb-4"
+                inputId="comment-audio-upload"
+                isSubmitting={createCommentMutation.isPending}
+              />
             </div>
           )}
 
@@ -469,7 +277,8 @@ function Post() {
                     <button
                       type="button"
                       onClick={() => navigate(`/profile/${comment.author.username}`)}
-                      className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                      className="flex-shrink-0 p-0 m-0 border-0 bg-transparent cursor-pointer hover:opacity-80 transition-opacity self-start"
+                      aria-label={`Go to ${comment.author.username}'s profile`}
                     >
                       <Avatar size="default" className="pointer-events-none">
                         <AvatarImage src={comment.author.avatar || ""} alt={comment.author.username} />
