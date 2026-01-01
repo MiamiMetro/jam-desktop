@@ -35,6 +35,7 @@ function Sidebar() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
   const [showSearchUsers, setShowSearchUsers] = useState(false);
   const [showFriendsSearch, setShowFriendsSearch] = useState(false);
   const [showFriendRequests, setShowFriendRequests] = useState(false);
@@ -101,6 +102,7 @@ function Sidebar() {
     setEmail("");
     setPassword("");
     setUsername("");
+    setAuthError(null);
   };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -108,6 +110,7 @@ function Sidebar() {
     const { loginWithCredentials, registerWithCredentials } = useAuthStore.getState();
     
     try {
+      setAuthError(null);
       if (isLogin) {
         await loginWithCredentials(email, password);
       } else {
@@ -117,10 +120,12 @@ function Sidebar() {
       setEmail("");
       setPassword("");
       setUsername("");
-    } catch (error) {
-      // Error handling - could show toast notification here
+      setAuthError(null);
+    } catch (error: any) {
+      // Extract error message from API error response
+      const errorMessage = error?.message || 'An error occurred. Please try again.';
+      setAuthError(errorMessage);
       console.error('Auth error:', error);
-      // For now, just log the error
     }
   };
 
@@ -210,10 +215,13 @@ function Sidebar() {
           showAuthForm ? (
             /* Auth Form */
             <div className="flex-1 overflow-y-auto px-3 py-4">
-              <Button
+                <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleBackToButtons}
+                onClick={() => {
+                  handleBackToButtons();
+                  setAuthError(null);
+                }}
                 className="mb-4 text-xs"
               >
                 <ArrowLeft className="h-3 w-3 mr-1" />
@@ -238,7 +246,10 @@ function Sidebar() {
                       type="text"
                       placeholder="Choose a username"
                       value={username}
-                      onChange={(e) => setUsername(e.target.value)}
+                      onChange={(e) => {
+                        setUsername(e.target.value);
+                        setAuthError(null);
+                      }}
                       required={!isLogin}
                       className="h-8 text-sm"
                     />
@@ -251,7 +262,10 @@ function Sidebar() {
                     type="email"
                     placeholder="your@email.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setAuthError(null);
+                    }}
                     required
                     className="h-8 text-sm"
                   />
@@ -263,7 +277,10 @@ function Sidebar() {
                     type="password"
                     placeholder="••••••••"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setAuthError(null);
+                    }}
                     required
                     className="h-8 text-sm"
                   />
@@ -271,6 +288,11 @@ function Sidebar() {
                 <Button type="submit" className="w-full h-8 text-sm">
                   {isLogin ? "Login" : "Sign Up"}
                 </Button>
+                {authError && (
+                  <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                    {authError}
+                  </div>
+                )}
               </form>
               <div className="mt-3 pt-3 border-t border-sidebar-border">
                 <button
@@ -279,6 +301,7 @@ function Sidebar() {
                     setEmail("");
                     setPassword("");
                     setUsername("");
+                    setAuthError(null);
                   }}
                   className="text-xs text-muted-foreground hover:text-sidebar-foreground transition-colors w-full text-center"
                 >
