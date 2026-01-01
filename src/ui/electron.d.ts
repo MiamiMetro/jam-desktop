@@ -1,5 +1,5 @@
 export interface ElectronAPI {
-    spawnClient: () => Promise<{ success: boolean; error?: string }>;
+    spawnClient: (args?: string[]) => Promise<{ success: boolean; error?: string }>;
 }
 
 declare global {

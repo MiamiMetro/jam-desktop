@@ -98,7 +98,7 @@ function JamRoom() {
         return;
       }
 
-      const result = await window.electron.spawnClient();
+      const result = await window.electron.spawnClient(['--room=abc123', '--token=jwt']);
       if (!result.success) {
         setClientError(result.error || "Failed to launch client");
       }

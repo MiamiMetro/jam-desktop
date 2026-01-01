@@ -32,7 +32,7 @@ if (!gotTheLock) {
     let mainWindow: BrowserWindow | null = null;
 
     // IPC handler for spawning client.exe
-    ipcMain.handle('spawn-client', async () => {
+    ipcMain.handle('spawn-client', async (event, args: string[] = []) => {
         try {
             // Check if client is already running
             if (clientProcess) {
@@ -73,8 +73,8 @@ if (!gotTheLock) {
                 return { success: false, error: `client.exe not found at ${clientPath}` };
             }
 
-            // Spawn the client executable
-            clientProcess = spawn(clientPath, [], {
+            // Spawn the client executable with provided arguments
+            clientProcess = spawn(clientPath, args, {
                 detached: true,
                 stdio: 'ignore',
             });

@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('electron', {
-    spawnClient: () => ipcRenderer.invoke('spawn-client'),
+    spawnClient: (args?: string[]) => ipcRenderer.invoke('spawn-client', args || []),
 });
 
 
