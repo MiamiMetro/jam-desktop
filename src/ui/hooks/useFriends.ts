@@ -1,8 +1,11 @@
 import { useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { friendsApi } from '@/lib/api/api';
 import type { User } from '@/lib/api/types';
+import { useAuthStore } from '@/stores/authStore';
 
 export const useFriends = () => {
+  const { isGuest } = useAuthStore();
+  
   const query = useInfiniteQuery<User[], Error>({
     queryKey: ['friends'],
     queryFn: async ({ pageParam = 0 }) => {
@@ -14,6 +17,7 @@ export const useFriends = () => {
       if (lastPage.length < 50) return undefined;
       return (lastPageParam as number) + 50;
     },
+    enabled: !isGuest, // Only fetch when user is authenticated
   });
   
   return {
@@ -23,6 +27,8 @@ export const useFriends = () => {
 };
 
 export const useFriendRequests = () => {
+  const { isGuest } = useAuthStore();
+  
   const query = useInfiniteQuery<User[], Error>({
     queryKey: ['friends', 'requests'],
     queryFn: async ({ pageParam = 0 }) => {
@@ -34,6 +40,7 @@ export const useFriendRequests = () => {
       if (lastPage.length < 20) return undefined;
       return (lastPageParam as number) + 20;
     },
+    enabled: !isGuest, // Only fetch when user is authenticated
   });
   
   return {
