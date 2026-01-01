@@ -16,7 +16,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
-import { usePost, useComments, useCreateComment, useToggleLike, type FrontendComment } from "@/hooks/usePosts";
+import { usePost, useComments, useCreateComment, useToggleLike, type FrontendComment, type FrontendPost } from "@/hooks/usePosts";
 import { useCommunities } from "@/hooks/useCommunities";
 import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,6 +38,7 @@ function Post() {
   const toggleLikeMutation = useToggleLike();
   const { data: communities = [] } = useCommunities();
   const [commentContent, setCommentContent] = useState("");
+  const MAX_COMMENT_LENGTH = 1000; // Same as posts
   
   // Audio player for post audio
   const postAudioUrl = post?.audioFile?.url;
@@ -74,6 +75,15 @@ function Post() {
       await toggleLikeMutation.mutateAsync(id);
     } catch (error) {
       console.error('Error toggling like:', error);
+    }
+  };
+
+  const handleLikeComment = async (commentId: string) => {
+    if (isGuest) return;
+    try {
+      await toggleLikeMutation.mutateAsync(commentId);
+    } catch (error) {
+      console.error('Error toggling comment like:', error);
     }
   };
 
@@ -300,13 +310,15 @@ function Post() {
                     </AvatarFallback>
                   </Avatar>
                 </button>
-                <div className="flex-1 space-y-3">
+                <div className="flex-1 space-y-3 min-w-0">
                   <Textarea
                     placeholder="Write a comment..."
                     value={commentContent}
                     onChange={(e) => setCommentContent(e.target.value)}
-                    className="min-h-[80px] resize-none border-border"
+                    className="min-h-[80px] resize-none border-border w-full overflow-wrap-anywhere"
                     rows={3}
+                    maxLength={MAX_COMMENT_LENGTH}
+                    wrap="soft"
                   />
                   
                   {/* Recorded Audio Preview */}
@@ -488,6 +500,24 @@ function Post() {
                           onActivate={() => setPlayingCommentId(comment.id)}
                         />
                       )}
+                      {/* Like button for comment - comments are now posts so they can be liked */}
+                      <div className="flex items-center gap-4 mt-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleLikeComment(comment.id);
+                          }}
+                          className={`flex items-center gap-1 text-xs transition-colors cursor-pointer ${
+                            comment.isLiked
+                              ? "text-red-500 hover:text-red-600"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          <Heart className={`h-3.5 w-3.5 ${comment.isLiked ? "fill-current" : ""}`} />
+                          <span>{comment.likes || 0}</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );

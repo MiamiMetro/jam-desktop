@@ -41,6 +41,7 @@ function Sidebar() {
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [selectedChatPartner, setSelectedChatPartner] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
+  const MAX_MESSAGE_LENGTH = 1000;
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isGuest, user } = useAuthStore();
   const { data: onlineUsers = [] } = useOnlineUsers();
@@ -511,6 +512,7 @@ function Sidebar() {
                               }
                             }}
                             className="h-7 text-xs flex-1"
+                            maxLength={MAX_MESSAGE_LENGTH}
                             autoFocus
                           />
                           <Button

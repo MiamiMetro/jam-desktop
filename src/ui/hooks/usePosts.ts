@@ -10,6 +10,8 @@ export interface FrontendPost extends Omit<Post, 'timestamp'> {
 
 export interface FrontendComment extends Omit<Comment, 'timestamp'> {
   timestamp: Date;
+  isLiked?: boolean; // Comments are now posts, so they can be liked
+  likes?: number; // Like count for comments
 }
 
 // Convert Post (already normalized from API) to FrontendPost format (with Date timestamp)
@@ -35,20 +37,20 @@ function convertPost(post: Post): FrontendPost {
   return result;
 }
 
-// Convert backend Comment to frontend format  
-function convertComment(comment: Comment): FrontendComment {
+// Comments are now posts with parent_post_id, so we can use convertPost
+// This function is kept for backward compatibility but converts FrontendPost to FrontendComment format
+function convertComment(post: FrontendPost): FrontendComment {
   const result: FrontendComment = {
-    id: comment.id,
-    postId: comment.postId,
-    author: comment.author,
-    content: comment.content,
-    timestamp: new Date(comment.timestamp),
-    audioFile: comment.audio_url ? {
-      url: comment.audio_url,
-      title: 'Audio',
-      duration: 0,
-    } : undefined,
-  };
+    id: post.id,
+    postId: post.id, // For comments, postId is the parent post ID (handled by backend)
+    author: post.author,
+    content: post.content || post.text || '',
+    timestamp: post.timestamp, // FrontendPost already has Date timestamp
+    audioFile: post.audioFile,
+    // Include like data from post
+    isLiked: post.isLiked,
+    likes: post.likes,
+  } as FrontendComment;
   return result;
 }
 
@@ -130,8 +132,10 @@ export const useComments = (postId: string) => {
   const query = useInfiniteQuery<FrontendComment[], Error>({
     queryKey: ['comments', postId],
     queryFn: async ({ pageParam = 0 }) => {
+      // Comments are now posts with parent_post_id, fetch them as posts
       const response = await postsApi.getComments(postId, { limit: 20, offset: pageParam as number });
-      return response.data.map(convertComment);
+      // Convert posts to FrontendComment format for backward compatibility
+      return response.data.map(convertPost).map(convertComment);
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, _allPages, lastPageParam) => {
@@ -156,12 +160,15 @@ export const useCreateComment = () => {
       if (!user) throw new Error('User not authenticated');
       
       // Audio upload is not implemented yet - don't send audio_url
-      const comment = await postsApi.createComment(postId, {
+      // Comments are now posts with parent_post_id
+      const commentPost = await postsApi.createComment(postId, {
         content: content || undefined,
         audio_url: null, // Audio upload will be implemented later
       });
       
-      return convertComment(comment);
+      // Convert the post to FrontendPost, then to FrontendComment format
+      const frontendPost = convertPost(commentPost);
+      return convertComment(frontendPost);
     },
     onSuccess: (_, variables) => {
       // Invalidate comments for this post
@@ -256,6 +263,30 @@ export const useToggleLike = () => {
         };
       });
 
+      // Optimistically update comments cache (comments are now posts)
+      queryClient.setQueriesData(
+        { queryKey: ['comments'] },
+        (old: any) => {
+          if (!old || !old.pages) return old;
+          
+          return {
+            ...old,
+            pages: old.pages.map((page: FrontendComment[]) =>
+              page.map((comment: FrontendComment) => {
+                if (comment.id === postId) {
+                  return {
+                    ...comment,
+                    isLiked: !comment.isLiked,
+                    likes: (comment.isLiked ? (comment.likes || 0) - 1 : (comment.likes || 0) + 1),
+                  };
+                }
+                return comment;
+              })
+            ),
+          };
+        }
+      );
+
       return { previousQueries };
     },
     onSuccess: (updatedPost, postId) => {
@@ -283,10 +314,36 @@ export const useToggleLike = () => {
         }
       );
 
+      // Update comments cache if this is a comment (post with parent_post_id)
+      // Comments are stored in ['comments', parentPostId] queries
+      queryClient.setQueriesData(
+        { queryKey: ['comments'] },
+        (old: any) => {
+          if (!old || !old.pages) return old;
+          
+          return {
+            ...old,
+            pages: old.pages.map((page: FrontendComment[]) =>
+              page.map((comment: FrontendComment) => {
+                if (comment.id === postId) {
+                  // Update comment with like data from the post
+                  return {
+                    ...comment,
+                    isLiked: normalizedPost.isLiked,
+                    likes: normalizedPost.likes,
+                  };
+                }
+                return comment;
+              })
+            ),
+          };
+        }
+      );
+
       // Update the specific post detail with the server response
       queryClient.setQueryData<FrontendPost>(['post', postId], normalizedPost);
     },
-    onError: (err, postId, context) => {
+    onError: (_err, _postId, context) => {
       // Rollback all queries on error
       if (context?.previousQueries) {
         Object.entries(context.previousQueries).forEach(([key, data]) => {

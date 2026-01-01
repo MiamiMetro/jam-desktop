@@ -22,6 +22,8 @@ interface ComposePostProps {
   onGuestAction?: () => void;
 }
 
+const MAX_POST_LENGTH = 1000;
+
 export function ComposePost({ 
   placeholder = "What's on your mind? Share a message or upload audio...",
   onSubmit,
@@ -115,13 +117,15 @@ export function ComposePost({
             </AvatarFallback>
           </Avatar>
         </button>
-        <div className="flex-1 space-y-3">
+        <div className="flex-1 space-y-3 min-w-0">
           <Textarea
             placeholder={placeholder}
             value={newPost.content}
             onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
-            className="min-h-[100px] resize-none border-border"
+            className="min-h-[100px] resize-none border-border w-full overflow-wrap-anywhere"
             rows={4}
+            maxLength={MAX_POST_LENGTH}
+            wrap="soft"
           />
           {/* Recorded Audio Preview */}
           {recordedAudio && (

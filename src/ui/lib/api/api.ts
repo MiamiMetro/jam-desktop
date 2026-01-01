@@ -1,7 +1,7 @@
 // API endpoint functions
 import { apiGet, apiPost, apiPatch, apiDelete, type PaginatedResponse } from './client';
-import type { User, Post, Comment, Message, Conversation, BackendPost, BackendUser, BackendComment } from './types';
-import { normalizePost, normalizeUser, normalizeComment, normalizeMessage } from './types';
+import type { User, Post, Message, Conversation, BackendPost, BackendUser } from './types';
+import { normalizePost, normalizeUser, normalizeMessage } from './types';
 
 // Auth endpoints
 export interface LoginDto {
@@ -73,17 +73,19 @@ export const postsApi = {
     return backendUsers.map(normalizeUser);
   },
   
-  getComments: async (postId: string, params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Comment>> => {
-    const response = await apiGet<PaginatedResponse<BackendComment>>(`/posts/${postId}/comments`, params);
+  getComments: async (postId: string, params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Post>> => {
+    // Comments are now posts with parent_post_id, so we normalize them as posts
+    const response = await apiGet<PaginatedResponse<BackendPost>>(`/posts/${postId}/comments`, params);
     return {
       ...response,
-      data: response.data.map(normalizeComment),
+      data: response.data.map(normalizePost),
     };
   },
   
-  createComment: async (postId: string, data: CreateCommentDto): Promise<Comment> => {
-    const backendComment = await apiPost<BackendComment>(`/posts/${postId}/comments`, data);
-    return normalizeComment(backendComment);
+  createComment: async (postId: string, data: CreateCommentDto): Promise<Post> => {
+    // Comments are now posts with parent_post_id, so we normalize as post
+    const backendPost = await apiPost<BackendPost>(`/posts/${postId}/comments`, data);
+    return normalizePost(backendPost);
   },
 };
 
