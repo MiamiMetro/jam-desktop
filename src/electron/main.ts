@@ -31,7 +31,7 @@ if (!gotTheLock) {
 
     let mainWindow: BrowserWindow | null = null;
 
-    // IPC handler for spawning client.exe
+    // IPC handler for spawning client executable
     ipcMain.handle('spawn-client', async (event, args: string[] = []) => {
         try {
             // Check if client is already running
@@ -45,23 +45,28 @@ if (!gotTheLock) {
                     }
                 } catch (e) {
                     // Process might have been killed, continue to spawn new one
+                    console.log(e);
                     clientProcess = null;
                 }
             }
 
+            // Determine the executable name based on platform
+            const platform = process.platform;
+            const clientExecutable = platform === 'win32' ? 'client.exe' : 'client';
+
             let clientPath: string;
             
             if (isDev()) {
-                // In development, look for client.exe in resources/client relative to project root
-                clientPath = path.join(process.cwd(), 'resources', 'client', 'client.exe');
+                // In development, look for client executable in resources/client relative to project root
+                clientPath = path.join(process.cwd(), 'resources', 'client', clientExecutable);
             } else {
                 // In production, extraResources are placed in process.resourcesPath
                 // Try the expected path first
-                clientPath = path.join(process.resourcesPath, 'client', 'client.exe');
+                clientPath = path.join(process.resourcesPath, 'client', clientExecutable);
                 
                 // If not found, try alternative path (in case electron-builder nests it)
                 if (!existsSync(clientPath)) {
-                    const altPath = path.join(process.resourcesPath, 'resources', 'client', 'client.exe');
+                    const altPath = path.join(process.resourcesPath, 'resources', 'client', clientExecutable);
                     if (existsSync(altPath)) {
                         clientPath = altPath;
                     }
@@ -70,7 +75,7 @@ if (!gotTheLock) {
 
             // Check if file exists
             if (!existsSync(clientPath)) {
-                return { success: false, error: `client.exe not found at ${clientPath}` };
+                return { success: false, error: `Client executable not found at ${clientPath}` };
             }
 
             // Spawn the client executable with provided arguments
