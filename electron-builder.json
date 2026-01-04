@@ -27,16 +27,17 @@
     "win": {
         "target": [
             {
-                "target": "msi",
+                "target": "nsis",
                 "arch": [
                     "x64"
                 ]
             }
         ]
     },
-    "msi": {
+    "nsis": {
         "oneClick": false,
-        "perMachine": false,
-        "runAfterFinish": true
+        "allowToChangeInstallationDirectory": true,
+        "createDesktopShortcut": true,
+        "createStartMenuShortcut": true
     }
 }
