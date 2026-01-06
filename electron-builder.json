@@ -2,7 +2,8 @@
     "appId": "com.jam.desktop",
     "files": [
         "dist-electron",
-        "dist-react"
+        "dist-react",
+        "!**/node_modules/**"
     ],
     "extraResources": [
         {
@@ -38,6 +39,8 @@
         "oneClick": false,
         "allowToChangeInstallationDirectory": true,
         "createDesktopShortcut": true,
-        "createStartMenuShortcut": true
+        "createStartMenuShortcut": true,
+        "deleteAppDataOnUninstall": true,
+        "runAfterFinish": true
     }
 }
