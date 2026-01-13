@@ -19,6 +19,9 @@ function convertUser(profile: any): User {
   };
 }
 
+/**
+ * Get friends list
+ */
 export const useFriends = () => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
@@ -41,10 +44,14 @@ export const useFriends = () => {
     hasNextPage: result?.hasMore || false,
     isFetchingNextPage: false,
     fetchNextPage: () => {},
+    refetch: () => {},
     error: null,
   };
 };
 
+/**
+ * Get friend requests - realtime subscription for immediate notification
+ */
 export const useFriendRequests = () => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();

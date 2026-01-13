@@ -10,6 +10,7 @@ import {
   sanitizeText,
   MAX_LENGTHS,
 } from "./helpers";
+import { checkRateLimit } from "./rateLimiter";
 
 /**
  * Find or create a conversation between two users
@@ -54,6 +55,9 @@ export const send = mutation({
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
+    
+    // Rate limit: 30 messages per minute
+    await checkRateLimit(ctx, "sendMessage", profile._id);
 
     // Cannot send message to self
     if (profile._id === args.recipient_id) {
@@ -301,6 +305,9 @@ export const remove = mutation({
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
+    
+    // Rate limit: 10 deletes per minute
+    await checkRateLimit(ctx, "deleteAction", profile._id);
 
     const message = await ctx.db.get(args.messageId);
     if (!message) {

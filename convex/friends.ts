@@ -2,6 +2,7 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { requireAuth } from "./helpers";
+import { checkRateLimit } from "./rateLimiter";
 
 /**
  * Send a friend request
@@ -13,6 +14,9 @@ export const sendRequest = mutation({
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
+    
+    // Rate limit: 10 friend requests per minute
+    await checkRateLimit(ctx, "friendRequest", profile._id);
 
     // Cannot send request to self
     if (profile._id === args.friendId) {
@@ -77,6 +81,9 @@ export const acceptRequest = mutation({
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
+    
+    // Rate limit: 10 friend actions per minute
+    await checkRateLimit(ctx, "friendRequest", profile._id);
 
     // Find pending request where args.userId is the requester
     const request = await ctx.db
@@ -111,6 +118,9 @@ export const remove = mutation({
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
+    
+    // Rate limit: 10 friend actions per minute
+    await checkRateLimit(ctx, "friendRequest", profile._id);
 
     // Find friendship in either direction
     const friendship1 = await ctx.db

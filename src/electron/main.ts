@@ -5,6 +5,10 @@ import { dirname } from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import { existsSync } from 'fs';
 import { isDev } from './util.js';
+import * as keytar from 'keytar';
+
+// Service name for keytar credential storage
+const KEYTAR_SERVICE = 'jam-desktop';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -31,8 +35,45 @@ if (!gotTheLock) {
 
     let mainWindow: BrowserWindow | null = null;
 
+    // IPC handlers for secure token storage using keytar
+    ipcMain.handle('keytar-set', async (_event, account: string, token: string) => {
+        try {
+            await keytar.setPassword(KEYTAR_SERVICE, account, token);
+            return { success: true };
+        } catch (error) {
+            return { 
+                success: false, 
+                error: error instanceof Error ? error.message : 'Failed to store token' 
+            };
+        }
+    });
+
+    ipcMain.handle('keytar-get', async (_event, account: string) => {
+        try {
+            const token = await keytar.getPassword(KEYTAR_SERVICE, account);
+            return { success: true, token };
+        } catch (error) {
+            return { 
+                success: false, 
+                error: error instanceof Error ? error.message : 'Failed to retrieve token' 
+            };
+        }
+    });
+
+    ipcMain.handle('keytar-delete', async (_event, account: string) => {
+        try {
+            const deleted = await keytar.deletePassword(KEYTAR_SERVICE, account);
+            return { success: true, deleted };
+        } catch (error) {
+            return { 
+                success: false, 
+                error: error instanceof Error ? error.message : 'Failed to delete token' 
+            };
+        }
+    });
+
     // IPC handler for spawning client executable
-    ipcMain.handle('spawn-client', async (event, args: string[] = []) => {
+    ipcMain.handle('spawn-client', async (_event, args: string[] = []) => {
         try {
             // Check if client is already running
             if (clientProcess) {

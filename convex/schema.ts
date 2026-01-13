@@ -15,17 +15,34 @@ export default defineSchema({
     .index("by_supabase_id", ["supabaseId"])
     .index("by_username", ["username"]),
 
-  // Posts table - for posts and comments (comments have parentId)
+  // Posts table - top-level posts only (comments moved to separate table)
   posts: defineTable({
     authorId: v.id("profiles"),
-    parentId: v.optional(v.id("posts")), // null for top-level posts, set for comments
+    // DEPRECATED: parentId kept for migration, will be removed
+    parentId: v.optional(v.id("posts")),
     text: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
   })
     .index("by_author", ["authorId"])
     .index("by_parent", ["parentId"]),
 
-  // Likes table
+  // Comments table - threaded comments with path-based ordering
+  // Path format: "0001.0002.0003" enables efficient tree operations
+  comments: defineTable({
+    postId: v.id("posts"),
+    authorId: v.id("profiles"),
+    parentId: v.optional(v.id("comments")), // For replies to other comments
+    path: v.string(), // e.g. "0001", "0001.0001", "0001.0001.0001"
+    depth: v.number(), // 0 for top-level, 1 for first reply, etc.
+    text: v.optional(v.string()),
+    audioUrl: v.optional(v.string()),
+  })
+    .index("by_post", ["postId"])
+    .index("by_post_and_path", ["postId", "path"])
+    .index("by_author", ["authorId"])
+    .index("by_parent", ["parentId"]),
+
+  // Likes table - for posts
   likes: defineTable({
     postId: v.id("posts"),
     userId: v.id("profiles"),
@@ -33,6 +50,15 @@ export default defineSchema({
     .index("by_post", ["postId"])
     .index("by_user", ["userId"])
     .index("by_post_and_user", ["postId", "userId"]),
+
+  // Comment likes table - separate from post likes to avoid cross-invalidation
+  comment_likes: defineTable({
+    commentId: v.id("comments"),
+    userId: v.id("profiles"),
+  })
+    .index("by_comment", ["commentId"])
+    .index("by_user", ["userId"])
+    .index("by_comment_and_user", ["commentId", "userId"]),
 
   // Friends table - for friend requests and friendships
   friends: defineTable({

@@ -30,6 +30,9 @@ export interface FrontendPost {
 export interface FrontendComment {
   id: string;
   postId: string;
+  parentId?: string | null;
+  path?: string;
+  depth?: number;
   author: {
     username: string;
     avatar?: string;
@@ -44,6 +47,7 @@ export interface FrontendComment {
   timestamp: Date;
   isLiked?: boolean;
   likes?: number;
+  repliesCount?: number;
 }
 
 // Convert Convex post to FrontendPost format
@@ -72,11 +76,14 @@ function convertPost(post: any): FrontendPost {
   };
 }
 
-// Convert FrontendPost to FrontendComment format
+// Convert Convex comment to FrontendComment format
 function convertComment(comment: any): FrontendComment {
   return {
     id: comment.id || comment._id,
-    postId: comment.id || comment._id,
+    postId: comment.post_id || comment.postId || comment.id || comment._id,
+    parentId: comment.parent_id ?? null,
+    path: comment.path,
+    depth: comment.depth ?? 0,
     author: {
       username: comment.author?.username || 'unknown',
       avatar: comment.author?.avatar_url || comment.author?.avatar || undefined,
@@ -91,9 +98,15 @@ function convertComment(comment: any): FrontendComment {
     timestamp: new Date(comment.created_at || comment._creationTime),
     isLiked: comment.is_liked || false,
     likes: comment.likes_count || 0,
+    repliesCount: comment.replies_count || 0,
   };
 }
 
+/**
+ * Get posts feed
+ * Note: This uses useQuery (realtime) for now. Can be optimized later with
+ * imperative fetch if performance becomes an issue.
+ */
 export const usePosts = () => {
   const result = useQuery(api.posts.getFeed, { limit: 20 });
   
@@ -107,7 +120,10 @@ export const usePosts = () => {
     hasNextPage: hasMore,
     isFetchingNextPage: false,
     fetchNextPage: () => {
-      // Convex handles pagination with cursors
+      // TODO: Implement cursor-based pagination
+    },
+    refetch: () => {
+      // useQuery auto-updates, no manual refetch needed
     },
   };
 };
@@ -118,9 +134,13 @@ export const useCommunityPosts = (_communityId: string) => {
     data: [] as FrontendPost[],
     isLoading: false,
     error: null,
+    refetch: () => {},
   };
 };
 
+/**
+ * Get global posts feed
+ */
 export const useGlobalPosts = () => {
   const result = useQuery(api.posts.getFeed, { limit: 20 });
   
@@ -133,9 +153,13 @@ export const useGlobalPosts = () => {
     hasNextPage: result?.hasMore || false,
     isFetchingNextPage: false,
     fetchNextPage: () => {},
+    refetch: () => {},
   };
 };
 
+/**
+ * Get a single post
+ */
 export const usePost = (postId: string) => {
   const result = useQuery(
     api.posts.getById, 
@@ -146,9 +170,13 @@ export const usePost = (postId: string) => {
     data: result ? convertPost(result) : null,
     isLoading: result === undefined && !!postId,
     error: null,
+    refetch: () => {},
   };
 };
 
+/**
+ * Get comments for a post
+ */
 export const useComments = (postId: string) => {
   const result = useQuery(
     api.posts.getComments,
@@ -164,6 +192,7 @@ export const useComments = (postId: string) => {
     hasNextPage: result?.hasMore || false,
     isFetchingNextPage: false,
     fetchNextPage: () => {},
+    refetch: () => {},
   };
 };
 
@@ -255,6 +284,9 @@ export const useToggleLike = () => {
   };
 };
 
+/**
+ * Get posts by username
+ */
 export const useUserPosts = (username: string) => {
   const result = useQuery(
     api.posts.getByUsername,
@@ -270,5 +302,6 @@ export const useUserPosts = (username: string) => {
     hasNextPage: result?.hasMore || false,
     isFetchingNextPage: false,
     fetchNextPage: () => {},
+    refetch: () => {},
   };
 };

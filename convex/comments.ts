@@ -1,0 +1,450 @@
+import { query, mutation } from "./_generated/server";
+import { v } from "convex/values";
+import type { Id, Doc } from "./_generated/dataModel";
+import {
+  getCurrentProfile,
+  requireAuth,
+  validateTextLength,
+  validateUrl,
+  sanitizeText,
+  MAX_LENGTHS,
+} from "./helpers";
+import { checkRateLimit } from "./rateLimiter";
+
+/**
+ * Generate the next path segment for a comment.
+ * Paths are 4-digit zero-padded numbers (0001, 0002, etc.)
+ */
+function generateNextSegment(existingCount: number): string {
+  return String(existingCount + 1).padStart(4, "0");
+}
+
+/**
+ * Format a comment for API response
+ */
+async function formatComment(
+  ctx: any,
+  comment: Doc<"comments">,
+  currentUserId?: Id<"profiles">
+) {
+  const author = await ctx.db.get(comment.authorId);
+
+  // Get likes count
+  const likes = await ctx.db
+    .query("comment_likes")
+    .withIndex("by_comment", (q: any) => q.eq("commentId", comment._id))
+    .collect();
+  const likesCount = likes.length;
+
+  // Get reply count (direct children only)
+  const replies = await ctx.db
+    .query("comments")
+    .withIndex("by_parent", (q: any) => q.eq("parentId", comment._id))
+    .collect();
+  const repliesCount = replies.length;
+
+  // Check if current user liked this comment
+  let isLiked = false;
+  if (currentUserId) {
+    const like = await ctx.db
+      .query("comment_likes")
+      .withIndex("by_comment_and_user", (q: any) =>
+        q.eq("commentId", comment._id).eq("userId", currentUserId)
+      )
+      .first();
+    isLiked = !!like;
+  }
+
+  return {
+    id: comment._id,
+    post_id: comment.postId,
+    author_id: comment.authorId,
+    parent_id: comment.parentId ?? null,
+    path: comment.path,
+    depth: comment.depth,
+    text: comment.text ?? "",
+    audio_url: comment.audioUrl ?? "",
+    created_at: new Date(comment._creationTime).toISOString(),
+    author: author
+      ? {
+          id: author._id,
+          username: author.username,
+          display_name: author.displayName ?? "",
+          avatar_url: author.avatarUrl ?? "",
+        }
+      : null,
+    likes_count: likesCount,
+    replies_count: repliesCount,
+    is_liked: isLiked,
+  };
+}
+
+/**
+ * Create a top-level comment on a post
+ */
+export const create = mutation({
+  args: {
+    postId: v.id("posts"),
+    text: v.optional(v.string()),
+    audioUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const profile = await requireAuth(ctx);
+    
+    // Rate limit: 10 comments per minute
+    await checkRateLimit(ctx, "createComment", profile._id);
+
+    // Verify post exists
+    const post = await ctx.db.get(args.postId);
+    if (!post) {
+      throw new Error("Post not found");
+    }
+
+    // Sanitize and validate inputs
+    const text = sanitizeText(args.text);
+    const audioUrl = args.audioUrl;
+
+    validateTextLength(text, MAX_LENGTHS.COMMENT_TEXT, "Comment text");
+    validateUrl(audioUrl);
+
+    if (!text && !audioUrl) {
+      throw new Error("Comment must have either text or audio");
+    }
+
+    // Count existing top-level comments to generate path
+    const existingTopLevel = await ctx.db
+      .query("comments")
+      .withIndex("by_post", (q) => q.eq("postId", args.postId))
+      .filter((q) => q.eq(q.field("depth"), 0))
+      .collect();
+
+    const path = generateNextSegment(existingTopLevel.length);
+
+    const commentId = await ctx.db.insert("comments", {
+      postId: args.postId,
+      authorId: profile._id,
+      parentId: undefined,
+      path,
+      depth: 0,
+      text,
+      audioUrl,
+    });
+
+    const comment = await ctx.db.get(commentId);
+    if (!comment) {
+      throw new Error("Failed to create comment");
+    }
+
+    return await formatComment(ctx, comment, profile._id);
+  },
+});
+
+/**
+ * Reply to an existing comment (threaded)
+ */
+export const reply = mutation({
+  args: {
+    parentId: v.id("comments"),
+    text: v.optional(v.string()),
+    audioUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const profile = await requireAuth(ctx);
+    
+    // Rate limit: 10 replies per minute
+    await checkRateLimit(ctx, "replyToComment", profile._id);
+
+    // Verify parent comment exists
+    const parent = await ctx.db.get(args.parentId);
+    if (!parent) {
+      throw new Error("Parent comment not found");
+    }
+
+    // Sanitize and validate inputs
+    const text = sanitizeText(args.text);
+    const audioUrl = args.audioUrl;
+
+    validateTextLength(text, MAX_LENGTHS.COMMENT_TEXT, "Comment text");
+    validateUrl(audioUrl);
+
+    if (!text && !audioUrl) {
+      throw new Error("Reply must have either text or audio");
+    }
+
+    // Count existing replies to this parent to generate path segment
+    const existingReplies = await ctx.db
+      .query("comments")
+      .withIndex("by_parent", (q) => q.eq("parentId", args.parentId))
+      .collect();
+
+    const newSegment = generateNextSegment(existingReplies.length);
+    const path = `${parent.path}.${newSegment}`;
+
+    const commentId = await ctx.db.insert("comments", {
+      postId: parent.postId,
+      authorId: profile._id,
+      parentId: args.parentId,
+      path,
+      depth: parent.depth + 1,
+      text,
+      audioUrl,
+    });
+
+    const comment = await ctx.db.get(commentId);
+    if (!comment) {
+      throw new Error("Failed to create reply");
+    }
+
+    return await formatComment(ctx, comment, profile._id);
+  },
+});
+
+/**
+ * Get all comments for a post, ordered by path (tree order)
+ * Supports cursor-based pagination
+ */
+export const getByPost = query({
+  args: {
+    postId: v.id("posts"),
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.string()), // Path-based cursor
+    maxDepth: v.optional(v.number()), // Optional: limit nesting depth
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 50;
+    const currentProfile = await getCurrentProfile(ctx);
+
+    const post = await ctx.db.get(args.postId);
+    if (!post) {
+      return { data: [], hasMore: false, nextCursor: null };
+    }
+
+    // Get comments ordered by path
+    let commentsQuery = ctx.db
+      .query("comments")
+      .withIndex("by_post_and_path", (q) => q.eq("postId", args.postId));
+
+    let comments: Doc<"comments">[] = [];
+
+    if (args.cursor) {
+      // Get comments after the cursor path
+      comments = await commentsQuery
+        .filter((q) => q.gt(q.field("path"), args.cursor!))
+        .take(limit + 1);
+    } else {
+      comments = await commentsQuery.take(limit + 1);
+    }
+
+    // Apply maxDepth filter if specified
+    if (args.maxDepth !== undefined) {
+      comments = comments.filter((c) => c.depth <= args.maxDepth!);
+    }
+
+    const hasMore = comments.length > limit;
+    const data = comments.slice(0, limit);
+
+    const formattedComments = await Promise.all(
+      data.map((comment) => formatComment(ctx, comment, currentProfile?._id))
+    );
+
+    return {
+      data: formattedComments,
+      hasMore,
+      nextCursor: hasMore && data.length > 0 ? data[data.length - 1].path : null,
+    };
+  },
+});
+
+/**
+ * Get replies to a specific comment
+ */
+export const getReplies = query({
+  args: {
+    parentId: v.id("comments"),
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.id("comments")),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 20;
+    const currentProfile = await getCurrentProfile(ctx);
+
+    const parent = await ctx.db.get(args.parentId);
+    if (!parent) {
+      return { data: [], hasMore: false, nextCursor: null };
+    }
+
+    let replies: Doc<"comments">[] = [];
+
+    if (args.cursor) {
+      const cursorComment = await ctx.db.get(args.cursor);
+      if (cursorComment) {
+        replies = await ctx.db
+          .query("comments")
+          .withIndex("by_parent", (q) => q.eq("parentId", args.parentId))
+          .filter((q) =>
+            q.gt(q.field("_creationTime"), cursorComment._creationTime)
+          )
+          .take(limit + 1);
+      }
+    } else {
+      replies = await ctx.db
+        .query("comments")
+        .withIndex("by_parent", (q) => q.eq("parentId", args.parentId))
+        .take(limit + 1);
+    }
+
+    const hasMore = replies.length > limit;
+    const data = replies.slice(0, limit);
+
+    const formattedReplies = await Promise.all(
+      data.map((comment) => formatComment(ctx, comment, currentProfile?._id))
+    );
+
+    return {
+      data: formattedReplies,
+      hasMore,
+      nextCursor: hasMore && data.length > 0 ? data[data.length - 1]._id : null,
+    };
+  },
+});
+
+/**
+ * Get a single comment by ID
+ */
+export const getById = query({
+  args: {
+    commentId: v.id("comments"),
+  },
+  handler: async (ctx, args) => {
+    const comment = await ctx.db.get(args.commentId);
+    if (!comment) {
+      return null;
+    }
+
+    const currentProfile = await getCurrentProfile(ctx);
+    return await formatComment(ctx, comment, currentProfile?._id);
+  },
+});
+
+/**
+ * Toggle like on a comment
+ */
+export const toggleLike = mutation({
+  args: {
+    commentId: v.id("comments"),
+  },
+  handler: async (ctx, args) => {
+    const profile = await requireAuth(ctx);
+    
+    // Rate limit: 30 likes per minute
+    await checkRateLimit(ctx, "toggleLike", profile._id);
+
+    const comment = await ctx.db.get(args.commentId);
+    if (!comment) {
+      throw new Error("Comment not found");
+    }
+
+    // Check if already liked
+    const existingLike = await ctx.db
+      .query("comment_likes")
+      .withIndex("by_comment_and_user", (q) =>
+        q.eq("commentId", args.commentId).eq("userId", profile._id)
+      )
+      .first();
+
+    if (existingLike) {
+      // Unlike
+      await ctx.db.delete(existingLike._id);
+    } else {
+      // Like
+      await ctx.db.insert("comment_likes", {
+        commentId: args.commentId,
+        userId: profile._id,
+      });
+    }
+
+    return await formatComment(ctx, comment, profile._id);
+  },
+});
+
+/**
+ * Delete a comment (only owner can delete)
+ * Optionally deletes all replies (cascade)
+ */
+export const remove = mutation({
+  args: {
+    commentId: v.id("comments"),
+    cascade: v.optional(v.boolean()), // If true, delete all replies too
+  },
+  handler: async (ctx, args) => {
+    const profile = await requireAuth(ctx);
+    
+    // Rate limit: 10 deletes per minute
+    await checkRateLimit(ctx, "deleteAction", profile._id);
+
+    const comment = await ctx.db.get(args.commentId);
+    if (!comment) {
+      throw new Error("Comment not found");
+    }
+
+    if (comment.authorId !== profile._id) {
+      throw new Error("You can only delete your own comments");
+    }
+
+    // Delete likes on this comment
+    const likes = await ctx.db
+      .query("comment_likes")
+      .withIndex("by_comment", (q) => q.eq("commentId", args.commentId))
+      .collect();
+    for (const like of likes) {
+      await ctx.db.delete(like._id);
+    }
+
+    if (args.cascade) {
+      // Get all comments and filter by path prefix to find descendants
+      const allComments = await ctx.db
+        .query("comments")
+        .withIndex("by_post", (q) => q.eq("postId", comment.postId))
+        .collect();
+
+      const descendants = allComments.filter(
+        (c) => c.path.startsWith(comment.path + ".") && c._id !== comment._id
+      );
+
+      for (const descendant of descendants) {
+        // Delete likes on descendant
+        const descendantLikes = await ctx.db
+          .query("comment_likes")
+          .withIndex("by_comment", (q) => q.eq("commentId", descendant._id))
+          .collect();
+        for (const like of descendantLikes) {
+          await ctx.db.delete(like._id);
+        }
+        await ctx.db.delete(descendant._id);
+      }
+    }
+
+    // Delete the comment itself
+    await ctx.db.delete(args.commentId);
+
+    return { message: "Comment deleted successfully" };
+  },
+});
+
+/**
+ * Get comment count for a post (for display in post cards)
+ */
+export const getCountByPost = query({
+  args: {
+    postId: v.id("posts"),
+  },
+  handler: async (ctx, args) => {
+    const comments = await ctx.db
+      .query("comments")
+      .withIndex("by_post", (q) => q.eq("postId", args.postId))
+      .collect();
+
+    return comments.length;
+  },
+});
+

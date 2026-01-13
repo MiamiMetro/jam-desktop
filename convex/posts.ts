@@ -9,6 +9,7 @@ import {
   sanitizeText,
   MAX_LENGTHS,
 } from "./helpers";
+import { checkRateLimit } from "./rateLimiter";
 
 // Helper to format a post for API response
 async function formatPost(
@@ -25,10 +26,10 @@ async function formatPost(
     .collect();
   const likesCount = likes.length;
 
-  // Get comments count (posts with this post as parent)
+  // Get comments count from the new comments table
   const comments = await ctx.db
-    .query("posts")
-    .withIndex("by_parent", (q: any) => q.eq("parentId", post._id))
+    .query("comments")
+    .withIndex("by_post", (q: any) => q.eq("postId", post._id))
     .collect();
   const commentsCount = comments.length;
 
@@ -75,6 +76,9 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
+    
+    // Rate limit: 5 posts per minute
+    await checkRateLimit(ctx, "createPost", profile._id);
 
     // Sanitize and validate inputs
     const text = sanitizeText(args.text);
@@ -252,6 +256,9 @@ export const remove = mutation({
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
+    
+    // Rate limit: 10 deletes per minute
+    await checkRateLimit(ctx, "deleteAction", profile._id);
 
     const post = await ctx.db.get(args.postId);
     if (!post) {
@@ -271,18 +278,34 @@ export const remove = mutation({
       await ctx.db.delete(like._id);
     }
 
-    // Delete all comments (child posts)
+    // Delete all comments from the new comments table
     const comments = await ctx.db
+      .query("comments")
+      .withIndex("by_post", (q) => q.eq("postId", args.postId))
+      .collect();
+    for (const comment of comments) {
+      // Delete likes on comments
+      const commentLikes = await ctx.db
+        .query("comment_likes")
+        .withIndex("by_comment", (q) => q.eq("commentId", comment._id))
+        .collect();
+      for (const like of commentLikes) {
+        await ctx.db.delete(like._id);
+      }
+      await ctx.db.delete(comment._id);
+    }
+
+    // Also delete legacy comments (posts with parentId) for migration period
+    const legacyComments = await ctx.db
       .query("posts")
       .withIndex("by_parent", (q) => q.eq("parentId", args.postId))
       .collect();
-    for (const comment of comments) {
-      // Delete likes on comments too
-      const commentLikes = await ctx.db
+    for (const comment of legacyComments) {
+      const legacyCommentLikes = await ctx.db
         .query("likes")
         .withIndex("by_post", (q) => q.eq("postId", comment._id))
         .collect();
-      for (const like of commentLikes) {
+      for (const like of legacyCommentLikes) {
         await ctx.db.delete(like._id);
       }
       await ctx.db.delete(comment._id);
@@ -305,6 +328,9 @@ export const toggleLike = mutation({
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
+    
+    // Rate limit: 30 likes per minute
+    await checkRateLimit(ctx, "toggleLike", profile._id);
 
     const post = await ctx.db.get(args.postId);
     if (!post) {
@@ -369,19 +395,18 @@ export const getLikes = query({
 
 /**
  * Get comments for a post
- * Equivalent to GET /posts/:postId/comments
- * Supports cursor-based pagination
+ * DEPRECATED: Use comments.getByPost instead for threaded comments
+ * This is kept for backward compatibility during migration
  */
 export const getComments = query({
   args: {
     postId: v.id("posts"),
     limit: v.optional(v.number()),
-    cursor: v.optional(v.id("posts")),
+    cursor: v.optional(v.string()), // Changed to string to support path-based cursors
     order: v.optional(v.union(v.literal("asc"), v.literal("desc"))),
   },
   handler: async (ctx, args) => {
     const limit = args.limit ?? 20;
-    const order = args.order ?? "asc";
     const currentProfile = await getCurrentProfile(ctx);
 
     const post = await ctx.db.get(args.postId);
@@ -389,27 +414,19 @@ export const getComments = query({
       return { data: [], hasMore: false, nextCursor: null };
     }
 
-    let comments: Doc<"posts">[] = [];
-    
+    // Use new comments table with path-based ordering
+    let comments: Doc<"comments">[] = [];
+
     if (args.cursor) {
-      const cursorComment = await ctx.db.get(args.cursor);
-      if (cursorComment) {
-        comments = await ctx.db
-          .query("posts")
-          .withIndex("by_parent", (q) => q.eq("parentId", args.postId))
-          .order(order)
-          .filter((q) => 
-            order === "asc" 
-              ? q.gt(q.field("_creationTime"), cursorComment._creationTime)
-              : q.lt(q.field("_creationTime"), cursorComment._creationTime)
-          )
-          .take(limit + 1);
-      }
+      comments = await ctx.db
+        .query("comments")
+        .withIndex("by_post_and_path", (q) => q.eq("postId", args.postId))
+        .filter((q) => q.gt(q.field("path"), args.cursor!))
+        .take(limit + 1);
     } else {
       comments = await ctx.db
-        .query("posts")
-        .withIndex("by_parent", (q) => q.eq("parentId", args.postId))
-        .order(order)
+        .query("comments")
+        .withIndex("by_post_and_path", (q) => q.eq("postId", args.postId))
         .take(limit + 1);
     }
 
@@ -418,21 +435,21 @@ export const getComments = query({
 
     const formattedComments = await Promise.all(
       data.map(async (comment) => {
-        const author = await ctx.db.get(comment.authorId) as Doc<"profiles"> | null;
+        const author = (await ctx.db.get(comment.authorId)) as Doc<"profiles"> | null;
 
-        // Get likes count for this comment
+        // Get likes count from new comment_likes table
         const likes = await ctx.db
-          .query("likes")
-          .withIndex("by_post", (q) => q.eq("postId", comment._id))
+          .query("comment_likes")
+          .withIndex("by_comment", (q) => q.eq("commentId", comment._id))
           .collect();
 
         // Check if current user liked this comment
         let isLiked = false;
         if (currentProfile) {
           const like = await ctx.db
-            .query("likes")
-            .withIndex("by_post_and_user", (q) =>
-              q.eq("postId", comment._id).eq("userId", currentProfile._id)
+            .query("comment_likes")
+            .withIndex("by_comment_and_user", (q) =>
+              q.eq("commentId", comment._id).eq("userId", currentProfile._id)
             )
             .first();
           isLiked = !!like;
@@ -441,6 +458,9 @@ export const getComments = query({
         return {
           id: comment._id,
           author_id: comment.authorId,
+          parent_id: comment.parentId ?? null,
+          path: comment.path,
+          depth: comment.depth,
           author: author
             ? {
                 id: author._id,
@@ -461,14 +481,15 @@ export const getComments = query({
     return {
       data: formattedComments,
       hasMore,
-      nextCursor: hasMore ? data[data.length - 1]._id : null,
+      nextCursor: hasMore && data.length > 0 ? data[data.length - 1].path : null,
     };
   },
 });
 
 /**
  * Create a comment on a post
- * Equivalent to POST /posts/:postId/comments
+ * DEPRECATED: Use comments.create instead for threaded comments
+ * This is kept for backward compatibility during migration
  */
 export const createComment = mutation({
   args: {
@@ -478,6 +499,9 @@ export const createComment = mutation({
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
+    
+    // Rate limit: 10 comments per minute
+    await checkRateLimit(ctx, "createComment", profile._id);
 
     const post = await ctx.db.get(args.postId);
     if (!post) {
@@ -487,7 +511,7 @@ export const createComment = mutation({
     // Sanitize and validate inputs
     const content = sanitizeText(args.content);
     const audioUrl = args.audio_url;
-    
+
     validateTextLength(content, MAX_LENGTHS.COMMENT_TEXT, "Comment text");
     validateUrl(audioUrl);
 
@@ -496,10 +520,22 @@ export const createComment = mutation({
       throw new Error("Comment must have either content or audio_url");
     }
 
-    // Create comment as a post with parentId
-    const commentId = await ctx.db.insert("posts", {
+    // Count existing top-level comments to generate path
+    const existingTopLevel = await ctx.db
+      .query("comments")
+      .withIndex("by_post", (q) => q.eq("postId", args.postId))
+      .filter((q) => q.eq(q.field("depth"), 0))
+      .collect();
+
+    const path = String(existingTopLevel.length + 1).padStart(4, "0");
+
+    // Create comment in the new comments table
+    const commentId = await ctx.db.insert("comments", {
+      postId: args.postId,
       authorId: profile._id,
-      parentId: args.postId,
+      parentId: undefined,
+      path,
+      depth: 0,
       text: content,
       audioUrl: audioUrl,
     });
@@ -512,6 +548,9 @@ export const createComment = mutation({
     return {
       id: comment._id,
       author_id: comment.authorId,
+      parent_id: null,
+      path: comment.path,
+      depth: 0,
       author: {
         id: profile._id,
         username: profile.username,
