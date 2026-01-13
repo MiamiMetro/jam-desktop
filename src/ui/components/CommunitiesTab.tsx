@@ -83,18 +83,16 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
     navigate(`/post/${postId}`);
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleJoin = (targetCommunityId: string) => {
+  const handleJoin = (_targetCommunityId: string) => {
     if (isGuest) {
       onGuestAction?.();
       return;
     }
-    // TODO: Implement join functionality with targetCommunityId
+    // TODO: Implement join functionality with _targetCommunityId
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleCreatePost = (content: string, audioFile: File | null) => {
-    // TODO: Implement actual post creation with API using content and audioFile
+  const handleCreatePost = (_content: string, _audioFile: File | null) => {
+    // TODO: Implement actual post creation with API using _content and _audioFile
   };
 
   const handleLikePost = async (postId: string) => {

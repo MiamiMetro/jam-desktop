@@ -1,5 +1,4 @@
 import { useCallback, useRef } from "react";
-import { RateLimiter } from "@tanstack/react-pacer";
 
 /**
  * Rate limiting configurations for different action types
@@ -21,9 +20,15 @@ const RATE_LIMITS = {
 
 type RateLimitType = keyof typeof RATE_LIMITS;
 
+interface RateLimitState {
+  timestamps: number[];
+  limit: number;
+  window: number;
+}
+
 /**
  * Hook to create a rate-limited version of any async function
- * Uses TanStack Pacer's RateLimiter for client-side protection
+ * Simple client-side rate limiting using sliding window
  */
 export function useRateLimitedMutation<TArgs extends unknown[], TResult>(
   mutationFn: (...args: TArgs) => Promise<TResult>,
@@ -31,30 +36,53 @@ export function useRateLimitedMutation<TArgs extends unknown[], TResult>(
 ) {
   const config = RATE_LIMITS[type];
   
-  const rateLimiterRef = useRef(
-    new RateLimiter<TArgs, TResult>(
-      async (...args: TArgs) => mutationFn(...args),
-      {
-        limit: config.limit,
-        window: config.window,
-        onReject: () => {
-          throw new Error(`Rate limit exceeded. Please wait before trying again.`);
-        },
-      }
-    )
-  );
+  const stateRef = useRef<RateLimitState>({
+    timestamps: [],
+    limit: config.limit,
+    window: config.window,
+  });
+
+  const cleanOldTimestamps = useCallback(() => {
+    const now = Date.now();
+    const { window } = stateRef.current;
+    stateRef.current.timestamps = stateRef.current.timestamps.filter(
+      (ts) => now - ts < window
+    );
+  }, []);
 
   const execute = useCallback(
     async (...args: TArgs): Promise<TResult> => {
-      return rateLimiterRef.current.maybeExecute(...args) as Promise<TResult>;
+      cleanOldTimestamps();
+      
+      const { timestamps, limit } = stateRef.current;
+      
+      if (timestamps.length >= limit) {
+        throw new Error(`Rate limit exceeded. Please wait before trying again.`);
+      }
+      
+      stateRef.current.timestamps.push(Date.now());
+      return mutationFn(...args);
     },
-    []
+    [mutationFn, cleanOldTimestamps]
   );
+
+  const getRemainingInWindow = useCallback(() => {
+    cleanOldTimestamps();
+    return stateRef.current.limit - stateRef.current.timestamps.length;
+  }, [cleanOldTimestamps]);
+
+  const getMsUntilNextWindow = useCallback(() => {
+    cleanOldTimestamps();
+    const { timestamps, window } = stateRef.current;
+    if (timestamps.length === 0) return 0;
+    const oldestTimestamp = Math.min(...timestamps);
+    return Math.max(0, window - (Date.now() - oldestTimestamp));
+  }, [cleanOldTimestamps]);
 
   return {
     execute,
-    getRemainingInWindow: () => rateLimiterRef.current.getRemainingInWindow(),
-    getMsUntilNextWindow: () => rateLimiterRef.current.getMsUntilNextWindow(),
+    getRemainingInWindow,
+    getMsUntilNextWindow,
   };
 }
 
