@@ -368,6 +368,42 @@ export const useToggleLike = () => {
 };
 
 /**
+ * Hook to toggle like on a comment
+ * Uses the comments.toggleLike mutation (separate from post likes)
+ */
+export const useToggleCommentLike = () => {
+  const toggleLike = useMutation(api.comments.toggleLike);
+  
+  return {
+    mutate: (commentId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
+      toggleLike({ commentId: commentId as Id<"comments"> })
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error));
+    },
+    mutateAsync: async (commentId: string) => {
+      const result = await toggleLike({ commentId: commentId as Id<"comments"> });
+      // Convert the comment result to FrontendComment format
+      return convertComment({
+        id: result.id,
+        post_id: result.post_id,
+        author_id: result.author_id,
+        parent_id: result.parent_id,
+        path: result.path,
+        depth: result.depth,
+        text: result.text,
+        audio_url: result.audio_url,
+        created_at: result.created_at,
+        author: result.author,
+        likes_count: result.likes_count,
+        replies_count: result.replies_count,
+        is_liked: result.is_liked,
+      });
+    },
+    isPending: false,
+  };
+};
+
+/**
  * Get posts by username with cursor-based pagination
  * Supports infinite scroll
  */

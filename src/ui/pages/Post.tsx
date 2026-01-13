@@ -14,7 +14,7 @@ import {
   Hash as HashIcon,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
-import { usePost, useComments, useCreateComment, useToggleLike, type FrontendComment } from "@/hooks/usePosts";
+import { usePost, useComments, useCreateComment, useToggleLike, useToggleCommentLike, type FrontendComment } from "@/hooks/usePosts";
 import { useCommunities } from "@/hooks/useCommunities";
 import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
 import { EmptyState } from "@/components/EmptyState";
@@ -46,6 +46,7 @@ function Post() {
   }, [inView, hasNextPage, isFetchingNextPage, commentsLoading, fetchNextPage]);
   const createCommentMutation = useCreateComment();
   const toggleLikeMutation = useToggleLike();
+  const toggleCommentLikeMutation = useToggleCommentLike();
   const { data: communities = [] } = useCommunities();
   
   // Audio player for post audio
@@ -75,7 +76,7 @@ function Post() {
   const handleLikeComment = async (commentId: string) => {
     if (isGuest) return;
     try {
-      await toggleLikeMutation.mutateAsync(commentId);
+      await toggleCommentLikeMutation.mutateAsync(commentId);
     } catch (error) {
       console.error('Error toggling comment like:', error);
     }
