@@ -1,5 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useInView } from "react-intersection-observer";
+import { useDebouncedValue } from "@tanstack/react-pacer";
 import { Avatar, AvatarFallback, AvatarImage, AvatarBadge } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,26 +43,153 @@ function Sidebar() {
   const [showFriendsSearch, setShowFriendsSearch] = useState(false);
   const [showFriendRequests, setShowFriendRequests] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState("");
+  // Debounce search query to avoid excessive API calls (wait 300ms after user stops typing)
+  const [debouncedSearchQuery] = useDebouncedValue(userSearchQuery, {
+    wait: 300,
+  });
   const [selectedChatPartner, setSelectedChatPartner] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const MAX_MESSAGE_LENGTH = 1000;
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const { isGuest, user } = useAuthStore();
+  
+  // Reverse infinite scroll: detect when user scrolls near top (load older messages)
+  const { ref: loadOlderMessagesRef, inView: topInView } = useInView({
+    threshold: 0,
+    rootMargin: '200px',
+  });
+  
+  // Infinite scroll for friends list: detect when user scrolls near bottom
+  const { ref: loadMoreFriendsRef, inView: friendsInView } = useInView({
+    threshold: 0,
+    rootMargin: '200px',
+  });
+  
+  // Track if we should auto-scroll to bottom (when new messages arrive)
+  const shouldAutoScrollRef = useRef(true);
   // Only fetch all users when searching globally or when we need to find a chat partner
   const shouldFetchAllUsers = showSearchUsers || !!selectedChatPartner;
-  const { data: allUsers = [] } = useAllUsers(userSearchQuery || undefined, shouldFetchAllUsers);
-  const { data: conversations = [] } = useConversations(user?.id || "");
-  const { data: messages = [] } = useMessages(user?.id || "", selectedChatPartner || "");
+  // Use debounced query for API calls to reduce requests
+  const { 
+    data: allUsers = [], 
+    fetchNextPage: fetchMoreUsers, 
+    hasNextPage: hasMoreUsers, 
+    isFetchingNextPage: isLoadingMoreUsers 
+  } = useAllUsers(debouncedSearchQuery || undefined, shouldFetchAllUsers);
+  const { 
+    data: conversations = [], 
+    fetchNextPage: _fetchMoreConversations, 
+    hasNextPage: _hasMoreConversations, 
+    isFetchingNextPage: _isLoadingMoreConversations 
+  } = useConversations(user?.id || "");
+  const { 
+    data: messages = [], 
+    fetchNextPage: loadOlderMessages, 
+    hasNextPage: hasOlderMessages, 
+    isFetchingNextPage: isLoadingOlderMessages 
+  } = useMessages(user?.id || "", selectedChatPartner || "");
   const sendMessageMutation = useSendMessage();
-  const { data: friends = [] } = useFriends();
-  const { data: friendRequests = [] } = useFriendRequests();
+  const { 
+    data: friends = [], 
+    fetchNextPage: fetchMoreFriends, 
+    hasNextPage: hasMoreFriends, 
+    isFetchingNextPage: isLoadingMoreFriends 
+  } = useFriends(showFriendsSearch ? debouncedSearchQuery : undefined);
+  const { 
+    data: friendRequests = [], 
+    fetchNextPage: fetchMoreFriendRequests, 
+    hasNextPage: hasMoreFriendRequests, 
+    isFetchingNextPage: isLoadingMoreFriendRequests 
+  } = useFriendRequests();
   const acceptFriendMutation = useAcceptFriend();
   const declineFriendMutation = useDeclineFriend();
   
-  // Scroll to bottom when messages change
+  // Store scroll state when loading older messages
+  const scrollStateRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
+  const prevMessagesLengthRef = useRef(messages.length);
+  
+  // Save scroll state before loading older messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (isLoadingOlderMessages) {
+      const container = messagesContainerRef.current;
+      if (container) {
+        scrollStateRef.current = {
+          scrollHeight: container.scrollHeight,
+          scrollTop: container.scrollTop,
+        };
+      }
+    }
+  }, [isLoadingOlderMessages]);
+  
+  // Restore scroll position after older messages are loaded (prepended)
+  useLayoutEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container || !selectedChatPartner || !scrollStateRef.current) return;
+    
+    // Check if messages were prepended (older messages loaded)
+    const messagesIncreased = messages.length > prevMessagesLengthRef.current;
+    
+    if (messagesIncreased && scrollStateRef.current && !shouldAutoScrollRef.current) {
+      const { scrollHeight: oldScrollHeight, scrollTop: oldScrollTop } = scrollStateRef.current;
+      const newScrollHeight = container.scrollHeight;
+      const heightDifference = newScrollHeight - oldScrollHeight;
+      
+      // Adjust scroll position to maintain the same visual position
+      container.scrollTop = oldScrollTop + heightDifference;
+      
+      scrollStateRef.current = null;
+    }
+    
+    prevMessagesLengthRef.current = messages.length;
+  }, [messages.length, selectedChatPartner]);
+  
+  // Auto-load older messages when scrolling to top
+  useEffect(() => {
+    if (topInView && hasOlderMessages && !isLoadingOlderMessages && selectedChatPartner) {
+      loadOlderMessages();
+    }
+  }, [topInView, hasOlderMessages, isLoadingOlderMessages, selectedChatPartner, loadOlderMessages]);
+  
+  // Scroll to bottom when new messages arrive (but not when loading older messages)
+  useEffect(() => {
+    if (shouldAutoScrollRef.current && messagesEndRef.current && selectedChatPartner) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages.length, selectedChatPartner]);
+  
+  // Reset auto-scroll flag when chat partner changes
+  useEffect(() => {
+    shouldAutoScrollRef.current = true;
+    if (messagesEndRef.current && selectedChatPartner) {
+      // Scroll to bottom when opening a conversation
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      }, 100);
+    }
+  }, [selectedChatPartner]);
+  
+  // Track scroll position to determine if user scrolled up
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container || !selectedChatPartner) return;
+    
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+      shouldAutoScrollRef.current = isNearBottom;
+    };
+    
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [selectedChatPartner]);
+  
+  // Auto-load more friends when scrolling to bottom (in sidebar)
+  useEffect(() => {
+    if (friendsInView && hasMoreFriends && !isLoadingMoreFriends && !showFriendsSearch && !userSearchQuery.trim()) {
+      fetchMoreFriends();
+    }
+  }, [friendsInView, hasMoreFriends, isLoadingMoreFriends, showFriendsSearch, userSearchQuery, fetchMoreFriends]);
   
   // Filter users based on search mode
   const getSearchUsers = () => {
@@ -70,15 +199,13 @@ function Sidebar() {
     }
     
     if (showSearchUsers) {
-      // Global search - all users
+      // Global search - all users (already filtered by backend)
       return allUsers.filter((user: User) => 
         user.username.toLowerCase().includes(userSearchQuery.toLowerCase())
       );
     } else if (showFriendsSearch) {
-      // Friends search - filter friends list
-      return friends.filter((user: User) => 
-        user.username.toLowerCase().includes(userSearchQuery.toLowerCase())
-      );
+      // Friends search - already filtered by backend via useFriends hook
+      return friends;
     }
     return [];
   };
@@ -411,6 +538,18 @@ function Sidebar() {
                             No users found
                           </div>
                         )}
+                        {/* Load more button for user search results */}
+                        {showSearchUsers && hasMoreUsers && (
+                          <div className="pt-2 pb-2 border-t border-sidebar-border">
+                            <button
+                              onClick={() => fetchMoreUsers()}
+                              disabled={isLoadingMoreUsers}
+                              className="w-full py-2 text-xs text-muted-foreground hover:text-foreground transition-colors text-center disabled:opacity-50"
+                            >
+                              {isLoadingMoreUsers ? 'Loading more...' : 'Load more users'}
+                            </button>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -492,13 +631,27 @@ function Sidebar() {
                       </div>
                       
                       {/* Messages */}
-                      <div className="flex-1 overflow-y-auto">
+                      <div 
+                        ref={messagesContainerRef}
+                        className="flex-1 overflow-y-auto"
+                      >
                         <div className="px-3 py-2 space-y-2">
+                          {/* Infinite scroll trigger at top (load older messages) */}
+                          {hasOlderMessages && (
+                            <div ref={loadOlderMessagesRef} className="py-2 text-center">
+                              {isLoadingOlderMessages && (
+                                <div className="text-xs text-muted-foreground">
+                                  Loading older messages...
+                                </div>
+                              )}
+                            </div>
+                          )}
                           {messages.map((message: Message) => {
                             const isOwn = message.senderId === user?.id;
                             return (
                               <div
                                 key={message.id}
+                                data-message-id={message.id}
                                 className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
                               >
                                 <div
@@ -533,12 +686,19 @@ function Sidebar() {
                             onKeyDown={(e) => {
                               if (e.key === "Enter" && !e.shiftKey) {
                                 e.preventDefault();
-                                handleSendMessage();
-                              }
+                            handleSendMessage();
+                          }
                             }}
                             className="h-7 text-xs flex-1"
                             maxLength={MAX_MESSAGE_LENGTH}
                             autoFocus
+                            onFocus={() => {
+                              // Auto-scroll to bottom when input is focused
+                              shouldAutoScrollRef.current = true;
+                              setTimeout(() => {
+                                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                              }, 100);
+                            }}
                           />
                           <Button
                             variant="default"
@@ -623,6 +783,18 @@ function Sidebar() {
                         ))}
                       </div>
                     )}
+                    {/* Load more button for friend requests */}
+                    {hasMoreFriendRequests && (
+                      <div className="pt-2 pb-2 border-t border-sidebar-border mt-2">
+                        <button
+                          onClick={() => fetchMoreFriendRequests()}
+                          disabled={isLoadingMoreFriendRequests}
+                          className="w-full py-2 text-xs text-muted-foreground hover:text-foreground transition-colors text-center disabled:opacity-50"
+                        >
+                          {isLoadingMoreFriendRequests ? 'Loading more...' : 'Load more requests'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </>
@@ -671,7 +843,7 @@ function Sidebar() {
                       FRIENDS ({showFriendsSearch && userSearchQuery.trim() ? getSearchUsers().length : friends.length})
                     </div>
                     <div className="space-y-1">
-                      {(showFriendsSearch && userSearchQuery.trim() ? getSearchUsers().slice(0, 50) : friends.slice(0, 100)).map((friend: User) => {
+                      {(showFriendsSearch && userSearchQuery.trim() ? getSearchUsers() : friends).map((friend: User) => {
                         const conversation = conversations.find((c: { userId: string }) => c.userId === friend.id);
                         return (
                           <div
@@ -717,6 +889,16 @@ function Sidebar() {
                       {!showFriendsSearch && !userSearchQuery.trim() && friends.length === 0 && (
                         <div className="text-center py-4 text-xs text-muted-foreground">
                           No friends yet
+                        </div>
+                      )}
+                      {/* Infinite scroll trigger for friends list (when not searching) */}
+                      {!showFriendsSearch && !userSearchQuery.trim() && hasMoreFriends && (
+                        <div ref={loadMoreFriendsRef} className="py-2 text-center">
+                          {isLoadingMoreFriends && (
+                            <div className="text-xs text-muted-foreground">
+                              Loading more friends...
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

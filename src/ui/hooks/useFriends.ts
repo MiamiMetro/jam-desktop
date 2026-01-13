@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "convex/react";
+import { useState, useEffect } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { useAuthStore } from '@/stores/authStore';
@@ -20,9 +21,9 @@ function convertUser(profile: any): User {
 }
 
 /**
- * Get friends list
+ * Get friends list with cursor-based pagination and server-side search
  */
-export const useFriends = () => {
+export const useFriends = (searchQuery?: string) => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
   const { isAuthSet } = useConvexAuthStore();
@@ -30,27 +31,79 @@ export const useFriends = () => {
   // Only query when fully authenticated AND profile is ready
   const canQuery = !isGuest && isAuthSet && isProfileReady;
   
+  const [cursor, setCursor] = useState<Id<"friends"> | null | undefined>(null);
+  const [allFriends, setAllFriends] = useState<User[]>([]);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [currentSearch, setCurrentSearch] = useState<string | undefined>(searchQuery);
+  
+  // Reset when search query changes
+  useEffect(() => {
+    if (currentSearch !== searchQuery) {
+      setCurrentSearch(searchQuery);
+      setCursor(null);
+      setAllFriends([]);
+      setIsInitialLoad(true);
+    }
+  }, [searchQuery, currentSearch]);
+  
+  // Query with current cursor and search
   const result = useQuery(
     api.friends.list,
-    canQuery ? { limit: 50 } : "skip"
+    canQuery && cursor === null
+      ? { limit: 50, search: currentSearch }
+      : canQuery && cursor
+        ? { limit: 50, cursor, search: currentSearch }
+        : "skip"
   );
   
-  const friends = result?.data?.map(convertUser) || [];
-  const isLoading = result === undefined && canQuery;
+  // Reset friends when cursor is null (first page)
+  useEffect(() => {
+    if (cursor === null && result?.data && canQuery) {
+      setAllFriends(result.data.map(convertUser));
+      setIsInitialLoad(false);
+    }
+  }, [cursor, result?.data, canQuery]);
+  
+  // Append new friends when cursor changes (loading next page)
+  useEffect(() => {
+    if (cursor !== null && cursor !== undefined && result?.data && canQuery) {
+      setAllFriends(prev => {
+        // Avoid duplicates by checking if friend ID already exists
+        const existingIds = new Set(prev.map(f => f.id));
+        const newFriends = result.data
+          .map(convertUser)
+          .filter(friend => !existingIds.has(friend.id));
+        return [...prev, ...newFriends];
+      });
+    }
+  }, [cursor, result?.data, canQuery]);
+  
+  const fetchNextPage = () => {
+    if (result?.hasMore && result?.nextCursor) {
+      setCursor(result.nextCursor);
+    }
+  };
+  
+  const reset = () => {
+    setCursor(null);
+    setAllFriends([]);
+    setIsInitialLoad(true);
+  };
   
   return {
-    data: friends,
-    isLoading,
+    data: allFriends,
+    isLoading: isInitialLoad && result === undefined && canQuery,
     hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: false,
-    fetchNextPage: () => {},
-    refetch: () => {},
+    isFetchingNextPage: cursor !== null && cursor !== undefined && result === undefined,
+    fetchNextPage,
+    refetch: reset,
     error: null,
   };
 };
 
 /**
- * Get friend requests - realtime subscription for immediate notification
+ * Get friend requests with cursor-based pagination
+ * Realtime subscription for immediate notification
  */
 export const useFriendRequests = () => {
   const { isGuest } = useAuthStore();
@@ -60,20 +113,61 @@ export const useFriendRequests = () => {
   // Only query when fully authenticated AND profile is ready
   const canQuery = !isGuest && isAuthSet && isProfileReady;
   
+  const [cursor, setCursor] = useState<Id<"friends"> | null | undefined>(null);
+  const [allRequests, setAllRequests] = useState<User[]>([]);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  
+  // Query with current cursor
   const result = useQuery(
     api.friends.getRequests,
-    canQuery ? { limit: 20 } : "skip"
+    canQuery && cursor === null
+      ? { limit: 20 }
+      : canQuery && cursor
+        ? { limit: 20, cursor }
+        : "skip"
   );
   
-  const requests = result?.data?.map(convertUser) || [];
-  const isLoading = result === undefined && canQuery;
+  // Reset requests when cursor is null (first page)
+  useEffect(() => {
+    if (cursor === null && result?.data && canQuery) {
+      setAllRequests(result.data.map(convertUser));
+      setIsInitialLoad(false);
+    }
+  }, [cursor, result?.data, canQuery]);
+  
+  // Append new requests when cursor changes (loading next page)
+  useEffect(() => {
+    if (cursor !== null && cursor !== undefined && result?.data && canQuery) {
+      setAllRequests(prev => {
+        // Avoid duplicates by checking if request ID already exists
+        const existingIds = new Set(prev.map(r => r.id));
+        const newRequests = result.data
+          .map(convertUser)
+          .filter(request => !existingIds.has(request.id));
+        return [...prev, ...newRequests];
+      });
+    }
+  }, [cursor, result?.data, canQuery]);
+  
+  const fetchNextPage = () => {
+    if (result?.hasMore && result?.nextCursor) {
+      setCursor(result.nextCursor);
+    }
+  };
+  
+  const reset = () => {
+    setCursor(null);
+    setAllRequests([]);
+    setIsInitialLoad(true);
+  };
   
   return {
-    data: requests,
-    isLoading,
+    data: allRequests,
+    isLoading: isInitialLoad && result === undefined && canQuery,
     hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: false,
-    fetchNextPage: () => {},
+    isFetchingNextPage: cursor !== null && cursor !== undefined && result === undefined,
+    fetchNextPage,
+    refetch: reset,
     error: null,
   };
 };

@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "convex/react";
+import { useState, useEffect } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { User, Message, Conversation } from '@/lib/api/types';
@@ -71,25 +72,85 @@ export const useUser = (username: string) => {
   };
 };
 
+/**
+ * Get all users with search and cursor-based pagination
+ * Supports load more button for search results
+ */
 export const useAllUsers = (search?: string, enabled: boolean = true) => {
+  const [cursor, setCursor] = useState<Id<"profiles"> | null | undefined>(null);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [currentSearch, setCurrentSearch] = useState<string | undefined>(search);
+  
+  // Reset when search query changes
+  useEffect(() => {
+    if (currentSearch !== search) {
+      setCurrentSearch(search);
+      setCursor(null);
+      setAllUsers([]);
+      setIsInitialLoad(true);
+    }
+  }, [search, currentSearch]);
+  
+  // Query with current cursor and search
   const result = useQuery(
     api.users.search,
-    enabled ? { search: search || undefined, limit: 20 } : "skip"
+    enabled && cursor === null
+      ? { search: currentSearch || undefined, limit: 20 }
+      : enabled && cursor
+        ? { search: currentSearch || undefined, limit: 20, cursor }
+        : "skip"
   );
   
-  const users = result?.data?.map(convertUser) || [];
-  const isLoading = result === undefined && enabled;
+  // Reset users when cursor is null (first page)
+  useEffect(() => {
+    if (cursor === null && result?.data && enabled) {
+      setAllUsers(result.data.map(convertUser));
+      setIsInitialLoad(false);
+    }
+  }, [cursor, result?.data, enabled]);
+  
+  // Append new users when cursor changes (loading next page)
+  useEffect(() => {
+    if (cursor !== null && cursor !== undefined && result?.data && enabled) {
+      setAllUsers(prev => {
+        // Avoid duplicates by checking if user ID already exists
+        const existingIds = new Set(prev.map(u => u.id));
+        const newUsers = result.data
+          .map(convertUser)
+          .filter(user => !existingIds.has(user.id));
+        return [...prev, ...newUsers];
+      });
+    }
+  }, [cursor, result?.data, enabled]);
+  
+  const fetchNextPage = () => {
+    if (result?.hasMore && result?.nextCursor) {
+      setCursor(result.nextCursor);
+    }
+  };
+  
+  const reset = () => {
+    setCursor(null);
+    setAllUsers([]);
+    setIsInitialLoad(true);
+  };
   
   return {
-    data: users,
-    isLoading,
+    data: allUsers,
+    isLoading: isInitialLoad && result === undefined && enabled,
     hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: false,
-    fetchNextPage: () => {},
+    isFetchingNextPage: cursor !== null && cursor !== undefined && result === undefined,
+    fetchNextPage,
+    refetch: reset,
     error: null,
   };
 };
 
+/**
+ * Get conversations list with cursor-based pagination
+ * Supports load more button
+ */
 export const useConversations = (userId: string) => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
@@ -98,24 +159,78 @@ export const useConversations = (userId: string) => {
   // Only query when fully authenticated AND profile is ready
   const canQuery = !isGuest && isAuthSet && isProfileReady && userId;
   
+  const [cursor, setCursor] = useState<Id<"conversations"> | null | undefined>(null);
+  const [allConversations, setAllConversations] = useState<Conversation[]>([]);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  
+  // Reset when userId changes
+  useEffect(() => {
+    if (userId) {
+      setCursor(null);
+      setAllConversations([]);
+      setIsInitialLoad(true);
+    }
+  }, [userId]);
+  
+  // Query with current cursor
   const result = useQuery(
     api.messages.getConversations,
-    canQuery ? { limit: 50 } : "skip"
+    canQuery && cursor === null
+      ? { limit: 50 }
+      : canQuery && cursor
+        ? { limit: 50, cursor }
+        : "skip"
   );
   
-  const conversations = result?.data?.map(convertConversation) || [];
-  const isLoading = result === undefined && canQuery;
+  // Reset conversations when cursor is null (first page)
+  useEffect(() => {
+    if (cursor === null && result?.data && canQuery && userId) {
+      setAllConversations(result.data.map(convertConversation));
+      setIsInitialLoad(false);
+    }
+  }, [cursor, result?.data, canQuery, userId]);
+  
+  // Append new conversations when cursor changes (loading next page)
+  useEffect(() => {
+    if (cursor !== null && cursor !== undefined && result?.data && canQuery && userId) {
+      setAllConversations(prev => {
+        // Avoid duplicates by checking if conversation ID already exists
+        const existingIds = new Set(prev.map(c => c.id));
+        const newConversations = result.data
+          .map(convertConversation)
+          .filter(conv => !existingIds.has(conv.id));
+        return [...prev, ...newConversations];
+      });
+    }
+  }, [cursor, result?.data, canQuery, userId]);
+  
+  const fetchNextPage = () => {
+    if (result?.hasMore && result?.nextCursor) {
+      setCursor(result.nextCursor as Id<"conversations">);
+    }
+  };
+  
+  const reset = () => {
+    setCursor(null);
+    setAllConversations([]);
+    setIsInitialLoad(true);
+  };
   
   return {
-    data: conversations,
-    isLoading,
+    data: allConversations,
+    isLoading: isInitialLoad && result === undefined && canQuery,
     hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: false,
-    fetchNextPage: () => {},
+    isFetchingNextPage: cursor !== null && cursor !== undefined && result === undefined,
+    fetchNextPage,
+    refetch: reset,
     error: null,
   };
 };
 
+/**
+ * Get messages with a user (reverse infinite scroll for loading older messages)
+ * Supports cursor-based pagination - loads older messages at the top
+ */
 export const useMessages = (userId: string, partnerId: string) => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
@@ -124,21 +239,72 @@ export const useMessages = (userId: string, partnerId: string) => {
   // Only query when fully authenticated AND profile is ready
   const canQuery = !isGuest && isAuthSet && isProfileReady && userId && partnerId;
   
+  const [cursor, setCursor] = useState<Id<"messages"> | null | undefined>(null);
+  const [allMessages, setAllMessages] = useState<Message[]>([]);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  
+  // Reset when partner changes
+  useEffect(() => {
+    if (partnerId) {
+      setCursor(null);
+      setAllMessages([]);
+      setIsInitialLoad(true);
+    }
+  }, [partnerId]);
+  
+  // Query with current cursor
   const result = useQuery(
     api.messages.getWithUser,
-    canQuery ? { userId: partnerId as Id<"profiles">, limit: 50 } : "skip"
+    canQuery && cursor === null
+      ? { userId: partnerId as Id<"profiles">, limit: 50 }
+      : canQuery && cursor
+        ? { userId: partnerId as Id<"profiles">, limit: 50, cursor }
+        : "skip"
   );
   
-  // Messages are already returned oldest first from the backend
-  const messages = result?.data?.map(convertMessage) || [];
-  const isLoading = result === undefined && canQuery;
+  // Reset messages when cursor is null (first page or partner change)
+  useEffect(() => {
+    if (cursor === null && result?.data && canQuery && partnerId) {
+      // Messages are already returned oldest first from the backend
+      setAllMessages(result.data.map(convertMessage));
+      setIsInitialLoad(false);
+    }
+  }, [cursor, result?.data, canQuery, partnerId]);
+  
+  // Prepend older messages when cursor changes (loading previous page)
+  useEffect(() => {
+    if (cursor !== null && cursor !== undefined && result?.data && canQuery && partnerId) {
+      setAllMessages(prev => {
+        // Avoid duplicates by checking if message ID already exists
+        const existingIds = new Set(prev.map(m => m.id));
+        const olderMessages = result.data
+          .map(convertMessage)
+          .filter(msg => !existingIds.has(msg.id));
+        // Prepend older messages (they're oldest first from backend)
+        return [...olderMessages, ...prev];
+      });
+    }
+  }, [cursor, result?.data, canQuery, partnerId]);
+  
+  const fetchNextPage = () => {
+    if (result?.hasMore && result?.nextCursor) {
+      setCursor(result.nextCursor);
+    }
+  };
+  
+  const reset = () => {
+    setCursor(null);
+    setAllMessages([]);
+    setIsInitialLoad(true);
+  };
   
   return {
-    data: messages,
-    isLoading,
+    data: allMessages,
+    isLoading: isInitialLoad && result === undefined && canQuery,
     hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: false,
-    fetchNextPage: () => {},
+    isFetchingNextPage: cursor !== null && cursor !== undefined && result === undefined,
+    fetchNextPage,
+    refetch: reset,
     error: null,
   };
 };

@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useInView } from "react-intersection-observer";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { 
@@ -30,6 +31,19 @@ function Post() {
   const commentsQuery = useComments(id || "");
   const comments = (commentsQuery.data || []) as FrontendComment[];
   const { isLoading: commentsLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = commentsQuery;
+  
+  // Infinite scroll: detect when user scrolls near bottom of comments
+  const { ref: loadMoreCommentsRef, inView } = useInView({
+    threshold: 0,
+    rootMargin: '200px',
+  });
+  
+  // Auto-load next page when scroll reaches trigger point
+  useEffect(() => {
+    if (inView && hasNextPage && !isFetchingNextPage && !commentsLoading) {
+      fetchNextPage();
+    }
+  }, [inView, hasNextPage, isFetchingNextPage, commentsLoading, fetchNextPage]);
   const createCommentMutation = useCreateComment();
   const toggleLikeMutation = useToggleLike();
   const { data: communities = [] } = useCommunities();
@@ -332,15 +346,14 @@ function Post() {
                 );
                 })}
               </div>
+              {/* Infinite scroll trigger - invisible element at bottom */}
               {hasNextPage && (
-                <div className="mt-4 text-center">
-                  <button
-                    onClick={() => fetchNextPage()}
-                    disabled={isFetchingNextPage}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {isFetchingNextPage ? 'Loading more comments...' : 'Load more comments'}
-                  </button>
+                <div ref={loadMoreCommentsRef} className="mt-4 py-4 text-center">
+                  {isFetchingNextPage && (
+                    <div className="text-sm text-muted-foreground">
+                      Loading more comments...
+                    </div>
+                  )}
                 </div>
               )}
             </>

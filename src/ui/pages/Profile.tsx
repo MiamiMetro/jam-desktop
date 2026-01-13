@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useInView } from "react-intersection-observer";
 import { Avatar, AvatarImage, AvatarFallback, AvatarBadge } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { 
@@ -26,10 +27,42 @@ function Profile() {
   const navigate = useNavigate();
   const { user: currentUser, isGuest } = useAuthStore();
   const { data: profileUser, isLoading } = useUser(username || "");
-  const { data: userPosts = [] } = useUserPosts(profileUser?.username || "");
+  const { 
+    data: userPosts = [], 
+    fetchNextPage: fetchMorePosts, 
+    hasNextPage: hasMorePosts, 
+    isFetchingNextPage: isLoadingMorePosts 
+  } = useUserPosts(profileUser?.username || "");
   const { data: friends = [], fetchNextPage: fetchMoreFriends, hasNextPage: hasMoreFriends, isFetchingNextPage: isLoadingMoreFriends } = useFriends();
+  
+  // Infinite scroll: detect when user scrolls near bottom of posts
+  const { ref: loadMorePostsRef, inView } = useInView({
+    threshold: 0,
+    rootMargin: '200px',
+  });
+  
+  // Auto-load next page when scroll reaches trigger point
+  useEffect(() => {
+    if (inView && hasMorePosts && !isLoadingMorePosts && !isLoading) {
+      fetchMorePosts();
+    }
+  }, [inView, hasMorePosts, isLoadingMorePosts, isLoading, fetchMorePosts]);
+  
   const requestFriendMutation = useRequestFriend();
   const [showFriends, setShowFriends] = useState(false);
+  
+  // Infinite scroll for friends list: detect when user scrolls near bottom
+  const { ref: loadMoreFriendsRef, inView: friendsInView } = useInView({
+    threshold: 0,
+    rootMargin: '200px',
+  });
+  
+  // Auto-load more friends when scroll reaches trigger point
+  useEffect(() => {
+    if (friendsInView && hasMoreFriends && !isLoadingMoreFriends && showFriends) {
+      fetchMoreFriends();
+    }
+  }, [friendsInView, hasMoreFriends, isLoadingMoreFriends, showFriends, fetchMoreFriends]);
   
   const isOwnProfile = currentUser?.username === profileUser?.username;
   const isFriend = friends.some((friend: User) => friend.id === profileUser?.id);
@@ -192,15 +225,14 @@ function Profile() {
                   </div>
                 ))}
               </div>
+              {/* Infinite scroll trigger - invisible element at bottom */}
               {hasMoreFriends && (
-                <div className="mt-4 text-center">
-                  <button
-                    onClick={() => fetchMoreFriends()}
-                    disabled={isLoadingMoreFriends}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {isLoadingMoreFriends ? 'Loading more...' : 'Load more friends'}
-                  </button>
+                <div ref={loadMoreFriendsRef} className="mt-4 py-4 text-center">
+                  {isLoadingMoreFriends && (
+                    <div className="text-sm text-muted-foreground">
+                      Loading more friends...
+                    </div>
+                  )}
                 </div>
               )}
             </>
@@ -265,6 +297,16 @@ function Profile() {
                   </div>
                 </div>
               ))}
+              {/* Infinite scroll trigger - invisible element at bottom */}
+              {hasMorePosts && (
+                <div ref={loadMorePostsRef} className="py-4 text-center">
+                  {isLoadingMorePosts && (
+                    <div className="text-sm text-muted-foreground">
+                      Loading more posts...
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

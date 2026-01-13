@@ -155,12 +155,13 @@ export const remove = mutation({
 /**
  * Get list of all friends (accepted only)
  * Equivalent to GET /friends
- * Supports cursor-based pagination
+ * Supports cursor-based pagination and search
  */
 export const list = query({
   args: {
     limit: v.optional(v.number()),
     cursor: v.optional(v.id("friends")),
+    search: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
@@ -218,7 +219,17 @@ export const list = query({
       })
     );
 
-    const validFriends = friends.filter((f): f is NonNullable<typeof f> => f !== null);
+    let validFriends = friends.filter((f): f is NonNullable<typeof f> => f !== null);
+
+    // Apply search filter if provided
+    if (args.search) {
+      const searchLower = args.search.toLowerCase();
+      validFriends = validFriends.filter(
+        (f) =>
+          f.username.toLowerCase().includes(searchLower) ||
+          f.display_name.toLowerCase().includes(searchLower)
+      );
+    }
 
     return {
       data: validFriends.map(({ _friendshipId, ...rest }) => rest),

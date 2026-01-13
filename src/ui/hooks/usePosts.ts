@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "convex/react";
+import { useState, useEffect } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { useAuthStore } from '@/stores/authStore';
@@ -103,28 +104,62 @@ function convertComment(comment: any): FrontendComment {
 }
 
 /**
- * Get posts feed
- * Note: This uses useQuery (realtime) for now. Can be optimized later with
- * imperative fetch if performance becomes an issue.
+ * Get posts feed with cursor-based pagination
+ * Supports infinite scroll by accumulating posts across pages
  */
 export const usePosts = () => {
-  const result = useQuery(api.posts.getFeed, { limit: 20 });
+  const [cursor, setCursor] = useState<Id<"posts"> | null | undefined>(null);
+  const [allPosts, setAllPosts] = useState<FrontendPost[]>([]);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   
-  const posts = result?.data?.map(convertPost) || [];
-  const isLoading = result === undefined;
-  const hasMore = result?.hasMore || false;
+  // Query with current cursor
+  const result = useQuery(
+    api.posts.getFeed,
+    cursor === null ? { limit: 20 } : cursor ? { limit: 20, cursor } : "skip"
+  );
+  
+  // Reset posts when cursor is null (first page)
+  useEffect(() => {
+    if (cursor === null && result?.data) {
+      setAllPosts(result.data.map(convertPost));
+      setIsInitialLoad(false);
+    }
+  }, [cursor, result?.data]);
+  
+  // Append new posts when cursor changes (loading next page)
+  useEffect(() => {
+    if (cursor !== null && cursor !== undefined && result?.data) {
+      setAllPosts(prev => {
+        // Avoid duplicates by checking if post ID already exists
+        const existingIds = new Set(prev.map(p => p.id));
+        const newPosts = result.data
+          .map(convertPost)
+          .filter(post => !existingIds.has(post.id));
+        return [...prev, ...newPosts];
+      });
+    }
+  }, [cursor, result?.data]);
+  
+  const fetchNextPage = () => {
+    // Only fetch if there's more data and we have a cursor
+    if (result?.hasMore && result?.nextCursor) {
+      setCursor(result.nextCursor);
+    }
+  };
+  
+  const reset = () => {
+    setCursor(null);
+    setAllPosts([]);
+    setIsInitialLoad(true);
+  };
   
   return {
-    data: posts,
-    isLoading,
-    hasNextPage: hasMore,
-    isFetchingNextPage: false,
-    fetchNextPage: () => {
-      // TODO: Implement cursor-based pagination
-    },
-    refetch: () => {
-      // useQuery auto-updates, no manual refetch needed
-    },
+    data: allPosts,
+    isLoading: isInitialLoad && result === undefined,
+    hasNextPage: result?.hasMore || false,
+    isFetchingNextPage: cursor !== null && cursor !== undefined && result === undefined,
+    fetchNextPage,
+    refetch: reset,
   };
 };
 
@@ -175,24 +210,72 @@ export const usePost = (postId: string) => {
 };
 
 /**
- * Get comments for a post
+ * Get comments for a post with cursor-based pagination
+ * Supports infinite scroll
  */
 export const useComments = (postId: string) => {
+  const [cursor, setCursor] = useState<string | null | undefined>(null);
+  const [allComments, setAllComments] = useState<FrontendComment[]>([]);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  
+  // Query with current cursor
   const result = useQuery(
     api.posts.getComments,
-    postId ? { postId: postId as Id<"posts">, limit: 20 } : "skip"
+    postId && cursor === null 
+      ? { postId: postId as Id<"posts">, limit: 20 } 
+      : postId && cursor 
+        ? { postId: postId as Id<"posts">, limit: 20, cursor } 
+        : "skip"
   );
   
-  const comments = result?.data?.map(convertComment) || [];
-  const isLoading = result === undefined && !!postId;
+  // Reset comments when cursor is null (first page)
+  useEffect(() => {
+    if (cursor === null && result?.data && postId) {
+      setAllComments(result.data.map(convertComment));
+      setIsInitialLoad(false);
+    }
+  }, [cursor, result?.data, postId]);
+  
+  // Append new comments when cursor changes (loading next page)
+  useEffect(() => {
+    if (cursor !== null && cursor !== undefined && result?.data && postId) {
+      setAllComments(prev => {
+        // Avoid duplicates by checking if comment ID already exists
+        const existingIds = new Set(prev.map(c => c.id));
+        const newComments = result.data
+          .map(convertComment)
+          .filter(comment => !existingIds.has(comment.id));
+        return [...prev, ...newComments];
+      });
+    }
+  }, [cursor, result?.data, postId]);
+  
+  // Reset when postId changes
+  useEffect(() => {
+    setCursor(null);
+    setAllComments([]);
+    setIsInitialLoad(true);
+  }, [postId]);
+  
+  const fetchNextPage = () => {
+    if (result?.hasMore && result?.nextCursor) {
+      setCursor(result.nextCursor);
+    }
+  };
+  
+  const reset = () => {
+    setCursor(null);
+    setAllComments([]);
+    setIsInitialLoad(true);
+  };
   
   return {
-    data: comments,
-    isLoading,
+    data: allComments,
+    isLoading: isInitialLoad && result === undefined && !!postId,
     hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: false,
-    fetchNextPage: () => {},
-    refetch: () => {},
+    isFetchingNextPage: cursor !== null && cursor !== undefined && result === undefined,
+    fetchNextPage,
+    refetch: reset,
   };
 };
 
@@ -285,23 +368,71 @@ export const useToggleLike = () => {
 };
 
 /**
- * Get posts by username
+ * Get posts by username with cursor-based pagination
+ * Supports infinite scroll
  */
 export const useUserPosts = (username: string) => {
+  const [cursor, setCursor] = useState<Id<"posts"> | null | undefined>(null);
+  const [allPosts, setAllPosts] = useState<FrontendPost[]>([]);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  
+  // Reset when username changes
+  useEffect(() => {
+    setCursor(null);
+    setAllPosts([]);
+    setIsInitialLoad(true);
+  }, [username]);
+  
+  // Query with current cursor
   const result = useQuery(
     api.posts.getByUsername,
-    username ? { username, limit: 20 } : "skip"
+    username && cursor === null
+      ? { username, limit: 20 }
+      : username && cursor
+        ? { username, limit: 20, cursor }
+        : "skip"
   );
   
-  const posts = result?.data?.map(convertPost) || [];
-  const isLoading = result === undefined && !!username;
+  // Reset posts when cursor is null (first page)
+  useEffect(() => {
+    if (cursor === null && result?.data && username) {
+      setAllPosts(result.data.map(convertPost));
+      setIsInitialLoad(false);
+    }
+  }, [cursor, result?.data, username]);
+  
+  // Append new posts when cursor changes (loading next page)
+  useEffect(() => {
+    if (cursor !== null && cursor !== undefined && result?.data && username) {
+      setAllPosts(prev => {
+        // Avoid duplicates by checking if post ID already exists
+        const existingIds = new Set(prev.map(p => p.id));
+        const newPosts = result.data
+          .map(convertPost)
+          .filter(post => !existingIds.has(post.id));
+        return [...prev, ...newPosts];
+      });
+    }
+  }, [cursor, result?.data, username]);
+  
+  const fetchNextPage = () => {
+    if (result?.hasMore && result?.nextCursor) {
+      setCursor(result.nextCursor);
+    }
+  };
+  
+  const reset = () => {
+    setCursor(null);
+    setAllPosts([]);
+    setIsInitialLoad(true);
+  };
   
   return {
-    data: posts,
-    isLoading,
+    data: allPosts,
+    isLoading: isInitialLoad && result === undefined && !!username,
     hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: false,
-    fetchNextPage: () => {},
-    refetch: () => {},
+    isFetchingNextPage: cursor !== null && cursor !== undefined && result === undefined,
+    fetchNextPage,
+    refetch: reset,
   };
 };

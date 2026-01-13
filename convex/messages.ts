@@ -129,10 +129,12 @@ export const send = mutation({
 /**
  * Get list of conversations
  * Equivalent to GET /messages/conversations
+ * Supports cursor-based pagination
  */
 export const getConversations = query({
   args: {
     limit: v.optional(v.number()),
+    cursor: v.optional(v.id("conversations")),
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
@@ -168,6 +170,7 @@ export const getConversations = query({
 
         return {
           id: conv._id,
+          _conversationId: conv._id, // For cursor
           other_user: otherUser
             ? {
                 id: otherUser._id,
@@ -199,10 +202,32 @@ export const getConversations = query({
         new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
     );
 
+    // Apply cursor pagination
+    let startIndex = 0;
+    if (args.cursor) {
+      const cursorIndex = enrichedConversations.findIndex(
+        (c) => c._conversationId === args.cursor
+      );
+      if (cursorIndex !== -1) {
+        startIndex = cursorIndex + 1;
+      }
+    }
+
+    const paginatedConversations = enrichedConversations.slice(
+      startIndex,
+      startIndex + limit + 1
+    );
+    const hasMore = paginatedConversations.length > limit;
+    const dataConversations = paginatedConversations.slice(0, limit);
+
     return {
-      data: enrichedConversations.slice(0, limit),
-      hasMore: enrichedConversations.length > limit,
+      data: dataConversations.map(({ _conversationId, ...rest }) => rest),
+      hasMore,
       total: enrichedConversations.length,
+      nextCursor:
+        hasMore && dataConversations.length > 0
+          ? dataConversations[dataConversations.length - 1].id
+          : null,
     };
   },
 });
