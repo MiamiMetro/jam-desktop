@@ -27,6 +27,7 @@ import {
 import { useAuthStore } from "@/stores/authStore";
 import { useAllUsers, useConversations, useMessages, useSendMessage } from "@/hooks/useUsers";
 import { useFriends, useFriendRequests, useAcceptFriend, useDeclineFriend } from "@/hooks/useFriends";
+import type { User, Message } from "@/lib/api/types";
 
 function Sidebar() {
   const navigate = useNavigate();
@@ -70,12 +71,12 @@ function Sidebar() {
     
     if (showSearchUsers) {
       // Global search - all users
-      return allUsers.filter(user => 
+      return allUsers.filter((user: User) => 
         user.username.toLowerCase().includes(userSearchQuery.toLowerCase())
       );
     } else if (showFriendsSearch) {
       // Friends search - filter friends list
-      return friends.filter(user => 
+      return friends.filter((user: User) => 
         user.username.toLowerCase().includes(userSearchQuery.toLowerCase())
       );
     }
@@ -381,7 +382,7 @@ function Sidebar() {
                       </div>
                     ) : (
                       <>
-                        {getSearchUsers().map((searchUser) => (
+                        {getSearchUsers().map((searchUser: User) => (
                           <div
                             key={searchUser.id}
                             className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-sidebar-accent/50 cursor-pointer group transition-colors"
@@ -493,7 +494,7 @@ function Sidebar() {
                       {/* Messages */}
                       <div className="flex-1 overflow-y-auto">
                         <div className="px-3 py-2 space-y-2">
-                          {messages.map((message) => {
+                          {messages.map((message: Message) => {
                             const isOwn = message.senderId === user?.id;
                             return (
                               <div
@@ -583,7 +584,7 @@ function Sidebar() {
                       </div>
                     ) : (
                       <div className="space-y-1">
-                        {friendRequests.map((requestUser) => (
+                        {friendRequests.map((requestUser: User) => (
                           <div
                             key={requestUser.id}
                             className="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-sidebar-accent/50 group transition-colors"
@@ -670,8 +671,8 @@ function Sidebar() {
                       FRIENDS ({showFriendsSearch && userSearchQuery.trim() ? getSearchUsers().length : friends.length})
                     </div>
                     <div className="space-y-1">
-                      {(showFriendsSearch && userSearchQuery.trim() ? getSearchUsers().slice(0, 50) : friends.slice(0, 100)).map((friend) => {
-                        const conversation = conversations.find(c => c.userId === friend.id);
+                      {(showFriendsSearch && userSearchQuery.trim() ? getSearchUsers().slice(0, 50) : friends.slice(0, 100)).map((friend: User) => {
+                        const conversation = conversations.find((c: { userId: string }) => c.userId === friend.id);
                         return (
                           <div
                             key={friend.id}

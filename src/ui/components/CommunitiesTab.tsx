@@ -19,7 +19,6 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { SearchInput } from "@/components/SearchInput";
 import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
-import type { Post } from "@/lib/api/types";
 import type { FrontendPost } from "@/hooks/usePosts";
 
 const CATEGORIES = [
@@ -84,18 +83,18 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
     navigate(`/post/${postId}`);
   };
 
-  const handleJoin = (communityId: string) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const handleJoin = (targetCommunityId: string) => {
     if (isGuest) {
       onGuestAction?.();
       return;
     }
-    // TODO: Implement join functionality
-    console.log("Join community:", communityId);
+    // TODO: Implement join functionality with targetCommunityId
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleCreatePost = (content: string, audioFile: File | null) => {
-    // TODO: Implement actual post creation with API
-    console.log("Creating post to community:", { communityId, content, audioFile });
+    // TODO: Implement actual post creation with API using content and audioFile
   };
 
   const handleLikePost = async (postId: string) => {
@@ -193,29 +192,11 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
               description="Be the first to share something!"
             />
           ) : (
-            communityPosts.map((post: Post) => {
-              // Convert Post (timestamp: string) to FrontendPost (timestamp: Date)
-              const frontendPost: FrontendPost = {
-                id: post.id,
-                author: post.author,
-                content: post.content || post.text || '',
-                timestamp: new Date(post.timestamp),
-                likes: post.likes,
-                isLiked: post.isLiked,
-                shares: post.shares || 0,
-                comments: post.comments || 0,
-                community: post.community,
-                isGlobal: post.isGlobal,
-                audioFile: post.audio_url ? {
-                  url: post.audio_url,
-                  title: 'Audio',
-                  duration: 0,
-                } : post.audioFile,
-              };
+            communityPosts.map((post: FrontendPost) => {
               return (
                 <PostCard
                   key={post.id}
-                  post={frontendPost}
+                  post={post}
                   communityName={null}
                   isPlaying={playingAudioId === post.id}
                   isGuest={isGuest}

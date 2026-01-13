@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/authStore";
-import { usePosts, useCreatePost, useToggleLike } from "@/hooks/usePosts";
+import { usePosts, useCreatePost, useToggleLike, type FrontendPost } from "@/hooks/usePosts";
 import { useCommunities } from "@/hooks/useCommunities";
 import { PostCard } from "@/components/PostCard";
 import { ComposePost } from "@/components/ComposePost";
@@ -86,7 +86,7 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
           />
         ) : (
           <>
-            {posts.map((post) => {
+            {posts.map((post: FrontendPost) => {
             const communityName = getCommunityName(post.community);
             return (
               <PostCard

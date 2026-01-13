@@ -43,9 +43,8 @@ if (!gotTheLock) {
                         // Process is still running
                         return { success: false, error: 'Client is already running' };
                     }
-                } catch (e) {
+                } catch {
                     // Process might have been killed, continue to spawn new one
-                    console.log(e);
                     clientProcess = null;
                 }
             }

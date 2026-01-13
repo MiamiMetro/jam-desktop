@@ -14,11 +14,12 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useUser } from "@/hooks/useUsers";
-import { useUserPosts } from "@/hooks/usePosts";
+import { useUserPosts, type FrontendPost } from "@/hooks/usePosts";
 import { useFriends, useRequestFriend } from "@/hooks/useFriends";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
+import type { User } from "@/lib/api/types";
 
 function Profile() {
   const { username } = useParams<{ username: string }>();
@@ -31,7 +32,7 @@ function Profile() {
   const [showFriends, setShowFriends] = useState(false);
   
   const isOwnProfile = currentUser?.username === profileUser?.username;
-  const isFriend = friends.some(friend => friend.id === profileUser?.id);
+  const isFriend = friends.some((friend: User) => friend.id === profileUser?.id);
   
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -160,7 +161,7 @@ function Profile() {
           ) : (
             <>
               <div className="divide-y divide-border">
-                {friends.map((friend) => (
+                {friends.map((friend: User) => (
                   <div
                     key={friend.id}
                     className="p-4 hover:bg-muted/30 transition-colors cursor-pointer"
@@ -212,7 +213,7 @@ function Profile() {
             <EmptyState icon={Music} title="No recent activities" />
           ) : (
             <div className="divide-y divide-border">
-              {userPosts.map((post) => (
+              {userPosts.map((post: FrontendPost) => (
                 <div
                   key={post.id}
                   className="p-4 hover:bg-muted/30 transition-colors cursor-pointer"

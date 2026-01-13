@@ -19,6 +19,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useJam, useUpdateRoomActivity } from "@/hooks/useJams";
 import { useAllUsers } from "@/hooks/useUsers";
 import { useHLSPlayer } from "@/hooks/useHLSPlayer";
+import type { User } from "@/lib/api/types";
 
 interface JamRoomProps {
   roomId?: string;
@@ -317,7 +318,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               <h3 className="text-sm font-semibold mb-3 flex-shrink-0">Participants</h3>
               <div className="space-y-2 overflow-y-auto flex-1">
-                {participants.map((participant) => (
+                {participants.map((participant: User) => (
                   <div
                     key={participant.id}
                     className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
@@ -358,7 +359,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                 </div>
               ) : (
                 messages.map((msg) => {
-                  const messageUser = allUsers.find(u => u.id === msg.userId);
+                  const messageUser = allUsers.find((u: User) => u.id === msg.userId);
                   return (
                     <div key={msg.id} className="flex gap-2">
                       <Avatar size="sm" className="h-6 w-6 flex-shrink-0">

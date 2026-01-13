@@ -16,14 +16,18 @@
     "transpile:electron": "tsc --project src/electron/tsconfig.json && tsc --project src/electron/preload.tsconfig.json",
     "dist:mac": "npm run transpile:electron && npm run build && electron-builder --mac --arm64",
     "dist:linux": "npm run transpile:electron && npm run build && electron-builder --linux --x64",
-    "dist:win": "npm run transpile:electron && npm run build && electron-builder --win --x64"
+    "dist:win": "npm run transpile:electron && npm run build && electron-builder --win --x64",
+    "convex:pull": "convex codegen"
   },
   "dependencies": {
     "@base-ui/react": "^1.0.0",
     "@fontsource-variable/noto-sans": "^5.2.10",
+    "@supabase/supabase-js": "^2.90.1",
+    "@tanstack/react-pacer": "^0.19.2",
     "@tanstack/react-query": "^5.90.11",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "convex": "^1.31.4",
     "hls.js": "^1.6.15",
     "lucide-react": "^0.561.0",
     "react": "^19.2.0",

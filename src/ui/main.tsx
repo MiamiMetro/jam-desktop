@@ -1,55 +1,80 @@
-import { StrictMode, useEffect, useRef } from "react";
+import { StrictMode, useEffect, useMemo, useCallback, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { HashRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { ConvexProviderWithAuth, ConvexReactClient } from "convex/react";
 import "./index.css";
 import App from "./App.tsx";
+import { supabase } from "./lib/supabase";
+import { useEnsureProfile } from "./hooks/useEnsureProfile";
 import { useAuthStore } from "./stores/authStore";
-import type { User } from "@/lib/api/types";
+import { useConvexAuth } from "./hooks/useConvexAuth";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes - data stays fresh
-      gcTime: 10 * 60 * 1000, // 10 minutes - cache persists
-      refetchOnWindowFocus: false,
-      refetchOnMount: false, // Don't refetch when component mounts if data exists
-      refetchOnReconnect: false,
+const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL);
+
+// Custom auth hook for ConvexProviderWithAuth
+function useSupabaseAuth() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  const fetchAccessToken = useCallback(
+    async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
+      try {
+        const { data, error } = forceRefreshToken 
+          ? await supabase.auth.refreshSession()
+          : await supabase.auth.getSession();
+        
+        if (error) {
+          console.error("[SupabaseAuth] Error getting session:", error);
+          return null;
+        }
+        
+        return data.session?.access_token ?? null;
+      } catch (e) {
+        console.error("[SupabaseAuth] Exception:", e);
+        return null;
+      }
     },
-  },
-});
-
-// Component to check session on mount (non-blocking) and invalidate queries on auth changes
-function AuthChecker() {
-  const checkSession = useAuthStore((state) => state.checkSession);
-  const queryClient = useQueryClient();
-  const { user, isGuest } = useAuthStore();
-  const prevUserRef = useRef<User | null>(null);
-  const prevIsGuestRef = useRef<boolean>(true);
+    []
+  );
   
   useEffect(() => {
-    // Don't block rendering - check session asynchronously
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsAuthenticated(!!session);
+      setIsLoading(false);
+    });
+    
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+      setIsLoading(false);
+    });
+    
+    return () => subscription.unsubscribe();
+  }, []);
+  
+  return useMemo(
+    () => ({ isLoading, isAuthenticated, fetchAccessToken }),
+    [isLoading, isAuthenticated, fetchAccessToken]
+  );
+}
+
+// Component to setup auth and check session on mount
+function AuthSetup() {
+  // Keep auth state store in sync
+  useConvexAuth();
+  
+  // Ensure Convex profile exists after Supabase auth
+  useEnsureProfile();
+  
+  const checkSession = useAuthStore((state) => state.checkSession);
+  
+  useEffect(() => {
+    // Check session asynchronously on mount
     checkSession().catch(() => {
       // Silently handle errors - they're already handled in the store
     });
   }, [checkSession]);
-  
-  // Invalidate friends queries when user logs in
-  useEffect(() => {
-    const wasGuest = prevIsGuestRef.current;
-    // const wasLoggedIn = prevUserRef.current !== null;
-    const isNowLoggedIn = !isGuest && user !== null;
-    
-    // If user just logged in (was guest, now logged in), invalidate friends queries
-    if (wasGuest && isNowLoggedIn) {
-      queryClient.invalidateQueries({ queryKey: ['friends'] });
-      queryClient.invalidateQueries({ queryKey: ['friends', 'requests'] });
-    }
-    
-    // Update refs
-    prevUserRef.current = user;
-    prevIsGuestRef.current = isGuest;
-  }, [user, isGuest, queryClient]);
   
   return null;
 }
@@ -57,10 +82,10 @@ function AuthChecker() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <HashRouter>
-      <QueryClientProvider client={queryClient}>
-        <AuthChecker />
+      <ConvexProviderWithAuth client={convex} useAuth={useSupabaseAuth}>
+        <AuthSetup />
         <App />
-      </QueryClientProvider>
+      </ConvexProviderWithAuth>
     </HashRouter>
   </StrictMode>
 );

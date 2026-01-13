@@ -1,19 +1,6 @@
-// Shared types for API responses
-// These types should match the backend API schema
+// Shared types for the application
 
-// Backend User response type (may have snake_case fields)
-export interface BackendUser {
-  id: string;
-  username: string;
-  avatar_url?: string;
-  display_name?: string;
-  bio?: string;
-  status?: string;
-  statusMessage?: string;
-  [key: string]: unknown;
-}
-
-// Frontend User type (camelCase)
+// User type used throughout the app
 export interface User {
   id: string;
   username: string;
@@ -24,40 +11,7 @@ export interface User {
   statusMessage?: string;
 }
 
-// Helper to normalize user from backend format
-export function normalizeUser(backendUser: BackendUser): User {
-  return {
-    id: backendUser.id,
-    username: backendUser.username,
-    avatar: backendUser.avatar_url || undefined, // Convert avatar_url to avatar
-    display_name: backendUser.display_name,
-    bio: backendUser.bio,
-    status: backendUser.status,
-    statusMessage: backendUser.statusMessage,
-  };
-}
-
-// Backend response type (snake_case)
-export interface BackendPost {
-  id: string;
-  author_id?: string;
-  text?: string;
-  audio_url?: string | null;
-  created_at: string;
-  likes_count: number;
-  comments_count?: number;
-  is_liked?: boolean;
-  author: {
-    id: string;
-    username: string;
-    avatar_url?: string;
-    display_name?: string;
-  };
-  // Add any other backend fields that might exist
-  [key: string]: unknown;
-}
-
-// Frontend Post type (camelCase)
+// Post type used in components
 export interface Post {
   id: string;
   author: {
@@ -65,14 +19,14 @@ export interface Post {
     avatar?: string;
   };
   content?: string;
-  text?: string; // Backend uses 'text', frontend uses 'content'
+  text?: string;
   audio_url?: string | null;
   audioFile?: {
     url: string;
     title: string;
     duration: number;
   };
-  timestamp: string; // ISO date string from backend
+  timestamp: string;
   likes: number;
   isLiked?: boolean;
   shares?: number;
@@ -81,27 +35,7 @@ export interface Post {
   isGlobal?: boolean;
 }
 
-// Backend Comment response type (may have snake_case or camelCase fields)
-export interface BackendComment {
-  id: string;
-  post_id?: string;
-  postId?: string;
-  text?: string;
-  content?: string; // API may return content directly
-  audio_url?: string | null;
-  created_at?: string;
-  timestamp?: string; // API may return timestamp directly
-  author: {
-    id: string;
-    username: string;
-    avatar_url?: string;
-    avatar?: string; // API may return avatar directly
-    display_name?: string;
-  };
-  [key: string]: unknown;
-}
-
-// Frontend Comment type (camelCase)
+// Comment type
 export interface Comment {
   id: string;
   postId: string;
@@ -116,84 +50,24 @@ export interface Comment {
     title: string;
     duration: number;
   };
-  timestamp: string; // ISO date string from backend
+  timestamp: string;
 }
 
+// Message type
 export interface Message {
   id: string;
   senderId?: string;
-  sender_id?: string; // Backend may use snake_case
   receiverId?: string;
-  receiver_id?: string; // Backend may use snake_case
   content?: string;
-  text?: string; // Backend uses 'text'
   audio_url?: string | null;
-  audioUrl?: string | null; // Backend may use camelCase
-  timestamp?: string; // ISO date string from backend
-  createdAt?: string; // Backend may use createdAt
-  created_at?: string; // Backend may use created_at
+  timestamp?: string;
   isRead?: boolean;
-  [key: string]: unknown; // Allow other fields from backend
 }
 
+// Conversation type
 export interface Conversation {
   id: string;
   userId: string;
   lastMessage?: Message;
   unreadCount: number;
 }
-
-// Helper function to convert backend Post (snake_case) to frontend Post format (camelCase)
-export function normalizePost(backendPost: BackendPost): Post {
-  return {
-    id: backendPost.id,
-    author: {
-      username: backendPost.author.username,
-      avatar: backendPost.author.avatar_url || undefined, // Convert avatar_url to avatar
-    },
-    text: backendPost.text,
-    content: backendPost.text, // Map text to content for frontend
-    audio_url: backendPost.audio_url || null,
-    timestamp: backendPost.created_at, // Map created_at to timestamp
-    likes: backendPost.likes_count || 0, // Map likes_count to likes
-    isLiked: backendPost.is_liked || false, // Map is_liked to isLiked
-    shares: 0, // Not in backend response
-    comments: backendPost.comments_count || 0, // Map comments_count to comments
-    community: undefined, // Backend doesn't return this yet
-    isGlobal: true, // Default to true for feed posts (backend doesn't return this field)
-  };
-}
-
-// Helper function to convert backend Comment (snake_case) to frontend Comment format (camelCase)
-export function normalizeComment(backendComment: BackendComment): Comment {
-  return {
-    id: backendComment.id,
-    postId: backendComment.post_id || backendComment.postId || backendComment.id, // Fallback if post_id is missing
-    author: {
-      username: backendComment.author.username,
-      avatar: backendComment.author.avatar || backendComment.author.avatar_url || undefined, // Handle both formats
-    },
-    content: backendComment.content || backendComment.text || '', // Handle both content and text fields
-    audio_url: backendComment.audio_url || null,
-    timestamp: backendComment.timestamp || backendComment.created_at || '', // Handle both timestamp and created_at
-  };
-}
-
-// Helper function to convert backend Message to frontend Message format
-export function normalizeMessage(message: Message): Message {
-  // Normalize message fields from backend format (may have snake_case or camelCase)
-  const senderId = message.senderId || (message.sender_id as string) || '';
-  const receiverId = message.receiverId || (message.receiver_id as string) || '';
-  const timestamp = message.timestamp || (message.createdAt as string) || (message.created_at as string) || '';
-  
-  return {
-    id: message.id,
-    senderId,
-    receiverId,
-    content: message.content || (message.text as string) || '',
-    audio_url: message.audio_url || (message.audioUrl as string | null) || null,
-    timestamp,
-    isRead: message.isRead,
-  };
-}
-

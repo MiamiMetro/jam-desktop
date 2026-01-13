@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { authApi } from '@/lib/api/api';
-import { setAuthToken } from '@/lib/api/client';
+import { supabase } from '@/lib/supabase';
 import type { User } from '@/lib/api/types';
 
 interface AuthState {
@@ -10,63 +9,71 @@ interface AuthState {
   setUser: (user: User | null) => void;
   setIsGuest: (isGuest: boolean) => void;
   login: (user: User) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   checkSession: () => Promise<void>;
   loginWithCredentials: (email: string, password: string) => Promise<void>;
   registerWithCredentials: (email: string, password: string, username: string, display_name?: string) => Promise<void>;
 }
 
-// Initialize state based on whether token exists in localStorage
-const getInitialState = () => {
-  const token = localStorage.getItem('auth_token');
-  return {
-    isGuest: !token, // If token exists, we're not a guest (optimistic)
-    user: null,
-    isLoading: !!token, // If token exists, we're loading to verify it
-  };
-};
-
 export const useAuthStore = create<AuthState>((set) => ({
-  ...getInitialState(),
+  isGuest: true,
+  user: null,
+  isLoading: true,
   setUser: (user) => set({ user, isGuest: !user }),
   setIsGuest: (isGuest) => set({ isGuest, user: isGuest ? null : undefined }),
   login: (user) => set({ user, isGuest: false }),
-  logout: () => {
-    setAuthToken(null);
+  logout: async () => {
+    await supabase.auth.signOut();
     set({ user: null, isGuest: true });
   },
   checkSession: async () => {
-    const token = localStorage.getItem('auth_token');
-    if (!token) {
-      set({ isGuest: true, user: null, isLoading: false });
-      return;
-    }
-
     try {
       set({ isLoading: true });
-      const user = await authApi.getMe();
-      set({ user, isGuest: false, isLoading: false });
-    } catch (error: any) {
-      // Only clear token if it's a 401 (unauthorized) - means token is invalid
-      // For other errors (network, etc.), keep the token and let user retry
-      if (error?.status === 401) {
-        // Token invalid or expired
-        setAuthToken(null);
-        set({ user: null, isGuest: true, isLoading: false });
-      } else {
-        // Network error or other issue - keep token but mark as guest for now
-        // User can retry by refreshing or the app can retry later
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
         set({ isGuest: true, user: null, isLoading: false });
+        return;
       }
+
+      // Get user metadata from Supabase session
+      const supabaseUser = session.user;
+      const user: User = {
+        id: supabaseUser.id,
+        username: supabaseUser.user_metadata?.username || supabaseUser.email?.split('@')[0] || 'user',
+        display_name: supabaseUser.user_metadata?.display_name,
+        avatar: supabaseUser.user_metadata?.avatar_url,
+        bio: supabaseUser.user_metadata?.bio,
+      };
+      
+      set({ user, isGuest: false, isLoading: false });
+    } catch (error) {
+      console.error('Session check failed:', error);
+      set({ isGuest: true, user: null, isLoading: false });
     }
   },
   loginWithCredentials: async (email: string, password: string) => {
     try {
       set({ isLoading: true });
-      const response = await authApi.login({ email, password });
-      setAuthToken(response.access_token);
-      // Always call getMe to ensure we have the complete user object
-      const user = await authApi.getMe();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) {
+        set({ isLoading: false });
+        throw { message: error.message, status: 401 };
+      }
+
+      const supabaseUser = data.user;
+      const user: User = {
+        id: supabaseUser.id,
+        username: supabaseUser.user_metadata?.username || supabaseUser.email?.split('@')[0] || 'user',
+        display_name: supabaseUser.user_metadata?.display_name,
+        avatar: supabaseUser.user_metadata?.avatar_url,
+        bio: supabaseUser.user_metadata?.bio,
+      };
+      
       set({ user, isGuest: false, isLoading: false });
     } catch (error) {
       set({ isLoading: false });
@@ -76,10 +83,36 @@ export const useAuthStore = create<AuthState>((set) => ({
   registerWithCredentials: async (email: string, password: string, username: string, display_name?: string) => {
     try {
       set({ isLoading: true });
-      const response = await authApi.register({ email, password, username, display_name });
-      setAuthToken(response.access_token);
-      // Always call getMe to ensure we have the complete user object
-      const user = await authApi.getMe();
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            username,
+            display_name,
+          },
+        },
+      });
+      
+      if (error) {
+        set({ isLoading: false });
+        throw { message: error.message, status: 400 };
+      }
+
+      if (!data.user) {
+        set({ isLoading: false });
+        throw { message: 'Registration failed', status: 400 };
+      }
+
+      const supabaseUser = data.user;
+      const user: User = {
+        id: supabaseUser.id,
+        username: supabaseUser.user_metadata?.username || username,
+        display_name: supabaseUser.user_metadata?.display_name || display_name,
+        avatar: supabaseUser.user_metadata?.avatar_url,
+        bio: supabaseUser.user_metadata?.bio,
+      };
+      
       set({ user, isGuest: false, isLoading: false });
     } catch (error) {
       set({ isLoading: false });
@@ -87,4 +120,3 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 }));
-
