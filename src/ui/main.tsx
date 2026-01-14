@@ -5,9 +5,7 @@ import { ConvexProviderWithAuth, ConvexReactClient } from "convex/react";
 import "./index.css";
 import App from "./App.tsx";
 import { supabase } from "./lib/supabase";
-import { useEnsureProfile } from "./hooks/useEnsureProfile";
 import { useAuthStore } from "./stores/authStore";
-import { useConvexAuth } from "./hooks/useConvexAuth";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL);
 
@@ -59,18 +57,11 @@ function useSupabaseAuth() {
   );
 }
 
-// Component to setup auth and check session on mount
-function AuthSetup() {
-  // Keep auth state store in sync
-  useConvexAuth();
-  
-  // Ensure Convex profile exists after Supabase auth
-  useEnsureProfile();
-  
+// Component to sync auth state on mount
+function AuthSync() {
   const checkSession = useAuthStore((state) => state.checkSession);
   
   useEffect(() => {
-    // Check session asynchronously on mount
     checkSession().catch(() => {
       // Silently handle errors - they're already handled in the store
     });
@@ -83,7 +74,7 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <HashRouter>
       <ConvexProviderWithAuth client={convex} useAuth={useSupabaseAuth}>
-        <AuthSetup />
+        <AuthSync />
         <App />
       </ConvexProviderWithAuth>
     </HashRouter>

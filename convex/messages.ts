@@ -1,116 +1,81 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
-import type { Id, Doc } from "./_generated/dataModel";
+import type { Doc } from "./_generated/dataModel";
 import { 
-  requireAuth, 
+  requireViewerWithProfile,
   isBlocked, 
-  areFriends,
+  isFriend,
+  getOrCreateDM,
   validateTextLength,
-  validateUrl,
   sanitizeText,
   MAX_LENGTHS,
 } from "./helpers";
 import { checkRateLimit } from "./rateLimiter";
 
 /**
- * Find or create a conversation between two users
- * Ensures consistent ordering of user IDs
- */
-async function findOrCreateConversation(
-  ctx: any,
-  user1: Id<"profiles">,
-  user2: Id<"profiles">
-): Promise<Id<"conversations">> {
-  // Sort IDs to ensure consistent ordering
-  const [smaller, larger] = [user1, user2].sort();
-
-  // Try to find existing conversation
-  const existing = await ctx.db
-    .query("conversations")
-    .withIndex("by_users", (q: any) => q.eq("user1", smaller).eq("user2", larger))
-    .first();
-
-  if (existing) {
-    return existing._id;
-  }
-
-  // Create new conversation
-  const conversationId = await ctx.db.insert("conversations", {
-    user1: smaller,
-    user2: larger,
-  });
-
-  return conversationId;
-}
-
-/**
  * Send a message to a user
- * Equivalent to POST /messages/send
  */
 export const send = mutation({
   args: {
-    recipient_id: v.id("profiles"),
-    text: v.optional(v.string()),
-    audio_url: v.optional(v.string()),
+    recipientAccountId: v.id("accounts"),
+    content: v.string(),
   },
   handler: async (ctx, args) => {
-    const profile = await requireAuth(ctx);
+    const { account, profile } = await requireViewerWithProfile(ctx);
     
     // Rate limit: 30 messages per minute
     await checkRateLimit(ctx, "sendMessage", profile._id);
 
     // Cannot send message to self
-    if (profile._id === args.recipient_id) {
+    if (account._id === args.recipientAccountId) {
       throw new Error("You cannot send message to yourself");
     }
 
     // Sanitize and validate inputs
-    const text = sanitizeText(args.text);
-    const audioUrl = args.audio_url;
-    
-    validateTextLength(text, MAX_LENGTHS.MESSAGE_TEXT, "Message text");
-    validateUrl(audioUrl);
-
-    // Text or audio must be provided
-    if (!text && !audioUrl) {
-      throw new Error("Message must have either text or audio");
+    const content = sanitizeText(args.content);
+    if (!content) {
+      throw new Error("Message content is required");
     }
+    validateTextLength(content, MAX_LENGTHS.MESSAGE_TEXT, "Message");
 
     // Check if blocked
-    const blocked = await isBlocked(ctx, profile._id, args.recipient_id);
+    const blocked = await isBlocked(ctx, account._id, args.recipientAccountId);
     if (blocked) {
       throw new Error("Cannot send message to this user");
     }
 
     // Get recipient profile
-    const recipient = await ctx.db.get(args.recipient_id);
-    if (!recipient) {
+    const recipientProfile = await ctx.db
+      .query("profiles")
+      .withIndex("by_accountId", (q) => q.eq("accountId", args.recipientAccountId))
+      .first();
+
+    if (!recipientProfile) {
       throw new Error("Recipient not found");
     }
 
-    // Check if users are friends
-    const friends = await areFriends(ctx, profile._id, args.recipient_id);
+    // Check DM privacy settings
+    const areFriends = await isFriend(ctx, account._id, args.recipientAccountId);
+    const dmPrivacy = recipientProfile.dmPrivacy ?? "friends";
 
-    // Check if message is allowed
-    if (!friends && recipient.dmPrivacy !== "everyone") {
-      throw new Error(
-        "You can only send messages to friends or users who allow messages from everyone"
-      );
+    if (!areFriends && dmPrivacy !== "everyone") {
+      throw new Error("This user only accepts messages from friends");
     }
 
-    // Find or create conversation
-    const conversationId = await findOrCreateConversation(
-      ctx,
-      profile._id,
-      args.recipient_id
-    );
+    // Get or create DM conversation
+    const conversation = await getOrCreateDM(ctx, account._id, args.recipientAccountId);
 
     // Create message
     const messageId = await ctx.db.insert("messages", {
-      conversationId,
-      senderId: profile._id,
-      text: text,
-      audioUrl: audioUrl,
+      conversationId: conversation._id,
+      senderId: account._id,
+      content,
+      createdAt: Date.now(),
+    });
+
+    // Update conversation's lastMessageAt
+    await ctx.db.patch(conversation._id, {
+      lastMessageAt: Date.now(),
     });
 
     const message = await ctx.db.get(messageId);
@@ -119,144 +84,146 @@ export const send = mutation({
       id: message!._id,
       conversation_id: message!.conversationId,
       sender_id: message!.senderId,
-      text: message!.text ?? "",
-      audio_url: message!.audioUrl ?? "",
-      created_at: new Date(message!._creationTime).toISOString(),
+      content: message!.content,
+      created_at: new Date(message!.createdAt).toISOString(),
+      is_deleted: false,
     };
   },
 });
 
 /**
  * Get list of conversations
- * Equivalent to GET /messages/conversations
  * Supports cursor-based pagination
  */
 export const getConversations = query({
   args: {
     limit: v.optional(v.number()),
-    cursor: v.optional(v.id("conversations")),
+    cursor: v.optional(v.number()), // lastMessageAt timestamp
   },
   handler: async (ctx, args) => {
-    const profile = await requireAuth(ctx);
+    const { account } = await requireViewerWithProfile(ctx);
     const limit = args.limit ?? 50;
 
-    // Get conversations where user is user1
-    const convs1 = await ctx.db
-      .query("conversations")
-      .withIndex("by_user1", (q) => q.eq("user1", profile._id))
+    // Get all memberships for this user
+    const memberships = await ctx.db
+      .query("conversationMembers")
+      .withIndex("by_accountId", (q) => q.eq("accountId", account._id))
       .collect();
 
-    // Get conversations where user is user2
-    const convs2 = await ctx.db
-      .query("conversations")
-      .withIndex("by_user2", (q) => q.eq("user2", profile._id))
-      .collect();
-
-    const allConversations = [...convs1, ...convs2];
-
-    // Enrich with other user info and last message
+    // Get conversations and enrich
     const enrichedConversations = await Promise.all(
-      allConversations.map(async (conv) => {
-        const otherUserId =
-          conv.user1 === profile._id ? conv.user2 : conv.user1;
-        const otherUser = await ctx.db.get(otherUserId);
+      memberships.map(async (membership) => {
+        const conversation = await ctx.db.get(membership.conversationId);
+        if (!conversation) return null;
+
+        // For DMs, get the other user
+        let otherUser = null;
+        if (conversation.type === "dm") {
+          const otherAccountId = conversation.dmUserA === account._id 
+            ? conversation.dmUserB 
+            : conversation.dmUserA;
+          
+          if (otherAccountId) {
+            const otherProfile = await ctx.db
+              .query("profiles")
+              .withIndex("by_accountId", (q) => q.eq("accountId", otherAccountId))
+              .first();
+            
+            if (otherProfile) {
+              otherUser = {
+                account_id: otherAccountId,
+                id: otherProfile._id,
+                username: otherProfile.username,
+                display_name: otherProfile.displayName ?? "",
+                avatar_url: otherProfile.avatarUrl ?? "",
+              };
+            }
+          }
+        }
 
         // Get last message
         const lastMessage = await ctx.db
           .query("messages")
-          .withIndex("by_conversation", (q) => q.eq("conversationId", conv._id))
+          .withIndex("by_conversation_createdAt", (q) => q.eq("conversationId", conversation._id))
           .order("desc")
+          .filter((q) => q.eq(q.field("deletedAt"), undefined))
           .first();
 
         return {
-          id: conv._id,
-          _conversationId: conv._id, // For cursor
-          other_user: otherUser
-            ? {
-                id: otherUser._id,
-                username: otherUser.username,
-                display_name: otherUser.displayName ?? "",
-                avatar_url: otherUser.avatarUrl ?? "",
-              }
-            : null,
+          id: conversation._id,
+          type: conversation.type,
+          other_user: otherUser,
+          title: conversation.title,
+          image_url: conversation.imageUrl,
           last_message: lastMessage
             ? {
                 id: lastMessage._id,
-                conversation_id: lastMessage.conversationId,
+                content: lastMessage.content,
                 sender_id: lastMessage.senderId,
-                text: lastMessage.text ?? "",
-                audio_url: lastMessage.audioUrl ?? "",
-                created_at: new Date(lastMessage._creationTime).toISOString(),
+                created_at: new Date(lastMessage.createdAt).toISOString(),
+                is_deleted: !!lastMessage.deletedAt,
               }
             : null,
-          updated_at: lastMessage
-            ? new Date(lastMessage._creationTime).toISOString()
-            : new Date(conv._creationTime).toISOString(),
+          updated_at: conversation.lastMessageAt 
+            ? new Date(conversation.lastMessageAt).toISOString()
+            : new Date(conversation.createdAt).toISOString(),
+          _sortTime: conversation.lastMessageAt ?? conversation.createdAt,
         };
       })
     );
 
-    // Sort by last message time (most recent first)
-    enrichedConversations.sort(
-      (a, b) =>
-        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-    );
+    // Filter out nulls and sort by last message time
+    let validConversations = enrichedConversations
+      .filter((c): c is NonNullable<typeof c> => c !== null)
+      .sort((a, b) => b._sortTime - a._sortTime);
 
     // Apply cursor pagination
     let startIndex = 0;
     if (args.cursor) {
-      const cursorIndex = enrichedConversations.findIndex(
-        (c) => c._conversationId === args.cursor
-      );
-      if (cursorIndex !== -1) {
-        startIndex = cursorIndex + 1;
-      }
+      startIndex = validConversations.findIndex((c) => c._sortTime < args.cursor!);
+      if (startIndex === -1) startIndex = validConversations.length;
     }
 
-    const paginatedConversations = enrichedConversations.slice(
-      startIndex,
-      startIndex + limit + 1
-    );
+    const paginatedConversations = validConversations.slice(startIndex, startIndex + limit + 1);
     const hasMore = paginatedConversations.length > limit;
     const dataConversations = paginatedConversations.slice(0, limit);
 
     return {
-      data: dataConversations.map(({ _conversationId, ...rest }) => rest),
+      data: dataConversations.map(({ _sortTime, ...rest }) => rest),
       hasMore,
-      total: enrichedConversations.length,
-      nextCursor:
-        hasMore && dataConversations.length > 0
-          ? dataConversations[dataConversations.length - 1].id
-          : null,
+      total: validConversations.length,
+      nextCursor: hasMore && dataConversations.length > 0
+        ? dataConversations[dataConversations.length - 1]._sortTime
+        : null,
     };
   },
 });
 
 /**
- * Get messages with a specific user
- * Equivalent to GET /messages/conversation/:userId
+ * Get messages with a specific user (DM)
  * Supports cursor-based pagination
  */
 export const getWithUser = query({
   args: {
-    userId: v.id("profiles"),
+    targetAccountId: v.id("accounts"),
     limit: v.optional(v.number()),
-    cursor: v.optional(v.id("messages")),
+    cursor: v.optional(v.number()), // createdAt timestamp
   },
   handler: async (ctx, args) => {
-    const profile = await requireAuth(ctx);
+    const { account } = await requireViewerWithProfile(ctx);
     const limit = args.limit ?? 50;
 
-    // Find conversation
-    const [smaller, larger] = [profile._id, args.userId].sort();
+    // Find the DM conversation using canonical ordering
+    const [userA, userB] = account._id < args.targetAccountId
+      ? [account._id, args.targetAccountId]
+      : [args.targetAccountId, account._id];
 
     const conversation = await ctx.db
       .query("conversations")
-      .withIndex("by_users", (q) => q.eq("user1", smaller).eq("user2", larger))
+      .withIndex("by_dmUserA_dmUserB", (q) => q.eq("dmUserA", userA).eq("dmUserB", userB))
       .first();
 
     if (!conversation) {
-      // No conversation yet
       return {
         data: [],
         hasMore: false,
@@ -265,27 +232,20 @@ export const getWithUser = query({
       };
     }
 
-    // Get messages in the conversation
+    // Get messages
     let messages: Doc<"messages">[] = [];
     
     if (args.cursor) {
-      const cursorMessage = await ctx.db.get(args.cursor);
-      if (cursorMessage) {
-        messages = await ctx.db
-          .query("messages")
-          .withIndex("by_conversation", (q) =>
-            q.eq("conversationId", conversation._id)
-          )
-          .order("desc")
-          .filter((q) => q.lt(q.field("_creationTime"), cursorMessage._creationTime))
-          .take(limit + 1);
-      }
+      messages = await ctx.db
+        .query("messages")
+        .withIndex("by_conversation_createdAt", (q) => q.eq("conversationId", conversation._id))
+        .order("desc")
+        .filter((q) => q.lt(q.field("createdAt"), args.cursor!))
+        .take(limit + 1);
     } else {
       messages = await ctx.db
         .query("messages")
-        .withIndex("by_conversation", (q) =>
-          q.eq("conversationId", conversation._id)
-        )
+        .withIndex("by_conversation_createdAt", (q) => q.eq("conversationId", conversation._id))
         .order("desc")
         .take(limit + 1);
     }
@@ -293,43 +253,41 @@ export const getWithUser = query({
     const hasMore = messages.length > limit;
     const data = messages.slice(0, limit);
 
-    // Reverse to get oldest first
+    // Reverse to get chronological order for display
     const formattedMessages = data.reverse().map((msg) => ({
       id: msg._id,
       conversation_id: msg.conversationId,
       sender_id: msg.senderId,
-      text: msg.text ?? "",
-      audio_url: msg.audioUrl ?? "",
-      created_at: new Date(msg._creationTime).toISOString(),
+      content: msg.deletedAt ? "" : msg.content,
+      created_at: new Date(msg.createdAt).toISOString(),
+      is_deleted: !!msg.deletedAt,
+      is_system: msg.isSystem ?? false,
     }));
 
     // Get total count
     const allMessages = await ctx.db
       .query("messages")
-      .withIndex("by_conversation", (q) =>
-        q.eq("conversationId", conversation._id)
-      )
+      .withIndex("by_conversation", (q) => q.eq("conversationId", conversation._id))
       .collect();
 
     return {
       data: formattedMessages,
       hasMore,
       total: allMessages.length,
-      nextCursor: hasMore ? data[data.length - 1]._id : null,
+      nextCursor: hasMore && data.length > 0 ? data[data.length - 1].createdAt : null,
     };
   },
 });
 
 /**
- * Delete a message (only sender can delete)
- * Equivalent to DELETE /messages/:messageId
+ * Soft delete a message (only sender can delete)
  */
 export const remove = mutation({
   args: {
     messageId: v.id("messages"),
   },
   handler: async (ctx, args) => {
-    const profile = await requireAuth(ctx);
+    const { account, profile } = await requireViewerWithProfile(ctx);
     
     // Rate limit: 10 deletes per minute
     await checkRateLimit(ctx, "deleteAction", profile._id);
@@ -339,13 +297,20 @@ export const remove = mutation({
       throw new Error("Message not found");
     }
 
-    if (message.senderId !== profile._id) {
+    if (message.senderId !== account._id) {
       throw new Error("You can only delete your own messages");
     }
 
-    await ctx.db.delete(args.messageId);
+    if (message.deletedAt) {
+      throw new Error("Message is already deleted");
+    }
+
+    // Soft delete
+    await ctx.db.patch(args.messageId, {
+      deletedAt: Date.now(),
+      deletedBy: account._id,
+    });
 
     return { message: "Message deleted successfully" };
   },
 });
-
