@@ -7,16 +7,26 @@ import { useProfileStore } from './useEnsureProfile';
 import { useConvexAuthStore } from './useConvexAuth';
 import type { User } from '@/lib/api/types';
 
-// Convert Convex profile to User type
-function convertUser(profile: any): User {
+// Convert Convex profile/friend data to User type
+// Friends list returns a slightly different structure than profile, so we adapt it
+function convertUser(profile: {
+  id: string | Id<"profiles">;
+  username: string;
+  display_name?: string;
+  avatar_url?: string;
+  bio?: string;
+  created_at?: string;
+  friends_since?: string;
+} | null): User | null {
+  if (!profile) return null;
+  
   return {
-    id: profile.id || profile._id,
+    id: (typeof profile.id === 'string' ? profile.id : profile.id) as Id<"profiles">, // Keep as Id<"profiles"> to match User type
     username: profile.username,
-    avatar: profile.avatar_url || undefined,
-    display_name: profile.display_name,
-    bio: profile.bio,
-    status: profile.status,
-    statusMessage: profile.statusMessage,
+    display_name: profile.display_name ?? "",
+    avatar_url: profile.avatar_url ?? "",
+    bio: profile.bio ?? "",
+    created_at: profile.created_at ?? profile.friends_since ?? new Date().toISOString(),
   };
 }
 
@@ -59,7 +69,7 @@ export const useFriends = (searchQuery?: string) => {
   // Reset friends when cursor is null (first page)
   useEffect(() => {
     if (cursor === null && result?.data && canQuery) {
-      setAllFriends(result.data.map(convertUser));
+      setAllFriends(result.data.map(convertUser).filter((f): f is User => f !== null));
       setIsInitialLoad(false);
     }
   }, [cursor, result?.data, canQuery]);
@@ -72,7 +82,7 @@ export const useFriends = (searchQuery?: string) => {
         const existingIds = new Set(prev.map(f => f.id));
         const newFriends = result.data
           .map(convertUser)
-          .filter(friend => !existingIds.has(friend.id));
+          .filter((f): f is User => f !== null && !existingIds.has(f.id));
         return [...prev, ...newFriends];
       });
     }
@@ -130,7 +140,7 @@ export const useFriendRequests = () => {
   // Reset requests when cursor is null (first page)
   useEffect(() => {
     if (cursor === null && result?.data && canQuery) {
-      setAllRequests(result.data.map(convertUser));
+      setAllRequests(result.data.map(convertUser).filter((r): r is User => r !== null));
       setIsInitialLoad(false);
     }
   }, [cursor, result?.data, canQuery]);
@@ -143,7 +153,7 @@ export const useFriendRequests = () => {
         const existingIds = new Set(prev.map(r => r.id));
         const newRequests = result.data
           .map(convertUser)
-          .filter(request => !existingIds.has(request.id));
+          .filter((r): r is User => r !== null && !existingIds.has(r.id));
         return [...prev, ...newRequests];
       });
     }

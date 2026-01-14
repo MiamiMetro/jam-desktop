@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useInView } from "react-intersection-observer";
 import { useDebouncedValue } from "@tanstack/react-pacer";
-import { Avatar, AvatarFallback, AvatarImage, AvatarBadge } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,7 +29,7 @@ import {
 import { useAuthStore } from "@/stores/authStore";
 import { useAllUsers, useConversations, useMessages, useSendMessage } from "@/hooks/useUsers";
 import { useFriends, useFriendRequests, useAcceptFriend, useDeclineFriend } from "@/hooks/useFriends";
-import type { User, Message } from "@/lib/api/types";
+import type { User } from "@/lib/api/types";
 
 function Sidebar() {
   const navigate = useNavigate();
@@ -210,18 +210,7 @@ function Sidebar() {
     return [];
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Online":
-      case "In Game":
-      case "In Queue":
-        return "bg-green-500";
-      case "Away":
-        return "bg-yellow-500";
-      default:
-        return "bg-gray-500";
-    }
-  };
+  // Status functionality removed - not available in Convex User type
 
   const handleAuthClick = (loginMode: boolean) => {
     setIsLogin(loginMode);
@@ -275,25 +264,21 @@ function Sidebar() {
               aria-label="Go to profile"
             >
               <Avatar size="lg" className="relative ring-2 ring-primary pointer-events-none">
-                <AvatarImage src={user?.avatar || ""} alt={user?.username || "Profile"} />
+                <AvatarImage src={user?.avatar_url || ""} alt={user?.username || "Profile"} />
                 <AvatarFallback className="bg-muted text-muted-foreground">
                   {user?.username?.substring(0, 2).toUpperCase() || "U"}
                 </AvatarFallback>
-                {user?.status && (
-                  <AvatarBadge className={getStatusColor(user.status)} />
-                )}
+                {/* Status not available in Convex User type */}
               </Avatar>
             </button>
           ) : (
             <div className="relative">
               <Avatar size="lg" className="relative ring-2 ring-primary">
-                <AvatarImage src={user?.avatar || ""} alt={isGuest ? "Guest" : user?.username || "Profile"} />
+                <AvatarImage src={user?.avatar_url || ""} alt={isGuest ? "Guest" : user?.username || "Profile"} />
                 <AvatarFallback className="bg-muted text-muted-foreground">
                   {isGuest ? "GU" : (user?.username?.substring(0, 2).toUpperCase() || "U")}
                 </AvatarFallback>
-                {!isGuest && user?.status && (
-                  <AvatarBadge className={getStatusColor(user.status)} />
-                )}
+                {/* Status not available in Convex User type */}
               </Avatar>
             </div>
           )}
@@ -312,7 +297,7 @@ function Sidebar() {
               </div>
             )}
             <div className="text-xs text-muted-foreground">
-              {isGuest ? "Not logged in" : (user?.status || "Online")}
+              {isGuest ? "Not logged in" : "Online"}
             </div>
           </div>
           {!isGuest && (
@@ -519,16 +504,16 @@ function Sidebar() {
                             }}
                           >
                             <Avatar size="sm" className="relative">
-                              <AvatarImage src={searchUser.avatar || ""} alt={searchUser.username} />
+                              <AvatarImage src={searchUser.avatar_url || ""} alt={searchUser.username} />
                               <AvatarFallback className="bg-muted text-muted-foreground text-xs">
                                 {searchUser.username.substring(0, 2).toUpperCase()}
                               </AvatarFallback>
-                              <AvatarBadge className={getStatusColor(searchUser.status || 'Offline')} />
+                              {/* Status not available in Convex User type */}
                             </Avatar>
                             <div className="flex-1 min-w-0">
                               <div className="text-sm font-medium truncate">{searchUser.username}</div>
                               <div className="text-xs text-muted-foreground truncate">
-                                {searchUser.statusMessage || searchUser.status}
+                                {/* Status not available in Convex User type */}
                               </div>
                             </div>
                           </div>
@@ -607,11 +592,11 @@ function Sidebar() {
                                 aria-label={`Go to ${chatPartner.username}'s profile`}
                               >
                                 <Avatar size="sm" className="relative pointer-events-none">
-                                  <AvatarImage src={chatPartner.avatar || ""} alt={chatPartner.username} />
+                                  <AvatarImage src={chatPartner.avatar_url || ""} alt={chatPartner.username} />
                                   <AvatarFallback className="bg-muted text-muted-foreground text-xs">
                                     {chatPartner.username.substring(0, 2).toUpperCase()}
                                   </AvatarFallback>
-                                  <AvatarBadge className={getStatusColor(chatPartner?.status || 'Offline')} />
+                                  {/* Status not available in Convex User type */}
                                 </Avatar>
                               </button>
                               <div className="flex-1 min-w-0">
@@ -622,7 +607,7 @@ function Sidebar() {
                                   {chatPartner.username}
                                 </button>
                                 <div className="text-xs text-muted-foreground truncate">
-                                  {chatPartner.status}
+                                  {/* Status not available in Convex User type */}
                                 </div>
                               </div>
                             </>
@@ -646,7 +631,7 @@ function Sidebar() {
                               )}
                             </div>
                           )}
-                          {messages.map((message: Message) => {
+                          {messages.map((message) => {
                             const isOwn = message.senderId === user?.id;
                             return (
                               <div
@@ -750,11 +735,11 @@ function Sidebar() {
                             className="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-sidebar-accent/50 group transition-colors"
                           >
                             <Avatar size="sm" className="relative">
-                              <AvatarImage src={requestUser.avatar || ""} alt={requestUser.username} />
+                              <AvatarImage src={requestUser.avatar_url || ""} alt={requestUser.username} />
                               <AvatarFallback className="bg-muted text-muted-foreground text-xs">
                                 {requestUser.username.substring(0, 2).toUpperCase()}
                               </AvatarFallback>
-                              <AvatarBadge className={getStatusColor(requestUser.status || 'Offline')} />
+                              {/* Status not available in Convex User type */}
                             </Avatar>
                             <div className="flex-1 min-w-0">
                               <div className="text-sm font-medium truncate">{requestUser.username}</div>
@@ -844,7 +829,7 @@ function Sidebar() {
                     </div>
                     <div className="space-y-1">
                       {(showFriendsSearch && userSearchQuery.trim() ? getSearchUsers() : friends).map((friend: User) => {
-                        const conversation = conversations.find((c: { userId: string }) => c.userId === friend.id);
+                        const conversation = conversations.find((c) => String(c.userId) === String(friend.id));
                         return (
                           <div
                             key={friend.id}
@@ -857,16 +842,16 @@ function Sidebar() {
                             }}
                           >
                             <Avatar size="sm" className="relative">
-                              <AvatarImage src={friend.avatar || ""} alt={friend.username} />
+                              <AvatarImage src={friend.avatar_url || ""} alt={friend.username} />
                               <AvatarFallback className="bg-muted text-muted-foreground text-xs">
                                 {friend.username.substring(0, 2).toUpperCase()}
                               </AvatarFallback>
-                              <AvatarBadge className={getStatusColor(friend.status || 'Offline')} />
+                              {/* Status not available in Convex User type */}
                             </Avatar>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1">
                                 <div className="text-sm font-medium truncate">{friend.username}</div>
-                                {conversation && conversation.unreadCount > 0 && (
+                                {conversation && (conversation.unreadCount || 0) > 0 && (
                                   <span className="bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                                     {conversation.unreadCount}
                                   </span>

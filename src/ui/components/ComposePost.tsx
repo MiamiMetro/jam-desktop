@@ -126,7 +126,7 @@ export function ComposePost({
           aria-label="Go to profile"
         >
           <Avatar size="default" className="pointer-events-none">
-            <AvatarImage src={user?.avatar || ""} alt={user?.username || "You"} />
+            <AvatarImage src={user?.avatar_url || ""} alt={user?.username || "You"} />
             <AvatarFallback className="bg-primary text-primary-foreground">
               {user?.username?.substring(0, 2).toUpperCase() || "U"}
             </AvatarFallback>

@@ -7,39 +7,70 @@ import { useAuthStore } from '@/stores/authStore';
 import { useProfileStore } from './useEnsureProfile';
 import { useConvexAuthStore } from './useConvexAuth';
 
-// Convert Convex profile to User type
-function convertUser(profile: any): User {
+// Convert Convex profile to User type (handles Id<"profiles"> to string conversion)
+function convertUser(profile: {
+  id: string | Id<"profiles">;
+  username: string;
+  display_name?: string;
+  avatar_url?: string;
+  bio?: string;
+  created_at?: string;
+}): User {
   return {
-    id: profile.id || profile._id,
+    id: (typeof profile.id === 'string' ? profile.id : profile.id) as Id<"profiles">,
     username: profile.username,
-    avatar: profile.avatar_url || undefined,
-    display_name: profile.display_name,
-    bio: profile.bio,
-    status: profile.status || 'offline',
-    statusMessage: profile.statusMessage || '',
+    display_name: profile.display_name ?? "",
+    avatar_url: profile.avatar_url ?? "",
+    bio: profile.bio ?? "",
+    created_at: profile.created_at ?? new Date().toISOString(),
   };
 }
 
-// Convert Convex message to Message type
-function convertMessage(message: any): Message {
+// Convert Convex message to UI-friendly Message format
+// Convex Message has: id, conversation_id, sender_id, text, audio_url, created_at
+// UI expects: id, senderId, receiverId, content, audio_url, timestamp, isRead
+function convertMessage(message: Message): {
+  id: string;
+  senderId?: string;
+  receiverId?: string;
+  content?: string;
+  audio_url?: string | null;
+  timestamp?: string;
+  isRead?: boolean;
+} {
   return {
-    id: message.id || message._id,
+    id: message.id,
     senderId: message.sender_id,
-    receiverId: message.receiver_id,
+    receiverId: undefined, // Not available in Convex message
     content: message.text || '',
     audio_url: message.audio_url || null,
-    timestamp: message.created_at || message._creationTime,
-    isRead: message.is_read || false,
+    timestamp: message.created_at,
+    isRead: false, // Not tracked in Convex currently
   };
 }
 
-// Convert Convex conversation to Conversation type
-function convertConversation(conv: any): Conversation {
+// Convert Convex conversation to UI-friendly Conversation format
+// Convex Conversation has: id, other_user, last_message, updated_at
+// UI expects: id, userId, lastMessage, unreadCount
+function convertConversation(conv: Conversation): {
+  id: string;
+  userId: string;
+  lastMessage?: {
+    id: string;
+    senderId?: string;
+    receiverId?: string;
+    content?: string;
+    audio_url?: string | null;
+    timestamp?: string;
+    isRead?: boolean;
+  };
+  unreadCount: number;
+} {
   return {
-    id: conv.id || conv._id,
-    userId: conv.other_user?.id || conv.userId,
+    id: conv.id,
+    userId: conv.other_user?.id || '',
     lastMessage: conv.last_message ? convertMessage(conv.last_message) : undefined,
-    unreadCount: conv.unreadCount || 0,
+    unreadCount: 0, // Not tracked in Convex currently
   };
 }
 
@@ -160,7 +191,9 @@ export const useConversations = (userId: string) => {
   const canQuery = !isGuest && isAuthSet && isProfileReady && userId;
   
   const [cursor, setCursor] = useState<Id<"conversations"> | null | undefined>(null);
-  const [allConversations, setAllConversations] = useState<Conversation[]>([]);
+  // Use UI-friendly conversation type (converted from Convex)
+  type UIConversation = ReturnType<typeof convertConversation>;
+  const [allConversations, setAllConversations] = useState<UIConversation[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   
   // Reset when userId changes
@@ -195,10 +228,10 @@ export const useConversations = (userId: string) => {
     if (cursor !== null && cursor !== undefined && result?.data && canQuery && userId) {
       setAllConversations(prev => {
         // Avoid duplicates by checking if conversation ID already exists
-        const existingIds = new Set(prev.map(c => c.id));
+        const existingIds = new Set(prev.map(c => String(c.id)));
         const newConversations = result.data
           .map(convertConversation)
-          .filter(conv => !existingIds.has(conv.id));
+          .filter(conv => !existingIds.has(String(conv.id)));
         return [...prev, ...newConversations];
       });
     }
@@ -240,7 +273,9 @@ export const useMessages = (userId: string, partnerId: string) => {
   const canQuery = !isGuest && isAuthSet && isProfileReady && userId && partnerId;
   
   const [cursor, setCursor] = useState<Id<"messages"> | null | undefined>(null);
-  const [allMessages, setAllMessages] = useState<Message[]>([]);
+  // Use UI-friendly message type (converted from Convex)
+  type UIMessage = ReturnType<typeof convertMessage>;
+  const [allMessages, setAllMessages] = useState<UIMessage[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   
   // Reset when partner changes
@@ -276,10 +311,10 @@ export const useMessages = (userId: string, partnerId: string) => {
     if (cursor !== null && cursor !== undefined && result?.data && canQuery && partnerId) {
       setAllMessages(prev => {
         // Avoid duplicates by checking if message ID already exists
-        const existingIds = new Set(prev.map(m => m.id));
+        const existingIds = new Set(prev.map(m => String(m.id)));
         const olderMessages = result.data
           .map(convertMessage)
-          .filter(msg => !existingIds.has(msg.id));
+          .filter(msg => !existingIds.has(String(msg.id)));
         // Prepend older messages (they're oldest first from backend)
         return [...olderMessages, ...prev];
       });

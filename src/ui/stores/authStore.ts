@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@/lib/api/types';
+import type { Id } from '../../../convex/_generated/dataModel';
 
 interface AuthState {
   isGuest: boolean;
@@ -39,11 +40,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       // Get user metadata from Supabase session
       const supabaseUser = session.user;
       const user: User = {
-        id: supabaseUser.id,
+        id: supabaseUser.id as Id<"profiles">, // Supabase ID needs to be cast to Convex Id type
         username: supabaseUser.user_metadata?.username || supabaseUser.email?.split('@')[0] || 'user',
-        display_name: supabaseUser.user_metadata?.display_name,
-        avatar: supabaseUser.user_metadata?.avatar_url,
-        bio: supabaseUser.user_metadata?.bio,
+        display_name: supabaseUser.user_metadata?.display_name ?? "",
+        avatar_url: supabaseUser.user_metadata?.avatar_url ?? "",
+        bio: supabaseUser.user_metadata?.bio ?? "",
+        created_at: new Date().toISOString(), // Supabase doesn't provide this, use current time
       };
       
       set({ user, isGuest: false, isLoading: false });
@@ -67,11 +69,12 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       const supabaseUser = data.user;
       const user: User = {
-        id: supabaseUser.id,
+        id: supabaseUser.id as Id<"profiles">, // Supabase ID needs to be cast to Convex Id type
         username: supabaseUser.user_metadata?.username || supabaseUser.email?.split('@')[0] || 'user',
-        display_name: supabaseUser.user_metadata?.display_name,
-        avatar: supabaseUser.user_metadata?.avatar_url,
-        bio: supabaseUser.user_metadata?.bio,
+        display_name: supabaseUser.user_metadata?.display_name ?? "",
+        avatar_url: supabaseUser.user_metadata?.avatar_url ?? "",
+        bio: supabaseUser.user_metadata?.bio ?? "",
+        created_at: new Date().toISOString(), // Supabase doesn't provide this, use current time
       };
       
       set({ user, isGuest: false, isLoading: false });
@@ -106,11 +109,12 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       const supabaseUser = data.user;
       const user: User = {
-        id: supabaseUser.id,
+        id: supabaseUser.id as Id<"profiles">, // Supabase ID needs to be cast to Convex Id type
         username: supabaseUser.user_metadata?.username || username,
-        display_name: supabaseUser.user_metadata?.display_name || display_name,
-        avatar: supabaseUser.user_metadata?.avatar_url,
-        bio: supabaseUser.user_metadata?.bio,
+        display_name: supabaseUser.user_metadata?.display_name || display_name || "",
+        avatar_url: supabaseUser.user_metadata?.avatar_url ?? "",
+        bio: supabaseUser.user_metadata?.bio ?? "",
+        created_at: new Date().toISOString(), // Supabase doesn't provide this, use current time
       };
       
       set({ user, isGuest: false, isLoading: false });
