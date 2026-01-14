@@ -1,10 +1,9 @@
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useConvexAuth } from "convex/react";
 import { useState, useEffect } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { useAuthStore } from '@/stores/authStore';
 import { useProfileStore } from './useEnsureProfile';
-import { useConvexAuthStore } from './useConvexAuth';
 import type { User } from '@/lib/api/types';
 
 // Convert Convex profile to User type
@@ -26,12 +25,12 @@ function convertUser(profile: any): User {
 export const useFriends = (searchQuery?: string) => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
-  const { isAuthSet } = useConvexAuthStore();
+  const { isAuthenticated } = useConvexAuth();
   
   // Only query when fully authenticated AND profile is ready
-  const canQuery = !isGuest && isAuthSet && isProfileReady;
+  const canQuery = !isGuest && isAuthenticated && isProfileReady;
   
-  const [cursor, setCursor] = useState<Id<"friends"> | null | undefined>(null);
+  const [cursor, setCursor] = useState<number | null | undefined>(null);
   const [allFriends, setAllFriends] = useState<User[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [currentSearch, setCurrentSearch] = useState<string | undefined>(searchQuery);
@@ -108,12 +107,12 @@ export const useFriends = (searchQuery?: string) => {
 export const useFriendRequests = () => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
-  const { isAuthSet } = useConvexAuthStore();
+  const { isAuthenticated } = useConvexAuth();
   
   // Only query when fully authenticated AND profile is ready
-  const canQuery = !isGuest && isAuthSet && isProfileReady;
+  const canQuery = !isGuest && isAuthenticated && isProfileReady;
   
-  const [cursor, setCursor] = useState<Id<"friends"> | null | undefined>(null);
+  const [cursor, setCursor] = useState<number | null | undefined>(null);
   const [allRequests, setAllRequests] = useState<User[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   
@@ -177,12 +176,12 @@ export const useRequestFriend = () => {
   
   return {
     mutate: (userId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
-      sendRequest({ friendId: userId as Id<"profiles"> })
+      sendRequest({ targetAccountId: userId as Id<"accounts"> })
         .then(() => options?.onSuccess?.())
         .catch((error) => options?.onError?.(error));
     },
     mutateAsync: async (userId: string) => {
-      await sendRequest({ friendId: userId as Id<"profiles"> });
+      await sendRequest({ targetAccountId: userId as Id<"accounts"> });
     },
     isPending: false,
   };
@@ -193,12 +192,12 @@ export const useAcceptFriend = () => {
   
   return {
     mutate: (userId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
-      acceptRequest({ userId: userId as Id<"profiles"> })
+      acceptRequest({ requesterAccountId: userId as Id<"accounts"> })
         .then(() => options?.onSuccess?.())
         .catch((error) => options?.onError?.(error));
     },
     mutateAsync: async (userId: string) => {
-      await acceptRequest({ userId: userId as Id<"profiles"> });
+      await acceptRequest({ requesterAccountId: userId as Id<"accounts"> });
     },
     isPending: false,
   };
@@ -210,12 +209,12 @@ export const useDeclineFriend = () => {
   
   return {
     mutate: (userId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
-      removeFriend({ userId: userId as Id<"profiles"> })
+      removeFriend({ friendAccountId: userId as Id<"accounts"> })
         .then(() => options?.onSuccess?.())
         .catch((error) => options?.onError?.(error));
     },
     mutateAsync: async (userId: string) => {
-      await removeFriend({ userId: userId as Id<"profiles"> });
+      await removeFriend({ friendAccountId: userId as Id<"accounts"> });
     },
     isPending: false,
   };
@@ -226,12 +225,12 @@ export const useDeleteFriend = () => {
   
   return {
     mutate: (userId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
-      removeFriend({ userId: userId as Id<"profiles"> })
+      removeFriend({ friendAccountId: userId as Id<"accounts"> })
         .then(() => options?.onSuccess?.())
         .catch((error) => options?.onError?.(error));
     },
     mutateAsync: async (userId: string) => {
-      await removeFriend({ userId: userId as Id<"profiles"> });
+      await removeFriend({ friendAccountId: userId as Id<"accounts"> });
     },
     isPending: false,
   };

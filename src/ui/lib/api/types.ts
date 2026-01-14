@@ -1,17 +1,39 @@
-// Shared types for the application
+/**
+ * Re-export types from Convex for frontend use
+ * This provides type safety derived directly from the schema
+ * 
+ * All types are generated from convex/schema.ts - if you need a new type,
+ * add it to convex/types.ts and it will be available here.
+ */
 
-// User type used throughout the app
+// Re-export everything from convex types
+export * from "../../../../convex/types";
+
+
+// ============================================
+// Legacy Aliases (for backward compatibility)
+// These map old type names to new ones
+// ============================================
+
+/**
+ * @deprecated Use ProfileResponse instead
+ */
 export interface User {
-  id: string;
+  id: string;             // Profile ID
+  account_id?: string;    // Account ID (canonical identity)
   username: string;
   avatar?: string;
   display_name?: string;
   bio?: string;
   status?: string;
   statusMessage?: string;
+  friend_count?: number;
+  post_count?: number;
 }
 
-// Post type used in components
+/**
+ * @deprecated Use PostResponse instead
+ */
 export interface Post {
   id: string;
   author: {
@@ -35,7 +57,9 @@ export interface Post {
   isGlobal?: boolean;
 }
 
-// Comment type
+/**
+ * @deprecated Use CommentResponse instead
+ */
 export interface Comment {
   id: string;
   postId: string;
@@ -53,7 +77,9 @@ export interface Comment {
   timestamp: string;
 }
 
-// Message type
+/**
+ * @deprecated Use MessageResponse instead
+ */
 export interface Message {
   id: string;
   senderId?: string;
@@ -64,7 +90,9 @@ export interface Message {
   isRead?: boolean;
 }
 
-// Conversation type
+/**
+ * @deprecated Use ConversationResponse instead
+ */
 export interface Conversation {
   id: string;
   userId: string;

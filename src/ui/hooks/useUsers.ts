@@ -1,16 +1,16 @@
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useConvexAuth } from "convex/react";
 import { useState, useEffect } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { User, Message, Conversation } from '@/lib/api/types';
 import { useAuthStore } from '@/stores/authStore';
 import { useProfileStore } from './useEnsureProfile';
-import { useConvexAuthStore } from './useConvexAuth';
 
 // Convert Convex profile to User type
 function convertUser(profile: any): User {
   return {
     id: profile.id || profile._id,
+    account_id: profile.account_id,
     username: profile.username,
     avatar: profile.avatar_url || undefined,
     display_name: profile.display_name,
@@ -26,7 +26,7 @@ function convertMessage(message: any): Message {
     id: message.id || message._id,
     senderId: message.sender_id,
     receiverId: message.receiver_id,
-    content: message.text || '',
+    content: message.content || '',
     audio_url: message.audio_url || null,
     timestamp: message.created_at || message._creationTime,
     isRead: message.is_read || false,
@@ -154,12 +154,12 @@ export const useAllUsers = (search?: string, enabled: boolean = true) => {
 export const useConversations = (userId: string) => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
-  const { isAuthSet } = useConvexAuthStore();
+  const { isAuthenticated } = useConvexAuth();
   
   // Only query when fully authenticated AND profile is ready
-  const canQuery = !isGuest && isAuthSet && isProfileReady && userId;
+  const canQuery = !isGuest && isAuthenticated && isProfileReady && userId;
   
-  const [cursor, setCursor] = useState<Id<"conversations"> | null | undefined>(null);
+  const [cursor, setCursor] = useState<number | null | undefined>(null);
   const [allConversations, setAllConversations] = useState<Conversation[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   
@@ -172,7 +172,7 @@ export const useConversations = (userId: string) => {
     }
   }, [userId]);
   
-  // Query with current cursor
+  // Query with current cursor (cursor is now a timestamp)
   const result = useQuery(
     api.messages.getConversations,
     canQuery && cursor === null
@@ -206,7 +206,7 @@ export const useConversations = (userId: string) => {
   
   const fetchNextPage = () => {
     if (result?.hasMore && result?.nextCursor) {
-      setCursor(result.nextCursor as Id<"conversations">);
+      setCursor(result.nextCursor);
     }
   };
   
@@ -231,49 +231,49 @@ export const useConversations = (userId: string) => {
  * Get messages with a user (reverse infinite scroll for loading older messages)
  * Supports cursor-based pagination - loads older messages at the top
  */
-export const useMessages = (userId: string, partnerId: string) => {
+export const useMessages = (userId: string, partnerAccountId: string) => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
-  const { isAuthSet } = useConvexAuthStore();
+  const { isAuthenticated } = useConvexAuth();
   
   // Only query when fully authenticated AND profile is ready
-  const canQuery = !isGuest && isAuthSet && isProfileReady && userId && partnerId;
+  const canQuery = !isGuest && isAuthenticated && isProfileReady && userId && partnerAccountId;
   
-  const [cursor, setCursor] = useState<Id<"messages"> | null | undefined>(null);
+  const [cursor, setCursor] = useState<number | null | undefined>(null);
   const [allMessages, setAllMessages] = useState<Message[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   
   // Reset when partner changes
   useEffect(() => {
-    if (partnerId) {
+    if (partnerAccountId) {
       setCursor(null);
       setAllMessages([]);
       setIsInitialLoad(true);
     }
-  }, [partnerId]);
+  }, [partnerAccountId]);
   
-  // Query with current cursor
+  // Query with current cursor (cursor is now a timestamp)
   const result = useQuery(
     api.messages.getWithUser,
     canQuery && cursor === null
-      ? { userId: partnerId as Id<"profiles">, limit: 50 }
+      ? { targetAccountId: partnerAccountId as Id<"accounts">, limit: 50 }
       : canQuery && cursor
-        ? { userId: partnerId as Id<"profiles">, limit: 50, cursor }
+        ? { targetAccountId: partnerAccountId as Id<"accounts">, limit: 50, cursor }
         : "skip"
   );
   
   // Reset messages when cursor is null (first page or partner change)
   useEffect(() => {
-    if (cursor === null && result?.data && canQuery && partnerId) {
+    if (cursor === null && result?.data && canQuery && partnerAccountId) {
       // Messages are already returned oldest first from the backend
       setAllMessages(result.data.map(convertMessage));
       setIsInitialLoad(false);
     }
-  }, [cursor, result?.data, canQuery, partnerId]);
+  }, [cursor, result?.data, canQuery, partnerAccountId]);
   
   // Prepend older messages when cursor changes (loading previous page)
   useEffect(() => {
-    if (cursor !== null && cursor !== undefined && result?.data && canQuery && partnerId) {
+    if (cursor !== null && cursor !== undefined && result?.data && canQuery && partnerAccountId) {
       setAllMessages(prev => {
         // Avoid duplicates by checking if message ID already exists
         const existingIds = new Set(prev.map(m => m.id));
@@ -284,7 +284,7 @@ export const useMessages = (userId: string, partnerId: string) => {
         return [...olderMessages, ...prev];
       });
     }
-  }, [cursor, result?.data, canQuery, partnerId]);
+  }, [cursor, result?.data, canQuery, partnerAccountId]);
   
   const fetchNextPage = () => {
     if (result?.hasMore && result?.nextCursor) {
@@ -314,20 +314,20 @@ export const useSendMessage = () => {
   
   return {
     mutate: (
-      variables: { senderId: string; receiverId: string; content: string },
+      variables: { senderId: string; receiverAccountId: string; content: string },
       options?: { onSuccess?: () => void; onError?: (error: Error) => void }
     ) => {
       sendMessage({
-        recipient_id: variables.receiverId as Id<"profiles">,
-        text: variables.content || undefined,
+        recipientAccountId: variables.receiverAccountId as Id<"accounts">,
+        content: variables.content,
       })
         .then(() => options?.onSuccess?.())
         .catch((error) => options?.onError?.(error));
     },
-    mutateAsync: async (variables: { senderId: string; receiverId: string; content: string }) => {
+    mutateAsync: async (variables: { senderId: string; receiverAccountId: string; content: string }) => {
       const result = await sendMessage({
-        recipient_id: variables.receiverId as Id<"profiles">,
-        text: variables.content || undefined,
+        recipientAccountId: variables.receiverAccountId as Id<"accounts">,
+        content: variables.content,
       });
       return convertMessage(result);
     },

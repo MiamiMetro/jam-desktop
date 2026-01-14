@@ -1,147 +1,175 @@
-import { useEffect, useState, useCallback } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useEffect, useState, useRef } from "react";
+import { useQuery, useMutation, useConvexAuth } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useAuthStore } from "@/stores/authStore";
-import { supabase } from "@/lib/supabase";
 import { create } from "zustand";
 
-// Store to track if profile is ready
+// Store to track account/profile state
 interface ProfileState {
+  isAccountReady: boolean;
   isProfileReady: boolean;
-  supabaseId: string | null;
+  needsOnboarding: boolean;
+  accountId: string | null;
+  setAccountReady: (ready: boolean) => void;
   setProfileReady: (ready: boolean) => void;
-  setSupabaseId: (id: string | null) => void;
+  setNeedsOnboarding: (needs: boolean) => void;
+  setAccountId: (id: string | null) => void;
+  reset: () => void;
 }
 
 export const useProfileStore = create<ProfileState>((set) => ({
+  isAccountReady: false,
   isProfileReady: false,
-  supabaseId: null,
+  needsOnboarding: false,
+  accountId: null,
+  setAccountReady: (ready) => set({ isAccountReady: ready }),
   setProfileReady: (ready) => set({ isProfileReady: ready }),
-  setSupabaseId: (id) => set({ supabaseId: id }),
+  setNeedsOnboarding: (needs) => set({ needsOnboarding: needs }),
+  setAccountId: (id) => set({ accountId: id }),
+  reset: () => set({ 
+    isAccountReady: false, 
+    isProfileReady: false, 
+    needsOnboarding: false, 
+    accountId: null 
+  }),
 }));
 
 /**
- * Hook that ensures a Convex profile exists for the authenticated user.
- * After Supabase signup, this creates the corresponding Convex profile.
- * Uses getBySupabaseId which doesn't require Convex auth to be configured.
+ * Hook that ensures a Convex account and profile exists for the authenticated user.
+ * Flow:
+ * 1. After Supabase auth, call `ensureAccount` to create account + authAccounts
+ * 2. If no profile exists, automatically create one using the username from auth store
+ * 3. Profile is created immediately - no separate onboarding
  */
 export function useEnsureProfile() {
+  const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth();
   const { user, isGuest, setUser } = useAuthStore();
-  const { setProfileReady, setSupabaseId } = useProfileStore();
-  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
-  const [hasAttemptedCreate, setHasAttemptedCreate] = useState(false);
-  const [localSupabaseId, setLocalSupabaseId] = useState<string | null>(null);
+  const profileStore = useProfileStore();
   
-  // Get Supabase ID from session
-  useEffect(() => {
-    if (isGuest) {
-      setLocalSupabaseId(null);
-      setSupabaseId(null);
-      return;
-    }
-    
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user?.id) {
-        setLocalSupabaseId(session.user.id);
-        setSupabaseId(session.user.id);
-      }
-    });
-  }, [isGuest, setSupabaseId]);
+  const [isEnsuring, setIsEnsuring] = useState(false);
+  const [hasCheckedAccount, setHasCheckedAccount] = useState(false);
+  const ensuredRef = useRef(false);
   
-  // Use getBySupabaseId which doesn't require Convex auth to be configured
-  const existingProfile = useQuery(
-    api.profiles.getBySupabaseId,
-    localSupabaseId ? { supabaseId: localSupabaseId } : "skip"
-  );
-  
+  const ensureAccount = useMutation(api.profiles.ensureAccount);
   const createProfile = useMutation(api.profiles.createProfile);
   
-  // Reset state when user changes
-  useEffect(() => {
-    if (isGuest) {
-      setProfileReady(false);
-      setHasAttemptedCreate(false);
-    }
-  }, [isGuest, setProfileReady]);
+  // Query for current account/profile (only after we know account might exist)
+  const accountInfo = useQuery(
+    api.profiles.getMyAccount,
+    isAuthenticated && profileStore.isAccountReady ? {} : "skip"
+  );
   
-  // Mark profile as ready when it exists
+  // Reset state when auth changes (logout)
   useEffect(() => {
-    if (existingProfile) {
-      setProfileReady(true);
-      // Update user ID to match Convex profile ID
-      if (user && existingProfile.id !== user.id) {
-        setUser({
-          ...user,
-          id: existingProfile.id,
-          username: existingProfile.username || user.username,
-          display_name: existingProfile.display_name || user.display_name,
-          avatar: existingProfile.avatar_url || user.avatar,
-        });
-      }
+    if (isGuest || !isAuthenticated) {
+      profileStore.reset();
+      setHasCheckedAccount(false);
+      ensuredRef.current = false;
     }
-  }, [existingProfile, setProfileReady, user, setUser]);
+  }, [isGuest, isAuthenticated]);
   
-  const ensureProfile = useCallback(async () => {
-    // Skip if guest, no supabase ID, already creating, profile exists, or already attempted
-    if (isGuest || !localSupabaseId || isCreatingProfile || existingProfile || hasAttemptedCreate) {
+  // Ensure account and profile exist after Supabase auth
+  useEffect(() => {
+    if (isGuest || !isAuthenticated || isAuthLoading || isEnsuring || ensuredRef.current) {
       return;
     }
     
-    // existingProfile is undefined while loading
-    if (existingProfile === undefined) {
-      return; // Still loading
-    }
+    const doEnsure = async () => {
+      try {
+        setIsEnsuring(true);
+        ensuredRef.current = true;
+        
+        // Step 1: Ensure account exists
+        const result = await ensureAccount({});
+        
+        profileStore.setAccountId(result.accountId);
+        profileStore.setAccountReady(true);
+        
+        if (result.hasProfile && result.profile) {
+          // Profile already exists
+          profileStore.setProfileReady(true);
+          profileStore.setNeedsOnboarding(false);
+          
+          // Update auth store with Convex profile data
+          setUser({
+            ...user,
+            id: result.profile.id,
+            username: result.profile.username,
+            display_name: result.profile.display_name,
+            avatar: result.profile.avatar_url,
+            bio: result.profile.bio,
+          });
+        } else {
+          // No profile - create one automatically using username from signup
+          const username = user?.username;
+          
+          if (username) {
+            try {
+              const profile = await createProfile({
+                username: username,
+              });
+              
+              profileStore.setProfileReady(true);
+              profileStore.setNeedsOnboarding(false);
+              
+              // Update auth store with created profile
+              setUser({
+                ...user,
+                id: profile.id,
+                username: profile.username,
+                display_name: profile.display_name,
+                avatar: profile.avatar_url,
+                bio: profile.bio,
+              });
+            } catch (profileError: any) {
+              console.error("[EnsureProfile] Error creating profile:", profileError);
+              // If username taken or invalid, set needs onboarding
+              profileStore.setProfileReady(false);
+              profileStore.setNeedsOnboarding(true);
+            }
+          } else {
+            // No username available - needs onboarding
+            profileStore.setProfileReady(false);
+            profileStore.setNeedsOnboarding(true);
+          }
+        }
+        
+        setHasCheckedAccount(true);
+      } catch (error) {
+        console.error("[EnsureProfile] Error ensuring account:", error);
+        ensuredRef.current = false; // Allow retry on error
+        setHasCheckedAccount(true);
+      } finally {
+        setIsEnsuring(false);
+      }
+    };
     
-    // Profile doesn't exist - need to create it
-    try {
-      setIsCreatingProfile(true);
-      setHasAttemptedCreate(true);
-      
-      // Get current Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) {
-        return;
-      }
-      
-      const supabaseUser = session.user;
-      const username = supabaseUser.user_metadata?.username || 
-                       supabaseUser.email?.split('@')[0] || 
-                       `user_${supabaseUser.id.substring(0, 8)}`;
-      
-      const newProfile = await createProfile({
-        supabaseId: supabaseUser.id,
-        username,
-        displayName: supabaseUser.user_metadata?.display_name || username,
-        avatarUrl: supabaseUser.user_metadata?.avatar_url,
-      });
-      
-      // Update the auth store with the new profile
-      if (newProfile && user) {
-        setUser({
-          ...user,
-          id: newProfile.id,
-          username: newProfile.username || user.username,
-        });
-      }
-      
-      setProfileReady(true);
-    } catch (error: any) {
-      // Profile might already exist (race condition) - that's OK
-      if (error.message?.includes("already exists")) {
-        setProfileReady(true);
-      }
-    } finally {
-      setIsCreatingProfile(false);
-    }
-  }, [isGuest, localSupabaseId, existingProfile, isCreatingProfile, hasAttemptedCreate, createProfile, user, setUser, setProfileReady]);
+    doEnsure();
+  }, [isAuthenticated, isAuthLoading, isGuest, isEnsuring, ensureAccount, createProfile, user?.username]);
   
+  // Update state when accountInfo changes (for profile updates)
   useEffect(() => {
-    ensureProfile();
-  }, [ensureProfile]);
+    if (accountInfo?.hasProfile && accountInfo?.profile && !profileStore.isProfileReady) {
+      profileStore.setProfileReady(true);
+      profileStore.setNeedsOnboarding(false);
+      
+      // Keep auth store in sync
+      setUser({
+        ...user,
+        id: accountInfo.profile.id,
+        username: accountInfo.profile.username,
+        display_name: accountInfo.profile.display_name,
+        avatar: accountInfo.profile.avatar_url,
+        bio: accountInfo.profile.bio,
+      });
+    }
+  }, [accountInfo?.hasProfile, accountInfo?.profile?.id]);
   
   return {
-    isLoading: (localSupabaseId && existingProfile === undefined) && !isGuest,
-    profile: existingProfile,
-    isProfileReady: useProfileStore((s) => s.isProfileReady),
+    isLoading: isAuthLoading || isEnsuring || (isAuthenticated && !hasCheckedAccount),
+    isAccountReady: profileStore.isAccountReady,
+    isProfileReady: profileStore.isProfileReady,
+    needsOnboarding: profileStore.needsOnboarding,
+    profile: accountInfo?.profile ?? null,
   };
 }

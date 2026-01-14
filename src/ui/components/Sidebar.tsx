@@ -578,7 +578,7 @@ function Sidebar() {
                     if (!messageInput.trim() || !user || !selectedChatPartner) return;
                     sendMessageMutation.mutate({
                       senderId: user.id,
-                      receiverId: selectedChatPartner,
+                      receiverAccountId: selectedChatPartner,
                       content: messageInput.trim(),
                     });
                     setMessageInput("");
