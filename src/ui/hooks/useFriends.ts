@@ -246,3 +246,30 @@ export const useDeleteFriend = () => {
     isPending: false,
   };
 };
+
+/**
+ * Get pending friend requests sent by the current user
+ * Returns a set of user IDs for easy lookup
+ */
+export const useSentFriendRequests = () => {
+  const { isGuest } = useAuthStore();
+  const { isProfileReady } = useProfileStore();
+  const { isAuthSet } = useConvexAuthStore();
+  
+  // Only query when fully authenticated AND profile is ready
+  const canQuery = !isGuest && isAuthSet && isProfileReady;
+  
+  const sentRequests = useQuery(
+    api.friends.getSentRequests,
+    canQuery ? {} : "skip"
+  );
+  
+  // Convert to Set for O(1) lookup
+  const sentRequestIds = new Set(sentRequests || []);
+  
+  return {
+    data: sentRequestIds,
+    isLoading: sentRequests === undefined && canQuery,
+    hasPendingRequest: (userId: Id<"profiles"> | string) => sentRequestIds.has(userId as Id<"profiles">),
+  };
+};
