@@ -94,7 +94,6 @@ export const create = mutation({
 
     const postId = await ctx.db.insert("posts", {
       authorId: profile._id,
-      parentId: undefined,
       text: text,
       audioUrl: audioUrl,
     });
@@ -141,26 +140,24 @@ export const getFeed = query({
     const limit = args.limit ?? 20;
     const currentProfile = await getCurrentProfile(ctx);
 
-    // Get all top-level posts (no parentId), ordered by creation time desc
+    // Get all posts (all posts are top-level), ordered by creation time desc
     let posts: Doc<"posts">[] = [];
     
     if (args.cursor) {
       // Get the cursor post to find its creation time
       const cursorPost = await ctx.db.get(args.cursor);
       if (cursorPost) {
-        // Get posts older than the cursor
+        // Get posts older than the cursor (all posts are top-level now)
         posts = await ctx.db
           .query("posts")
-          .withIndex("by_parent", (q) => q.eq("parentId", undefined))
           .order("desc")
           .filter((q) => q.lt(q.field("_creationTime"), cursorPost._creationTime))
           .take(limit + 1);
       }
     } else {
-      // First page - no cursor
+      // First page - no cursor (all posts are top-level now)
       posts = await ctx.db
         .query("posts")
-        .withIndex("by_parent", (q) => q.eq("parentId", undefined))
         .order("desc")
         .take(limit + 1);
     }
@@ -214,12 +211,7 @@ export const getByUsername = query({
           .query("posts")
           .withIndex("by_author", (q) => q.eq("authorId", author._id))
           .order("desc")
-          .filter((q) => 
-            q.and(
-              q.eq(q.field("parentId"), undefined),
-              q.lt(q.field("_creationTime"), cursorPost._creationTime)
-            )
-          )
+          .filter((q) => q.lt(q.field("_creationTime"), cursorPost._creationTime))
           .take(limit + 1);
       }
     } else {
@@ -227,7 +219,6 @@ export const getByUsername = query({
         .query("posts")
         .withIndex("by_author", (q) => q.eq("authorId", author._id))
         .order("desc")
-        .filter((q) => q.eq(q.field("parentId"), undefined))
         .take(limit + 1);
     }
 
@@ -295,21 +286,7 @@ export const remove = mutation({
       await ctx.db.delete(comment._id);
     }
 
-    // Also delete legacy comments (posts with parentId) for migration period
-    const legacyComments = await ctx.db
-      .query("posts")
-      .withIndex("by_parent", (q) => q.eq("parentId", args.postId))
-      .collect();
-    for (const comment of legacyComments) {
-      const legacyCommentLikes = await ctx.db
-        .query("likes")
-        .withIndex("by_post", (q) => q.eq("postId", comment._id))
-        .collect();
-      for (const like of legacyCommentLikes) {
-        await ctx.db.delete(like._id);
-      }
-      await ctx.db.delete(comment._id);
-    }
+    // Comments are now in the separate comments table, handled above
 
     // Delete the post
     await ctx.db.delete(args.postId);
@@ -390,179 +367,6 @@ export const getLikes = query({
     );
 
     return users.filter(Boolean);
-  },
-});
-
-/**
- * Get comments for a post
- * DEPRECATED: Use comments.getByPost instead for threaded comments
- * This is kept for backward compatibility during migration
- */
-export const getComments = query({
-  args: {
-    postId: v.id("posts"),
-    limit: v.optional(v.number()),
-    cursor: v.optional(v.string()), // Changed to string to support path-based cursors
-    order: v.optional(v.union(v.literal("asc"), v.literal("desc"))),
-  },
-  handler: async (ctx, args) => {
-    const limit = args.limit ?? 20;
-    const currentProfile = await getCurrentProfile(ctx);
-
-    const post = await ctx.db.get(args.postId);
-    if (!post) {
-      return { data: [], hasMore: false, nextCursor: null };
-    }
-
-    // Use new comments table with path-based ordering
-    let comments: Doc<"comments">[] = [];
-
-    if (args.cursor) {
-      comments = await ctx.db
-        .query("comments")
-        .withIndex("by_post_and_path", (q) => q.eq("postId", args.postId))
-        .filter((q) => q.gt(q.field("path"), args.cursor!))
-        .take(limit + 1);
-    } else {
-      comments = await ctx.db
-        .query("comments")
-        .withIndex("by_post_and_path", (q) => q.eq("postId", args.postId))
-        .take(limit + 1);
-    }
-
-    const hasMore = comments.length > limit;
-    const data = comments.slice(0, limit);
-
-    const formattedComments = await Promise.all(
-      data.map(async (comment) => {
-        const author = (await ctx.db.get(comment.authorId)) as Doc<"profiles"> | null;
-
-        // Get likes count from new comment_likes table
-        const likes = await ctx.db
-          .query("comment_likes")
-          .withIndex("by_comment", (q) => q.eq("commentId", comment._id))
-          .collect();
-
-        // Check if current user liked this comment
-        let isLiked = false;
-        if (currentProfile) {
-          const like = await ctx.db
-            .query("comment_likes")
-            .withIndex("by_comment_and_user", (q) =>
-              q.eq("commentId", comment._id).eq("userId", currentProfile._id)
-            )
-            .first();
-          isLiked = !!like;
-        }
-
-        return {
-          id: comment._id,
-          author_id: comment.authorId,
-          parent_id: comment.parentId ?? null,
-          path: comment.path,
-          depth: comment.depth,
-          author: author
-            ? {
-                id: author._id,
-                username: author.username,
-                display_name: author.displayName ?? "",
-                avatar_url: author.avatarUrl ?? "",
-              }
-            : null,
-          text: comment.text ?? "",
-          audio_url: comment.audioUrl ?? "",
-          created_at: new Date(comment._creationTime).toISOString(),
-          likes_count: likes.length,
-          is_liked: isLiked,
-        };
-      })
-    );
-
-    return {
-      data: formattedComments,
-      hasMore,
-      nextCursor: hasMore && data.length > 0 ? data[data.length - 1].path : null,
-    };
-  },
-});
-
-/**
- * Create a comment on a post
- * DEPRECATED: Use comments.create instead for threaded comments
- * This is kept for backward compatibility during migration
- */
-export const createComment = mutation({
-  args: {
-    postId: v.id("posts"),
-    content: v.optional(v.string()),
-    audio_url: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const profile = await requireAuth(ctx);
-    
-    // Rate limit: 10 comments per minute
-    await checkRateLimit(ctx, "createComment", profile._id);
-
-    const post = await ctx.db.get(args.postId);
-    if (!post) {
-      throw new Error("Post not found");
-    }
-
-    // Sanitize and validate inputs
-    const content = sanitizeText(args.content);
-    const audioUrl = args.audio_url;
-
-    validateTextLength(content, MAX_LENGTHS.COMMENT_TEXT, "Comment text");
-    validateUrl(audioUrl);
-
-    // Content or audio must be provided
-    if (!content && !audioUrl) {
-      throw new Error("Comment must have either content or audio_url");
-    }
-
-    // Count existing top-level comments to generate path
-    const existingTopLevel = await ctx.db
-      .query("comments")
-      .withIndex("by_post", (q) => q.eq("postId", args.postId))
-      .filter((q) => q.eq(q.field("depth"), 0))
-      .collect();
-
-    const path = String(existingTopLevel.length + 1).padStart(4, "0");
-
-    // Create comment in the new comments table
-    const commentId = await ctx.db.insert("comments", {
-      postId: args.postId,
-      authorId: profile._id,
-      parentId: undefined,
-      path,
-      depth: 0,
-      text: content,
-      audioUrl: audioUrl,
-    });
-
-    const comment = await ctx.db.get(commentId);
-    if (!comment) {
-      throw new Error("Failed to create comment");
-    }
-
-    return {
-      id: comment._id,
-      author_id: comment.authorId,
-      parent_id: null,
-      path: comment.path,
-      depth: 0,
-      author: {
-        id: profile._id,
-        username: profile.username,
-        display_name: profile.displayName ?? "",
-        avatar_url: profile.avatarUrl ?? "",
-      },
-      text: comment.text ?? "",
-      audio_url: comment.audioUrl ?? "",
-      created_at: new Date(comment._creationTime).toISOString(),
-      likes_count: 0,
-      is_liked: false,
-    };
   },
 });
 
