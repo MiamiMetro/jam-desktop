@@ -12,7 +12,7 @@ interface AuthState {
   logout: () => Promise<void>;
   checkSession: () => Promise<void>;
   loginWithCredentials: (email: string, password: string) => Promise<void>;
-  registerWithCredentials: (email: string, password: string, username: string) => Promise<void>;
+  registerWithCredentials: (email: string, password: string, username: string, display_name?: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -80,7 +80,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       throw error;
     }
   },
-  registerWithCredentials: async (email: string, password: string, username: string) => {
+  registerWithCredentials: async (email: string, password: string, username: string, display_name?: string) => {
     try {
       set({ isLoading: true });
       const { data, error } = await supabase.auth.signUp({
@@ -88,7 +88,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         password,
         options: {
           data: {
-            username, // Store username in Supabase metadata for reference
+            username,
+            display_name,
           },
         },
       });
@@ -103,11 +104,13 @@ export const useAuthStore = create<AuthState>((set) => ({
         throw { message: 'Registration failed', status: 400 };
       }
 
-      // Set user with username - profile will be created by useEnsureProfile
       const supabaseUser = data.user;
       const user: User = {
         id: supabaseUser.id,
-        username: username,
+        username: supabaseUser.user_metadata?.username || username,
+        display_name: supabaseUser.user_metadata?.display_name || display_name,
+        avatar: supabaseUser.user_metadata?.avatar_url,
+        bio: supabaseUser.user_metadata?.bio,
       };
       
       set({ user, isGuest: false, isLoading: false });

@@ -11,7 +11,8 @@ export interface FrontendPost {
     username: string;
     avatar?: string;
   };
-  content: string;
+  content?: string;
+  text?: string;
   audio_url?: string | null;
   audioFile?: {
     url: string;
@@ -31,11 +32,13 @@ export interface FrontendComment {
   id: string;
   postId: string;
   parentId?: string | null;
+  path?: string;
+  depth?: number;
   author: {
     username: string;
     avatar?: string;
   };
-  content: string;
+  content?: string;
   audio_url?: string | null;
   audioFile?: {
     url: string;
@@ -54,15 +57,21 @@ function convertPost(post: any): FrontendPost {
     id: post.id || post._id,
     author: {
       username: post.author?.username || 'unknown',
-      avatar: post.author?.avatar_url || undefined,
+      avatar: post.author?.avatar_url || post.author?.avatar || undefined,
     },
-    content: post.content || '',
-    audio_url: null,
-    timestamp: new Date(post.created_at || post.createdAt || post._creationTime),
-    likes: post.likes_count ?? post.likeCount ?? 0,
-    isLiked: post.is_liked ?? false,
+    content: post.text || post.content || '',
+    text: post.text,
+    audio_url: post.audio_url || null,
+    audioFile: post.audio_url ? {
+      url: post.audio_url,
+      title: 'Audio',
+      duration: 0,
+    } : undefined,
+    timestamp: new Date(post.created_at || post._creationTime),
+    likes: post.likes_count || 0,
+    isLiked: post.is_liked || false,
     shares: 0,
-    comments: post.comments_count ?? post.commentCount ?? 0,
+    comments: post.comments_count || 0,
     community: undefined,
     isGlobal: true,
   };
@@ -72,18 +81,25 @@ function convertPost(post: any): FrontendPost {
 function convertComment(comment: any): FrontendComment {
   return {
     id: comment.id || comment._id,
-    postId: comment.post_id || comment.postId,
-    parentId: comment.parent_id ?? comment.parentId ?? null,
+    postId: comment.post_id || comment.postId || comment.id || comment._id,
+    parentId: comment.parent_id ?? null,
+    path: comment.path,
+    depth: comment.depth ?? 0,
     author: {
       username: comment.author?.username || 'unknown',
-      avatar: comment.author?.avatar_url || undefined,
+      avatar: comment.author?.avatar_url || comment.author?.avatar || undefined,
     },
-    content: comment.content || '',
-    audio_url: null,
-    timestamp: new Date(comment.created_at || comment.createdAt || comment._creationTime),
-    isLiked: comment.is_liked ?? false,
-    likes: comment.likes_count ?? comment.likeCount ?? 0,
-    repliesCount: comment.replies_count ?? comment.replyCount ?? 0,
+    content: comment.text || comment.content || '',
+    audio_url: comment.audio_url || null,
+    audioFile: comment.audio_url ? {
+      url: comment.audio_url,
+      title: 'Audio',
+      duration: 0,
+    } : undefined,
+    timestamp: new Date(comment.created_at || comment._creationTime),
+    isLiked: comment.is_liked || false,
+    likes: comment.likes_count || 0,
+    repliesCount: comment.replies_count || 0,
   };
 }
 
@@ -92,7 +108,7 @@ function convertComment(comment: any): FrontendComment {
  * Supports infinite scroll by accumulating posts across pages
  */
 export const usePosts = () => {
-  const [cursor, setCursor] = useState<number | null | undefined>(null);
+  const [cursor, setCursor] = useState<Id<"posts"> | null | undefined>(null);
   const [allPosts, setAllPosts] = useState<FrontendPost[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   
@@ -198,13 +214,13 @@ export const usePost = (postId: string) => {
  * Supports infinite scroll
  */
 export const useComments = (postId: string) => {
-  const [cursor, setCursor] = useState<number | null | undefined>(null);
+  const [cursor, setCursor] = useState<string | null | undefined>(null);
   const [allComments, setAllComments] = useState<FrontendComment[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   
-  // Query with current cursor - using comments.getByPost
+  // Query with current cursor
   const result = useQuery(
-    api.comments.getByPost,
+    api.posts.getComments,
     postId && cursor === null 
       ? { postId: postId as Id<"posts">, limit: 20 } 
       : postId && cursor 
@@ -264,7 +280,7 @@ export const useComments = (postId: string) => {
 };
 
 export const useCreateComment = () => {
-  const createComment = useMutation(api.comments.create);
+  const createComment = useMutation(api.posts.createComment);
   const { user } = useAuthStore();
   
   return {
@@ -279,7 +295,7 @@ export const useCreateComment = () => {
       
       createComment({
         postId: variables.postId as Id<"posts">,
-        content: variables.content,
+        content: variables.content || undefined,
       })
         .then(() => options?.onSuccess?.())
         .catch((error) => options?.onError?.(error));
@@ -289,7 +305,7 @@ export const useCreateComment = () => {
       
       const result = await createComment({
         postId: variables.postId as Id<"posts">,
-        content: variables.content,
+        content: variables.content || undefined,
       });
       
       return convertComment(result);
@@ -306,12 +322,12 @@ export const useCreatePost = () => {
       variables: { content: string; audioFile?: File | null },
       options?: { onSuccess?: () => void; onError?: (error: Error) => void }
     ) => {
-      createPost({ content: variables.content })
+      createPost({ text: variables.content || undefined })
         .then(() => options?.onSuccess?.())
         .catch((error) => options?.onError?.(error));
     },
     mutateAsync: async (variables: { content: string; audioFile?: File | null }) => {
-      const result = await createPost({ content: variables.content });
+      const result = await createPost({ text: variables.content || undefined });
       return convertPost(result);
     },
     isPending: false,
@@ -366,7 +382,22 @@ export const useToggleCommentLike = () => {
     },
     mutateAsync: async (commentId: string) => {
       const result = await toggleLike({ commentId: commentId as Id<"comments"> });
-      return convertComment(result);
+      // Convert the comment result to FrontendComment format
+      return convertComment({
+        id: result.id,
+        post_id: result.post_id,
+        author_id: result.author_id,
+        parent_id: result.parent_id,
+        path: result.path,
+        depth: result.depth,
+        text: result.text,
+        audio_url: result.audio_url,
+        created_at: result.created_at,
+        author: result.author,
+        likes_count: result.likes_count,
+        replies_count: result.replies_count,
+        is_liked: result.is_liked,
+      });
     },
     isPending: false,
   };
@@ -377,7 +408,7 @@ export const useToggleCommentLike = () => {
  * Supports infinite scroll
  */
 export const useUserPosts = (username: string) => {
-  const [cursor, setCursor] = useState<number | null | undefined>(null);
+  const [cursor, setCursor] = useState<Id<"posts"> | null | undefined>(null);
   const [allPosts, setAllPosts] = useState<FrontendPost[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   
