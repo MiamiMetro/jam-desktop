@@ -222,7 +222,7 @@ export const useComments = (postId: string) => {
   
   // Query with current cursor
   const result = useQuery(
-    api.posts.getComments,
+    api.comments.getByPost,
     postId && cursor === null 
       ? { postId: postId as Id<"posts">, limit: 20 } 
       : postId && cursor 
@@ -282,7 +282,7 @@ export const useComments = (postId: string) => {
 };
 
 export const useCreateComment = () => {
-  const createComment = useMutation(api.posts.createComment);
+  const createComment = useMutation(api.comments.create);
   const { user } = useAuthStore();
   
   return {
@@ -297,7 +297,7 @@ export const useCreateComment = () => {
       
       createComment({
         postId: variables.postId as Id<"posts">,
-        content: variables.content || undefined,
+        text: variables.content || undefined,
       })
         .then(() => options?.onSuccess?.())
         .catch((error) => options?.onError?.(error));
@@ -307,9 +307,9 @@ export const useCreateComment = () => {
       
       const result = await createComment({
         postId: variables.postId as Id<"posts">,
-        content: variables.content || undefined,
+        text: variables.content || undefined,
       });
-      
+
       return convertComment(result);
     },
     isPending: false,

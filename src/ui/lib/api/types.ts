@@ -18,7 +18,7 @@ type PostFeedReturn = FunctionReturnType<typeof api.posts.getFeed>;
 export type PostFeedItem = PostFeedReturn["data"][number];
 
 // Infer Comment type from comments query (Convex format - single source of truth)
-type CommentsQueryReturn = FunctionReturnType<typeof api.posts.getComments>;
+type CommentsQueryReturn = FunctionReturnType<typeof api.comments.getByPost>;
 export type Comment = CommentsQueryReturn["data"][number];
 
 // Infer Message type from messages query (Convex format - single source of truth)

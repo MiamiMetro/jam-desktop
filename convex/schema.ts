@@ -18,13 +18,10 @@ export default defineSchema({
   // Posts table - top-level posts only (comments moved to separate table)
   posts: defineTable({
     authorId: v.id("profiles"),
-    // DEPRECATED: parentId kept for migration, will be removed
-    parentId: v.optional(v.id("posts")),
     text: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
   })
-    .index("by_author", ["authorId"])
-    .index("by_parent", ["parentId"]),
+    .index("by_author", ["authorId"]),
 
   // Comments table - threaded comments with path-based ordering
   // Path format: "0001.0002.0003" enables efficient tree operations
