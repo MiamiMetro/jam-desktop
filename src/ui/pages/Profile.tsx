@@ -12,11 +12,12 @@ import {
   Share2,
   Users,
   ChevronRight,
+  UserMinus,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useUser } from "@/hooks/useUsers";
 import { useUserPosts, type FrontendPost } from "@/hooks/usePosts";
-import { useFriends, useRequestFriend } from "@/hooks/useFriends";
+import { useFriends, useRequestFriend, useSentFriendRequests, useDeleteFriend } from "@/hooks/useFriends";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
@@ -49,6 +50,8 @@ function Profile() {
   }, [inView, hasMorePosts, isLoadingMorePosts, isLoading, fetchMorePosts]);
   
   const requestFriendMutation = useRequestFriend();
+  const deleteFriendMutation = useDeleteFriend();
+  const { hasPendingRequest } = useSentFriendRequests();
   const [showFriends, setShowFriends] = useState(false);
   
   // Infinite scroll for friends list: detect when user scrolls near bottom
@@ -66,6 +69,7 @@ function Profile() {
   
   const isOwnProfile = currentUser?.username === profileUser?.username;
   const isFriend = friends.some((friend: User) => friend.id === profileUser?.id);
+  const hasSentRequest = profileUser?.id ? hasPendingRequest(profileUser.id) : false;
   
   // Status functionality removed - not available in Convex User type
 
@@ -76,6 +80,24 @@ function Profile() {
       await requestFriendMutation.mutateAsync(profileUser.id);
     } catch (error) {
       console.error('Error sending friend request:', error);
+    }
+  };
+
+  const handleCancelRequest = async () => {
+    if (isGuest || !profileUser?.id) return;
+    try {
+      await deleteFriendMutation.mutateAsync(profileUser.id);
+    } catch (error) {
+      console.error('Error canceling friend request:', error);
+    }
+  };
+
+  const handleUnfriend = async () => {
+    if (isGuest || !profileUser?.id) return;
+    try {
+      await deleteFriendMutation.mutateAsync(profileUser.id);
+    } catch (error) {
+      console.error('Error unfriending:', error);
     }
   };
 
@@ -144,16 +166,36 @@ function Profile() {
               <span>Friends</span>
             </button>
           </div>
-          {!isOwnProfile && !isGuest && !isFriend && (
+          {!isOwnProfile && !isGuest && (
             <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                onClick={handleAddFriend}
-                size="sm"
-                variant="outline"
-              >
-                <UserPlus className="h-4 w-4 mr-2" />
-                Add Friend
-              </Button>
+              {isFriend ? (
+                <Button
+                  onClick={handleUnfriend}
+                  size="sm"
+                  variant="outline"
+                >
+                  <UserMinus className="h-4 w-4 mr-2" />
+                  Unfriend
+                </Button>
+              ) : hasSentRequest ? (
+                <Button
+                  onClick={handleCancelRequest}
+                  size="sm"
+                  variant="outline"
+                >
+                  <UserMinus className="h-4 w-4 mr-2" />
+                  Cancel Request
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleAddFriend}
+                  size="sm"
+                  variant="outline"
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Add Friend
+                </Button>
+              )}
             </div>
           )}
         </div>

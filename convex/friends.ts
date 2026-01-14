@@ -313,3 +313,25 @@ export const getRequests = query({
   },
 });
 
+/**
+ * Get pending friend requests sent by me
+ * Equivalent to GET /friends/sent-requests
+ * Returns a simple list of user IDs that have pending requests from the current user
+ */
+export const getSentRequests = query({
+  args: {},
+  handler: async (ctx) => {
+    const profile = await requireAuth(ctx);
+
+    // Get pending requests where current user is the userId (sender)
+    const requests = await ctx.db
+      .query("friends")
+      .withIndex("by_user", (q) => q.eq("userId", profile._id))
+      .filter((q) => q.eq(q.field("status"), "pending"))
+      .collect();
+
+    // Return just the friend IDs for easy lookup
+    return requests.map((request) => request.friendId);
+  },
+});
+
