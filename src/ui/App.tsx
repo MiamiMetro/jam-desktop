@@ -1,12 +1,9 @@
 import { useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import MainPage from "@/pages/MainPage";
-import { useEnsureProfile } from "./hooks/useEnsureProfile";
 
 function App() {
-  // This hook auto-creates account + profile after signup
-  useEnsureProfile();
-
+  // Clear jam room ID on app startup (when app reopens, user should not be in a room)
   useEffect(() => {
     localStorage.removeItem("currentJamRoomId");
   }, []);

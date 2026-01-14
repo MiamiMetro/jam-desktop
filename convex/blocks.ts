@@ -1,39 +1,35 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { 
-  requireViewerWithProfile, 
-  executeBlockSideEffects,
-} from "./helpers";
+import { requireAuth } from "./helpers";
 
 /**
  * Block a user
- * Also removes friendship and cancels pending requests
+ * Equivalent to POST /blocks/:userId
  */
 export const block = mutation({
   args: {
-    targetAccountId: v.id("accounts"),
-    reason: v.optional(v.string()),
+    userId: v.id("profiles"),
   },
   handler: async (ctx, args) => {
-    const { account } = await requireViewerWithProfile(ctx);
+    const profile = await requireAuth(ctx);
 
     // Cannot block self
-    if (account._id === args.targetAccountId) {
+    if (profile._id === args.userId) {
       throw new Error("You cannot block yourself");
     }
 
-    // Check if target account exists
-    const targetAccount = await ctx.db.get(args.targetAccountId);
-    if (!targetAccount || targetAccount.status !== "active") {
+    // Check if user exists
+    const userToBlock = await ctx.db.get(args.userId);
+    if (!userToBlock) {
       throw new Error("User not found");
     }
 
     // Check if already blocked
     const existingBlock = await ctx.db
       .query("blocks")
-      .withIndex("by_blocker_blocked", (q) =>
-        q.eq("blockerId", account._id).eq("blockedId", args.targetAccountId)
+      .withIndex("by_blocker_and_blocked", (q) =>
+        q.eq("blockerId", profile._id).eq("blockedId", args.userId)
       )
       .first();
 
@@ -43,14 +39,9 @@ export const block = mutation({
 
     // Create block
     const blockId = await ctx.db.insert("blocks", {
-      blockerId: account._id,
-      blockedId: args.targetAccountId,
-      createdAt: Date.now(),
-      reason: args.reason,
+      blockerId: profile._id,
+      blockedId: args.userId,
     });
-
-    // Execute side-effects (remove friendship, cancel requests)
-    await executeBlockSideEffects(ctx, account._id, args.targetAccountId);
 
     const block = await ctx.db.get(blockId);
 
@@ -58,26 +49,27 @@ export const block = mutation({
       id: block!._id,
       blocker_id: block!.blockerId,
       blocked_id: block!.blockedId,
-      created_at: new Date(block!.createdAt).toISOString(),
+      created_at: new Date(block!._creationTime).toISOString(),
     };
   },
 });
 
 /**
  * Unblock a user
+ * Equivalent to DELETE /blocks/:userId
  */
 export const unblock = mutation({
   args: {
-    targetAccountId: v.id("accounts"),
+    userId: v.id("profiles"),
   },
   handler: async (ctx, args) => {
-    const { account } = await requireViewerWithProfile(ctx);
+    const profile = await requireAuth(ctx);
 
     // Find the block
     const block = await ctx.db
       .query("blocks")
-      .withIndex("by_blocker_blocked", (q) =>
-        q.eq("blockerId", account._id).eq("blockedId", args.targetAccountId)
+      .withIndex("by_blocker_and_blocked", (q) =>
+        q.eq("blockerId", profile._id).eq("blockedId", args.userId)
       )
       .first();
 
@@ -93,31 +85,35 @@ export const unblock = mutation({
 
 /**
  * Get list of blocked users
+ * Equivalent to GET /blocks
  * Supports cursor-based pagination
  */
 export const list = query({
   args: {
     limit: v.optional(v.number()),
-    cursor: v.optional(v.number()), // createdAt timestamp
+    cursor: v.optional(v.id("blocks")),
   },
   handler: async (ctx, args) => {
-    const { account } = await requireViewerWithProfile(ctx);
+    const profile = await requireAuth(ctx);
     const limit = args.limit ?? 50;
 
     // Get blocks where current user is the blocker
     let blocks: Doc<"blocks">[] = [];
     
     if (args.cursor) {
-      blocks = await ctx.db
-        .query("blocks")
-        .withIndex("by_blocker", (q) => q.eq("blockerId", account._id))
-        .order("desc")
-        .filter((q) => q.lt(q.field("createdAt"), args.cursor!))
-        .take(limit + 1);
+      const cursorBlock = await ctx.db.get(args.cursor);
+      if (cursorBlock) {
+        blocks = await ctx.db
+          .query("blocks")
+          .withIndex("by_blocker", (q) => q.eq("blockerId", profile._id))
+          .order("desc")
+          .filter((q) => q.lt(q.field("_creationTime"), cursorBlock._creationTime))
+          .take(limit + 1);
+      }
     } else {
       blocks = await ctx.db
         .query("blocks")
-        .withIndex("by_blocker", (q) => q.eq("blockerId", account._id))
+        .withIndex("by_blocker", (q) => q.eq("blockerId", profile._id))
         .order("desc")
         .take(limit + 1);
     }
@@ -127,72 +123,31 @@ export const list = query({
 
     const formattedBlocks = await Promise.all(
       data.map(async (block) => {
-        const blockedProfile = await ctx.db
-          .query("profiles")
-          .withIndex("by_accountId", (q) => q.eq("accountId", block.blockedId))
-          .first();
-
-        if (!blockedProfile) return null;
+        const blocked = await ctx.db.get(block.blockedId);
+        if (!blocked) return null;
 
         return {
-          account_id: block.blockedId,
-          id: blockedProfile._id,
-          username: blockedProfile.username,
-          display_name: blockedProfile.displayName ?? "",
-          avatar_url: blockedProfile.avatarUrl ?? "",
-          blocked_at: new Date(block.createdAt).toISOString(),
-          _createdAt: block.createdAt,
+          id: blocked._id,
+          username: blocked.username,
+          display_name: blocked.displayName ?? "",
+          avatar_url: blocked.avatarUrl ?? "",
+          blocked_at: new Date(block._creationTime).toISOString(),
         };
       })
     );
 
-    const validBlocks = formattedBlocks.filter((b): b is NonNullable<typeof b> => b !== null);
-
     // Get total count
     const allBlocks = await ctx.db
       .query("blocks")
-      .withIndex("by_blocker", (q) => q.eq("blockerId", account._id))
+      .withIndex("by_blocker", (q) => q.eq("blockerId", profile._id))
       .collect();
 
     return {
-      data: validBlocks.map(({ _createdAt, ...rest }) => rest),
+      data: formattedBlocks.filter(Boolean),
       hasMore,
       total: allBlocks.length,
-      nextCursor: hasMore && data.length > 0 ? data[data.length - 1].createdAt : null,
+      nextCursor: hasMore && data.length > 0 ? data[data.length - 1]._id : null,
     };
   },
 });
 
-/**
- * Check if a user is blocked (by me or has blocked me)
- */
-export const checkBlocked = query({
-  args: {
-    targetAccountId: v.id("accounts"),
-  },
-  handler: async (ctx, args) => {
-    const { account } = await requireViewerWithProfile(ctx);
-
-    // Check if I blocked them
-    const blockedByMe = await ctx.db
-      .query("blocks")
-      .withIndex("by_blocker_blocked", (q) =>
-        q.eq("blockerId", account._id).eq("blockedId", args.targetAccountId)
-      )
-      .first();
-
-    // Check if they blocked me
-    const blockedByThem = await ctx.db
-      .query("blocks")
-      .withIndex("by_blocker_blocked", (q) =>
-        q.eq("blockerId", args.targetAccountId).eq("blockedId", account._id)
-      )
-      .first();
-
-    return {
-      blockedByMe: !!blockedByMe,
-      blockedByThem: !!blockedByThem,
-      isBlocked: !!blockedByMe || !!blockedByThem,
-    };
-  },
-});

@@ -1,117 +1,70 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
-import { 
-  requireViewerWithProfile,
-  getCanonicalPair,
-  isBlocked,
-  incrementFriendCount,
-} from "./helpers";
+import type { Doc } from "./_generated/dataModel";
+import { requireAuth } from "./helpers";
 import { checkRateLimit } from "./rateLimiter";
 
 /**
  * Send a friend request
- * Uses canonical ordering (userA < userB) to prevent duplicates
+ * Equivalent to POST /friends/:userId/request
  */
 export const sendRequest = mutation({
   args: {
-    targetAccountId: v.id("accounts"),
+    friendId: v.id("profiles"),
   },
   handler: async (ctx, args) => {
-    const { account, profile } = await requireViewerWithProfile(ctx);
+    const profile = await requireAuth(ctx);
     
     // Rate limit: 10 friend requests per minute
     await checkRateLimit(ctx, "friendRequest", profile._id);
 
     // Cannot send request to self
-    if (account._id === args.targetAccountId) {
+    if (profile._id === args.friendId) {
       throw new Error("You cannot send friend request to yourself");
     }
 
-    // Check if target account exists and has a profile
-    const targetAccount = await ctx.db.get(args.targetAccountId);
-    if (!targetAccount || targetAccount.status !== "active") {
+    // Check if friend exists
+    const friend = await ctx.db.get(args.friendId);
+    if (!friend) {
       throw new Error("User not found");
     }
 
-    const targetProfile = await ctx.db
-      .query("profiles")
-      .withIndex("by_accountId", (q) => q.eq("accountId", args.targetAccountId))
-      .first();
-    if (!targetProfile) {
-      throw new Error("User not found");
-    }
-
-    // Check if blocked
-    const blocked = await isBlocked(ctx, account._id, args.targetAccountId);
-    if (blocked) {
-      throw new Error("Cannot send friend request to this user");
-    }
-
-    const { userA, userB } = getCanonicalPair(account._id, args.targetAccountId);
-
-    // Check if already friends
-    const existingFriend = await ctx.db
+    // Check if friendship already exists (in either direction)
+    const existing1 = await ctx.db
       .query("friends")
-      .withIndex("by_userA_userB", (q) => q.eq("userA", userA).eq("userB", userB))
+      .withIndex("by_user_and_friend", (q) =>
+        q.eq("userId", profile._id).eq("friendId", args.friendId)
+      )
       .first();
 
-    if (existingFriend) {
-      throw new Error("Users are already friends");
-    }
-
-    // Check for existing request
-    const existingRequest = await ctx.db
-      .query("friendRequests")
-      .withIndex("by_userA_userB", (q) => q.eq("userA", userA).eq("userB", userB))
+    const existing2 = await ctx.db
+      .query("friends")
+      .withIndex("by_user_and_friend", (q) =>
+        q.eq("userId", args.friendId).eq("friendId", profile._id)
+      )
       .first();
 
-    if (existingRequest) {
-      if (existingRequest.status === "pending") {
-        if (existingRequest.requesterId === account._id) {
-          throw new Error("Friend request already sent");
-        } else {
-          // The other user already sent us a request - auto-accept it
-          await ctx.db.patch(existingRequest._id, {
-            status: "accepted",
-            resolvedAt: Date.now(),
-            resolvedBy: account._id,
-          });
-
-          // Create the friendship
-          await ctx.db.insert("friends", {
-            userA,
-            userB,
-            createdAt: Date.now(),
-          });
-
-          // Increment friend counts
-          await incrementFriendCount(ctx, account._id);
-          await incrementFriendCount(ctx, args.targetAccountId);
-
-          return { message: "Friend request accepted", status: "accepted" };
-        }
-      } else if (existingRequest.status === "rejected") {
-        // Allow re-request after rejection
-        await ctx.db.patch(existingRequest._id, {
-          status: "pending",
-          requesterId: account._id,
-          createdAt: Date.now(),
-          resolvedAt: undefined,
-          resolvedBy: undefined,
-        });
-        return { message: "Friend request sent", status: "pending" };
-      } else {
-        throw new Error("Cannot send friend request at this time");
+    if (existing1) {
+      if (existing1.status === "accepted") {
+        throw new Error("Users are already friends");
       }
+      throw new Error("Friend request already sent");
     }
 
-    // Create new friend request
-    await ctx.db.insert("friendRequests", {
-      userA,
-      userB,
-      requesterId: account._id,
+    if (existing2) {
+      if (existing2.status === "accepted") {
+        throw new Error("Users are already friends");
+      }
+      // The other user sent a request, accept it instead
+      await ctx.db.patch(existing2._id, { status: "accepted" });
+      return { message: "Friend request accepted", status: "accepted" };
+    }
+
+    // Create friend request
+    await ctx.db.insert("friends", {
+      userId: profile._id,
+      friendId: args.friendId,
       status: "pending",
-      createdAt: Date.now(),
     });
 
     return { message: "Friend request sent", status: "pending" };
@@ -120,23 +73,24 @@ export const sendRequest = mutation({
 
 /**
  * Accept a friend request
+ * Equivalent to POST /friends/:userId/accept
  */
 export const acceptRequest = mutation({
   args: {
-    requesterAccountId: v.id("accounts"),
+    userId: v.id("profiles"),
   },
   handler: async (ctx, args) => {
-    const { account, profile } = await requireViewerWithProfile(ctx);
+    const profile = await requireAuth(ctx);
     
     // Rate limit: 10 friend actions per minute
     await checkRateLimit(ctx, "friendRequest", profile._id);
 
-    const { userA, userB } = getCanonicalPair(account._id, args.requesterAccountId);
-
-    // Find pending request where args.requesterAccountId is the requester
+    // Find pending request where args.userId is the requester
     const request = await ctx.db
-      .query("friendRequests")
-      .withIndex("by_userA_userB", (q) => q.eq("userA", userA).eq("userB", userB))
+      .query("friends")
+      .withIndex("by_user_and_friend", (q) =>
+        q.eq("userId", args.userId).eq("friendId", profile._id)
+      )
       .first();
 
     if (!request) {
@@ -147,126 +101,52 @@ export const acceptRequest = mutation({
       throw new Error("Friend request is not pending");
     }
 
-    if (request.requesterId !== args.requesterAccountId) {
-      throw new Error("Friend request not found");
-    }
-
-    // Update request to accepted
-    await ctx.db.patch(request._id, {
-      status: "accepted",
-      resolvedAt: Date.now(),
-      resolvedBy: account._id,
-    });
-
-    // Create the friendship
-    await ctx.db.insert("friends", {
-      userA,
-      userB,
-      createdAt: Date.now(),
-    });
-
-    // Increment friend counts
-    await incrementFriendCount(ctx, account._id);
-    await incrementFriendCount(ctx, args.requesterAccountId);
+    // Update to accepted
+    await ctx.db.patch(request._id, { status: "accepted" });
 
     return { message: "Friend request accepted", status: "accepted" };
   },
 });
 
 /**
- * Reject a friend request
- */
-export const rejectRequest = mutation({
-  args: {
-    requesterAccountId: v.id("accounts"),
-  },
-  handler: async (ctx, args) => {
-    const { account, profile } = await requireViewerWithProfile(ctx);
-    
-    // Rate limit: 10 friend actions per minute
-    await checkRateLimit(ctx, "friendRequest", profile._id);
-
-    const { userA, userB } = getCanonicalPair(account._id, args.requesterAccountId);
-
-    const request = await ctx.db
-      .query("friendRequests")
-      .withIndex("by_userA_userB", (q) => q.eq("userA", userA).eq("userB", userB))
-      .first();
-
-    if (!request || request.status !== "pending" || request.requesterId !== args.requesterAccountId) {
-      throw new Error("Friend request not found");
-    }
-
-    await ctx.db.patch(request._id, {
-      status: "rejected",
-      resolvedAt: Date.now(),
-      resolvedBy: account._id,
-    });
-
-    return { message: "Friend request rejected" };
-  },
-});
-
-/**
- * Cancel a friend request you sent
- */
-export const cancelRequest = mutation({
-  args: {
-    targetAccountId: v.id("accounts"),
-  },
-  handler: async (ctx, args) => {
-    const { account } = await requireViewerWithProfile(ctx);
-    
-    const { userA, userB } = getCanonicalPair(account._id, args.targetAccountId);
-
-    const request = await ctx.db
-      .query("friendRequests")
-      .withIndex("by_userA_userB", (q) => q.eq("userA", userA).eq("userB", userB))
-      .first();
-
-    if (!request || request.status !== "pending" || request.requesterId !== account._id) {
-      throw new Error("Friend request not found");
-    }
-
-    await ctx.db.patch(request._id, {
-      status: "cancelled",
-      resolvedAt: Date.now(),
-      resolvedBy: account._id,
-    });
-
-    return { message: "Friend request cancelled" };
-  },
-});
-
-/**
- * Remove a friend
+ * Remove a friend or cancel a friend request
+ * Equivalent to DELETE /friends/:userId
  */
 export const remove = mutation({
   args: {
-    friendAccountId: v.id("accounts"),
+    userId: v.id("profiles"),
   },
   handler: async (ctx, args) => {
-    const { account, profile } = await requireViewerWithProfile(ctx);
+    const profile = await requireAuth(ctx);
     
     // Rate limit: 10 friend actions per minute
     await checkRateLimit(ctx, "friendRequest", profile._id);
 
-    const { userA, userB } = getCanonicalPair(account._id, args.friendAccountId);
-
-    const friendship = await ctx.db
+    // Find friendship in either direction
+    const friendship1 = await ctx.db
       .query("friends")
-      .withIndex("by_userA_userB", (q) => q.eq("userA", userA).eq("userB", userB))
+      .withIndex("by_user_and_friend", (q) =>
+        q.eq("userId", profile._id).eq("friendId", args.userId)
+      )
       .first();
 
-    if (!friendship) {
+    const friendship2 = await ctx.db
+      .query("friends")
+      .withIndex("by_user_and_friend", (q) =>
+        q.eq("userId", args.userId).eq("friendId", profile._id)
+      )
+      .first();
+
+    if (!friendship1 && !friendship2) {
       throw new Error("Friendship not found");
     }
 
-    await ctx.db.delete(friendship._id);
-
-    // Decrement friend counts
-    await incrementFriendCount(ctx, account._id, -1);
-    await incrementFriendCount(ctx, args.friendAccountId, -1);
+    if (friendship1) {
+      await ctx.db.delete(friendship1._id);
+    }
+    if (friendship2) {
+      await ctx.db.delete(friendship2._id);
+    }
 
     return { message: "Friend removed successfully" };
   },
@@ -274,61 +154,72 @@ export const remove = mutation({
 
 /**
  * Get list of all friends (accepted only)
+ * Equivalent to GET /friends
  * Supports cursor-based pagination and search
  */
 export const list = query({
   args: {
     limit: v.optional(v.number()),
-    cursor: v.optional(v.number()), // createdAt timestamp
+    cursor: v.optional(v.id("friends")),
     search: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { account } = await requireViewerWithProfile(ctx);
+    const profile = await requireAuth(ctx);
     const limit = args.limit ?? 50;
 
-    // Get friendships where user is userA
-    const friendshipsA = await ctx.db
+    // Get friendships where user is userId
+    const friendships1 = await ctx.db
       .query("friends")
-      .withIndex("by_userA", (q) => q.eq("userA", account._id))
+      .withIndex("by_user", (q) => q.eq("userId", profile._id))
+      .filter((q) => q.eq(q.field("status"), "accepted"))
       .collect();
 
-    // Get friendships where user is userB
-    const friendshipsB = await ctx.db
+    // Get friendships where user is friendId
+    const friendships2 = await ctx.db
       .query("friends")
-      .withIndex("by_userB", (q) => q.eq("userB", account._id))
+      .withIndex("by_friend", (q) => q.eq("friendId", profile._id))
+      .filter((q) => q.eq(q.field("status"), "accepted"))
       .collect();
 
-    const allFriendships = [...friendshipsA, ...friendshipsB].sort(
-      (a, b) => b.createdAt - a.createdAt
+    // Combine and sort by creation time
+    const allFriendships = [...friendships1, ...friendships2].sort(
+      (a, b) => b._creationTime - a._creationTime
     );
 
-    // Enrich with profile data
-    const enrichedFriends = await Promise.all(
-      allFriendships.map(async (friendship) => {
-        const friendAccountId = friendship.userA === account._id 
-          ? friendship.userB 
-          : friendship.userA;
-        
-        const friendProfile = await ctx.db
-          .query("profiles")
-          .withIndex("by_accountId", (q) => q.eq("accountId", friendAccountId))
-          .first();
+    // Apply cursor if provided
+    let startIndex = 0;
+    if (args.cursor) {
+      const cursorIndex = allFriendships.findIndex((f) => f._id === args.cursor);
+      if (cursorIndex !== -1) {
+        startIndex = cursorIndex + 1;
+      }
+    }
 
-        if (!friendProfile) return null;
+    const paginatedFriendships = allFriendships.slice(startIndex, startIndex + limit + 1);
+    const hasMore = paginatedFriendships.length > limit;
+    const dataFriendships = paginatedFriendships.slice(0, limit);
+
+    const friends = await Promise.all(
+      dataFriendships.map(async (friendship) => {
+        const friendId =
+          friendship.userId === profile._id
+            ? friendship.friendId
+            : friendship.userId;
+        const friend = await ctx.db.get(friendId);
+        if (!friend) return null;
 
         return {
-          account_id: friendAccountId,
-          id: friendProfile._id,
-          username: friendProfile.username,
-          display_name: friendProfile.displayName ?? "",
-          avatar_url: friendProfile.avatarUrl ?? "",
-          friends_since: new Date(friendship.createdAt).toISOString(),
-          _createdAt: friendship.createdAt,
+          id: friend._id,
+          username: friend.username,
+          display_name: friend.displayName ?? "",
+          avatar_url: friend.avatarUrl ?? "",
+          friends_since: new Date(friendship._creationTime).toISOString(),
+          _friendshipId: friendship._id, // For cursor
         };
       })
     );
 
-    let validFriends = enrichedFriends.filter((f): f is NonNullable<typeof f> => f !== null);
+    let validFriends = friends.filter((f): f is NonNullable<typeof f> => f !== null);
 
     // Apply search filter if provided
     if (args.search) {
@@ -340,23 +231,12 @@ export const list = query({
       );
     }
 
-    // Apply cursor pagination
-    let startIndex = 0;
-    if (args.cursor) {
-      startIndex = validFriends.findIndex((f) => f._createdAt < args.cursor!) ;
-      if (startIndex === -1) startIndex = validFriends.length;
-    }
-
-    const paginatedFriends = validFriends.slice(startIndex, startIndex + limit + 1);
-    const hasMore = paginatedFriends.length > limit;
-    const dataFriends = paginatedFriends.slice(0, limit);
-
     return {
-      data: dataFriends.map(({ _createdAt, ...rest }) => rest),
+      data: validFriends.map(({ _friendshipId, ...rest }) => rest),
       hasMore,
-      total: validFriends.length,
-      nextCursor: hasMore && dataFriends.length > 0 
-        ? dataFriends[dataFriends.length - 1]._createdAt 
+      total: allFriendships.length,
+      nextCursor: hasMore && dataFriendships.length > 0 
+        ? dataFriendships[dataFriendships.length - 1]._id 
         : null,
     };
   },
@@ -364,125 +244,72 @@ export const list = query({
 
 /**
  * Get pending friend requests (requests sent to me)
+ * Equivalent to GET /friends/requests
  * Supports cursor-based pagination
  */
 export const getRequests = query({
   args: {
     limit: v.optional(v.number()),
-    cursor: v.optional(v.number()), // createdAt timestamp
+    cursor: v.optional(v.id("friends")),
   },
   handler: async (ctx, args) => {
-    const { account } = await requireViewerWithProfile(ctx);
+    const profile = await requireAuth(ctx);
     const limit = args.limit ?? 20;
 
-    // Get requests where current user is NOT the requester (i.e., they're receiving)
-    // Need to check both userA and userB positions
-    const requestsA = await ctx.db
-      .query("friendRequests")
-      .withIndex("by_userA", (q) => q.eq("userA", account._id))
-      .collect();
-
-    const requestsB = await ctx.db
-      .query("friendRequests")
-      .withIndex("by_userB", (q) => q.eq("userB", account._id))
-      .collect();
-
-    // Filter to only pending requests where current user is NOT the requester
-    const pendingRequests = [...requestsA, ...requestsB]
-      .filter((r) => r.status === "pending" && r.requesterId !== account._id)
-      .sort((a, b) => b.createdAt - a.createdAt);
-
-    // Enrich with requester profile
-    const enrichedRequests = await Promise.all(
-      pendingRequests.map(async (request) => {
-        const requesterProfile = await ctx.db
-          .query("profiles")
-          .withIndex("by_accountId", (q) => q.eq("accountId", request.requesterId))
-          .first();
-
-        if (!requesterProfile) return null;
-
-        return {
-          account_id: request.requesterId,
-          id: requesterProfile._id,
-          username: requesterProfile.username,
-          display_name: requesterProfile.displayName ?? "",
-          avatar_url: requesterProfile.avatarUrl ?? "",
-          requested_at: new Date(request.createdAt).toISOString(),
-          _createdAt: request.createdAt,
-        };
-      })
-    );
-
-    const validRequests = enrichedRequests.filter((r): r is NonNullable<typeof r> => r !== null);
-
-    // Apply cursor pagination
-    let startIndex = 0;
+    // Get pending requests where current user is the friendId (recipient)
+    let requests: Doc<"friends">[] = [];
+    
     if (args.cursor) {
-      startIndex = validRequests.findIndex((r) => r._createdAt < args.cursor!);
-      if (startIndex === -1) startIndex = validRequests.length;
+      const cursorRequest = await ctx.db.get(args.cursor);
+      if (cursorRequest) {
+        requests = await ctx.db
+          .query("friends")
+          .withIndex("by_friend", (q) => q.eq("friendId", profile._id))
+          .filter((q) => q.eq(q.field("status"), "pending"))
+          .order("desc")
+          .filter((q) => q.lt(q.field("_creationTime"), cursorRequest._creationTime))
+          .take(limit + 1);
+      }
+    } else {
+      requests = await ctx.db
+        .query("friends")
+        .withIndex("by_friend", (q) => q.eq("friendId", profile._id))
+        .filter((q) => q.eq(q.field("status"), "pending"))
+        .order("desc")
+        .take(limit + 1);
     }
 
-    const paginatedRequests = validRequests.slice(startIndex, startIndex + limit + 1);
-    const hasMore = paginatedRequests.length > limit;
-    const dataRequests = paginatedRequests.slice(0, limit);
+    const hasMore = requests.length > limit;
+    const data = requests.slice(0, limit);
 
-    return {
-      data: dataRequests.map(({ _createdAt, ...rest }) => rest),
-      hasMore,
-      total: validRequests.length,
-      nextCursor: hasMore && dataRequests.length > 0 
-        ? dataRequests[dataRequests.length - 1]._createdAt 
-        : null,
-    };
-  },
-});
+    // Get total count
+    const allRequests = await ctx.db
+      .query("friends")
+      .withIndex("by_friend", (q) => q.eq("friendId", profile._id))
+      .filter((q) => q.eq(q.field("status"), "pending"))
+      .collect();
 
-/**
- * Get friend requests I've sent
- */
-export const getSentRequests = query({
-  args: {
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const { account } = await requireViewerWithProfile(ctx);
-    const limit = args.limit ?? 20;
-
-    // Get requests where current user IS the requester
-    const requests = await ctx.db
-      .query("friendRequests")
-      .withIndex("by_requesterId_status", (q) => 
-        q.eq("requesterId", account._id).eq("status", "pending")
-      )
-      .take(limit);
-
-    const enrichedRequests = await Promise.all(
-      requests.map(async (request) => {
-        const targetAccountId = request.userA === account._id 
-          ? request.userB 
-          : request.userA;
-
-        const targetProfile = await ctx.db
-          .query("profiles")
-          .withIndex("by_accountId", (q) => q.eq("accountId", targetAccountId))
-          .first();
-
-        if (!targetProfile) return null;
+    const formattedRequests = await Promise.all(
+      data.map(async (request) => {
+        const user = await ctx.db.get(request.userId);
+        if (!user) return null;
 
         return {
-          account_id: targetAccountId,
-          id: targetProfile._id,
-          username: targetProfile.username,
-          display_name: targetProfile.displayName ?? "",
-          avatar_url: targetProfile.avatarUrl ?? "",
-          sent_at: new Date(request.createdAt).toISOString(),
+          id: user._id,
+          username: user.username,
+          display_name: user.displayName ?? "",
+          avatar_url: user.avatarUrl ?? "",
+          requested_at: new Date(request._creationTime).toISOString(),
         };
       })
     );
 
     return {
-      data: enrichedRequests.filter(Boolean),
+      data: formattedRequests.filter(Boolean),
+      hasMore,
+      total: allRequests.length,
+      nextCursor: hasMore && data.length > 0 ? data[data.length - 1]._id : null,
     };
   },
 });
+

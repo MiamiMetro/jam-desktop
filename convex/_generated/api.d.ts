@@ -17,7 +17,6 @@ import type * as messages from "../messages.js";
 import type * as posts from "../posts.js";
 import type * as profiles from "../profiles.js";
 import type * as rateLimiter from "../rateLimiter.js";
-import type * as types from "../types.js";
 import type * as users from "../users.js";
 
 import type {
@@ -36,7 +35,6 @@ declare const fullApi: ApiFromModules<{
   posts: typeof posts;
   profiles: typeof profiles;
   rateLimiter: typeof rateLimiter;
-  types: typeof types;
   users: typeof users;
 }>;
 

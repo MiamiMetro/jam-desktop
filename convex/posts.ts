@@ -2,13 +2,11 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id, Doc } from "./_generated/dataModel";
 import { 
-  getViewer,
-  requireViewerWithProfile,
-  isFriend,
+  getCurrentProfile, 
+  requireAuth,
   validateTextLength,
+  validateUrl,
   sanitizeText,
-  incrementPostLikeCount,
-  incrementPostCount,
   MAX_LENGTHS,
 } from "./helpers";
 import { checkRateLimit } from "./rateLimiter";
@@ -16,22 +14,32 @@ import { checkRateLimit } from "./rateLimiter";
 // Helper to format a post for API response
 async function formatPost(
   ctx: any,
-  post: Doc<"posts">,
-  currentAccountId?: Id<"accounts">
+  post: any,
+  currentUserId?: Id<"profiles">
 ) {
-  // Get author profile
-  const authorProfile = await ctx.db
-    .query("profiles")
-    .withIndex("by_accountId", (q: any) => q.eq("accountId", post.authorId))
-    .first();
+  const author = await ctx.db.get(post.authorId);
+
+  // Get likes count
+  const likes = await ctx.db
+    .query("likes")
+    .withIndex("by_post", (q: any) => q.eq("postId", post._id))
+    .collect();
+  const likesCount = likes.length;
+
+  // Get comments count from the new comments table
+  const comments = await ctx.db
+    .query("comments")
+    .withIndex("by_post", (q: any) => q.eq("postId", post._id))
+    .collect();
+  const commentsCount = comments.length;
 
   // Check if current user liked this post
   let isLiked = false;
-  if (currentAccountId) {
+  if (currentUserId) {
     const like = await ctx.db
-      .query("postLikes")
-      .withIndex("by_post_account", (q: any) =>
-        q.eq("postId", post._id).eq("accountId", currentAccountId)
+      .query("likes")
+      .withIndex("by_post_and_user", (q: any) =>
+        q.eq("postId", post._id).eq("userId", currentUserId)
       )
       .first();
     isLiked = !!like;
@@ -40,23 +48,20 @@ async function formatPost(
   return {
     id: post._id,
     author_id: post.authorId,
-    content: post.content,
-    media_urls: post.mediaUrls ?? [],
-    visibility: post.visibility,
-    created_at: new Date(post.createdAt).toISOString(),
-    author: authorProfile
+    text: post.text ?? "",
+    audio_url: post.audioUrl ?? "",
+    created_at: new Date(post._creationTime).toISOString(),
+    author: author
       ? {
-          id: authorProfile._id,
-          account_id: authorProfile.accountId,
-          username: authorProfile.username,
-          display_name: authorProfile.displayName ?? "",
-          avatar_url: authorProfile.avatarUrl ?? "",
+          id: author._id,
+          username: author.username,
+          display_name: author.displayName ?? "",
+          avatar_url: author.avatarUrl ?? "",
         }
       : null,
-    likes_count: post.likeCount,
-    comments_count: post.commentCount,
+    likes_count: likesCount,
+    comments_count: commentsCount,
     is_liked: isLiked,
-    is_deleted: !!post.deletedAt,
   };
 }
 
@@ -66,42 +71,40 @@ async function formatPost(
  */
 export const create = mutation({
   args: {
-    content: v.string(),
-    visibility: v.optional(v.union(v.literal("public"), v.literal("friends"), v.literal("private"))),
+    text: v.optional(v.string()),
+    audio_url: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { account, profile } = await requireViewerWithProfile(ctx);
+    const profile = await requireAuth(ctx);
     
     // Rate limit: 5 posts per minute
     await checkRateLimit(ctx, "createPost", profile._id);
 
     // Sanitize and validate inputs
-    const content = sanitizeText(args.content);
+    const text = sanitizeText(args.text);
+    const audioUrl = args.audio_url;
     
-    if (!content) {
-      throw new Error("Post content is required");
+    validateTextLength(text, MAX_LENGTHS.POST_TEXT, "Post text");
+    validateUrl(audioUrl);
+
+    // Text or audio must be provided
+    if (!text && !audioUrl) {
+      throw new Error("Post must have either text or audio");
     }
-    
-    validateTextLength(content, MAX_LENGTHS.POST_TEXT, "Post content");
 
     const postId = await ctx.db.insert("posts", {
-      authorId: account._id,
-      content: content,
-      visibility: args.visibility ?? "public",
-      createdAt: Date.now(),
-      likeCount: 0,
-      commentCount: 0,
+      authorId: profile._id,
+      parentId: undefined,
+      text: text,
+      audioUrl: audioUrl,
     });
-
-    // Increment post count
-    await incrementPostCount(ctx, account._id);
 
     const post = await ctx.db.get(postId);
     if (!post) {
       throw new Error("Failed to create post");
     }
 
-    return await formatPost(ctx, post, account._id);
+    return await formatPost(ctx, post, profile._id);
   },
 });
 
@@ -115,85 +118,64 @@ export const getById = query({
   },
   handler: async (ctx, args) => {
     const post = await ctx.db.get(args.postId);
-    if (!post || post.deletedAt) {
+    if (!post) {
       return null;
     }
 
-    const viewer = await getViewer(ctx);
-    return await formatPost(ctx, post, viewer?.account._id);
+    const currentProfile = await getCurrentProfile(ctx);
+    return await formatPost(ctx, post, currentProfile?._id);
   },
 });
 
 /**
- * Get feed (public posts + friends' posts if authenticated)
+ * Get feed (all top-level posts)
  * Equivalent to GET /posts/feed
  * Supports cursor-based pagination
  */
 export const getFeed = query({
   args: {
     limit: v.optional(v.number()),
-    cursor: v.optional(v.number()), // createdAt timestamp for cursor
+    cursor: v.optional(v.id("posts")),
   },
   handler: async (ctx, args) => {
     const limit = args.limit ?? 20;
-    const viewer = await getViewer(ctx);
+    const currentProfile = await getCurrentProfile(ctx);
 
-    // Get public posts
-    let postsQuery = ctx.db
-      .query("posts")
-      .withIndex("by_createdAt")
-      .order("desc");
-
+    // Get all top-level posts (no parentId), ordered by creation time desc
     let posts: Doc<"posts">[] = [];
-
+    
     if (args.cursor) {
-      posts = await postsQuery
-        .filter((q) => 
-          q.and(
-            q.lt(q.field("createdAt"), args.cursor!),
-            q.eq(q.field("deletedAt"), undefined)
-          )
-        )
-        .take(limit + 1);
-    } else {
-      posts = await postsQuery
-        .filter((q) => q.eq(q.field("deletedAt"), undefined))
-        .take(limit + 1);
-    }
-
-    // Filter by visibility
-    const visiblePosts: Doc<"posts">[] = [];
-    for (const post of posts) {
-      if (post.visibility === "public") {
-        visiblePosts.push(post);
-      } else if (viewer && post.visibility === "friends") {
-        // Check if viewer is friends with author or is the author
-        if (post.authorId === viewer.account._id) {
-          visiblePosts.push(post);
-        } else {
-          const areFriends = await isFriend(ctx, viewer.account._id, post.authorId);
-          if (areFriends) {
-            visiblePosts.push(post);
-          }
-        }
-      } else if (viewer && post.visibility === "private" && post.authorId === viewer.account._id) {
-        visiblePosts.push(post);
+      // Get the cursor post to find its creation time
+      const cursorPost = await ctx.db.get(args.cursor);
+      if (cursorPost) {
+        // Get posts older than the cursor
+        posts = await ctx.db
+          .query("posts")
+          .withIndex("by_parent", (q) => q.eq("parentId", undefined))
+          .order("desc")
+          .filter((q) => q.lt(q.field("_creationTime"), cursorPost._creationTime))
+          .take(limit + 1);
       }
-      
-      if (visiblePosts.length > limit) break;
+    } else {
+      // First page - no cursor
+      posts = await ctx.db
+        .query("posts")
+        .withIndex("by_parent", (q) => q.eq("parentId", undefined))
+        .order("desc")
+        .take(limit + 1);
     }
 
-    const hasMore = visiblePosts.length > limit;
-    const data = visiblePosts.slice(0, limit);
+    const hasMore = posts.length > limit;
+    const data = posts.slice(0, limit);
 
     const formattedPosts = await Promise.all(
-      data.map((post) => formatPost(ctx, post, viewer?.account._id))
+      data.map((post) => formatPost(ctx, post, currentProfile?._id))
     );
 
     return {
       data: formattedPosts,
       hasMore,
-      nextCursor: hasMore && data.length > 0 ? data[data.length - 1].createdAt : null,
+      nextCursor: hasMore ? data[data.length - 1]._id : null,
     };
   },
 });
@@ -207,74 +189,65 @@ export const getByUsername = query({
   args: {
     username: v.string(),
     limit: v.optional(v.number()),
-    cursor: v.optional(v.number()), // createdAt timestamp
+    cursor: v.optional(v.id("posts")),
   },
   handler: async (ctx, args) => {
     const limit = args.limit ?? 20;
-    const viewer = await getViewer(ctx);
+    const currentProfile = await getCurrentProfile(ctx);
 
-    // Find the user's profile
-    const authorProfile = await ctx.db
+    // Find the user
+    const author = await ctx.db
       .query("profiles")
-      .withIndex("by_usernameLower", (q) => q.eq("usernameLower", args.username.toLowerCase()))
+      .withIndex("by_username", (q) => q.eq("username", args.username))
       .first();
 
-    if (!authorProfile) {
+    if (!author) {
       return { data: [], hasMore: false, nextCursor: null };
     }
 
-    // Get posts by this author
     let posts: Doc<"posts">[] = [];
     
     if (args.cursor) {
-      posts = await ctx.db
-        .query("posts")
-        .withIndex("by_author_createdAt", (q) => q.eq("authorId", authorProfile.accountId))
-        .order("desc")
-        .filter((q) => 
-          q.and(
-            q.lt(q.field("createdAt"), args.cursor!),
-            q.eq(q.field("deletedAt"), undefined)
+      const cursorPost = await ctx.db.get(args.cursor);
+      if (cursorPost) {
+        posts = await ctx.db
+          .query("posts")
+          .withIndex("by_author", (q) => q.eq("authorId", author._id))
+          .order("desc")
+          .filter((q) => 
+            q.and(
+              q.eq(q.field("parentId"), undefined),
+              q.lt(q.field("_creationTime"), cursorPost._creationTime)
+            )
           )
-        )
-        .take(limit + 1);
+          .take(limit + 1);
+      }
     } else {
       posts = await ctx.db
         .query("posts")
-        .withIndex("by_author_createdAt", (q) => q.eq("authorId", authorProfile.accountId))
+        .withIndex("by_author", (q) => q.eq("authorId", author._id))
         .order("desc")
-        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .filter((q) => q.eq(q.field("parentId"), undefined))
         .take(limit + 1);
     }
 
-    // Filter by visibility based on viewer's relationship
-    const isOwner = viewer?.account._id === authorProfile.accountId;
-    const areFriends = viewer ? await isFriend(ctx, viewer.account._id, authorProfile.accountId) : false;
-
-    const visiblePosts = posts.filter((post) => {
-      if (isOwner) return true;
-      if (post.visibility === "public") return true;
-      if (post.visibility === "friends" && areFriends) return true;
-      return false;
-    });
-
-    const hasMore = visiblePosts.length > limit;
-    const data = visiblePosts.slice(0, limit);
+    const hasMore = posts.length > limit;
+    const data = posts.slice(0, limit);
 
     const formattedPosts = await Promise.all(
-      data.map((post) => formatPost(ctx, post, viewer?.account._id))
+      data.map((post) => formatPost(ctx, post, currentProfile?._id))
     );
 
     return {
       data: formattedPosts,
       hasMore,
-      nextCursor: hasMore && data.length > 0 ? data[data.length - 1].createdAt : null,
+      nextCursor: hasMore ? data[data.length - 1]._id : null,
     };
   },
 });
 
 /**
- * Soft delete a post (only owner can delete)
+ * Delete a post (only owner can delete)
  * Equivalent to DELETE /posts/:postId
  */
 export const remove = mutation({
@@ -282,7 +255,7 @@ export const remove = mutation({
     postId: v.id("posts"),
   },
   handler: async (ctx, args) => {
-    const { account, profile } = await requireViewerWithProfile(ctx);
+    const profile = await requireAuth(ctx);
     
     // Rate limit: 10 deletes per minute
     await checkRateLimit(ctx, "deleteAction", profile._id);
@@ -292,22 +265,54 @@ export const remove = mutation({
       throw new Error("Post not found");
     }
 
-    if (post.authorId !== account._id) {
+    if (post.authorId !== profile._id) {
       throw new Error("You can only delete your own posts");
     }
 
-    if (post.deletedAt) {
-      throw new Error("Post is already deleted");
+    // Delete all likes for this post
+    const likes = await ctx.db
+      .query("likes")
+      .withIndex("by_post", (q) => q.eq("postId", args.postId))
+      .collect();
+    for (const like of likes) {
+      await ctx.db.delete(like._id);
     }
 
-    // Soft delete the post
-    await ctx.db.patch(args.postId, {
-      deletedAt: Date.now(),
-      deletedBy: account._id,
-    });
+    // Delete all comments from the new comments table
+    const comments = await ctx.db
+      .query("comments")
+      .withIndex("by_post", (q) => q.eq("postId", args.postId))
+      .collect();
+    for (const comment of comments) {
+      // Delete likes on comments
+      const commentLikes = await ctx.db
+        .query("comment_likes")
+        .withIndex("by_comment", (q) => q.eq("commentId", comment._id))
+        .collect();
+      for (const like of commentLikes) {
+        await ctx.db.delete(like._id);
+      }
+      await ctx.db.delete(comment._id);
+    }
 
-    // Decrement post count
-    await incrementPostCount(ctx, account._id, -1);
+    // Also delete legacy comments (posts with parentId) for migration period
+    const legacyComments = await ctx.db
+      .query("posts")
+      .withIndex("by_parent", (q) => q.eq("parentId", args.postId))
+      .collect();
+    for (const comment of legacyComments) {
+      const legacyCommentLikes = await ctx.db
+        .query("likes")
+        .withIndex("by_post", (q) => q.eq("postId", comment._id))
+        .collect();
+      for (const like of legacyCommentLikes) {
+        await ctx.db.delete(like._id);
+      }
+      await ctx.db.delete(comment._id);
+    }
+
+    // Delete the post
+    await ctx.db.delete(args.postId);
 
     return { message: "Post deleted successfully" };
   },
@@ -322,41 +327,37 @@ export const toggleLike = mutation({
     postId: v.id("posts"),
   },
   handler: async (ctx, args) => {
-    const { account, profile } = await requireViewerWithProfile(ctx);
+    const profile = await requireAuth(ctx);
     
     // Rate limit: 30 likes per minute
     await checkRateLimit(ctx, "toggleLike", profile._id);
 
     const post = await ctx.db.get(args.postId);
-    if (!post || post.deletedAt) {
+    if (!post) {
       throw new Error("Post not found");
     }
 
     // Check if already liked
     const existingLike = await ctx.db
-      .query("postLikes")
-      .withIndex("by_post_account", (q) =>
-        q.eq("postId", args.postId).eq("accountId", account._id)
+      .query("likes")
+      .withIndex("by_post_and_user", (q) =>
+        q.eq("postId", args.postId).eq("userId", profile._id)
       )
       .first();
 
     if (existingLike) {
       // Unlike
       await ctx.db.delete(existingLike._id);
-      await incrementPostLikeCount(ctx, args.postId, -1);
     } else {
       // Like
-      await ctx.db.insert("postLikes", {
+      await ctx.db.insert("likes", {
         postId: args.postId,
-        accountId: account._id,
-        createdAt: Date.now(),
+        userId: profile._id,
       });
-      await incrementPostLikeCount(ctx, args.postId, 1);
     }
 
     // Return updated post
-    const updatedPost = await ctx.db.get(args.postId);
-    return await formatPost(ctx, updatedPost!, account._id);
+    return await formatPost(ctx, post, profile._id);
   },
 });
 
@@ -367,32 +368,23 @@ export const toggleLike = mutation({
 export const getLikes = query({
   args: {
     postId: v.id("posts"),
-    limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const limit = args.limit ?? 50;
-    
     const likes = await ctx.db
-      .query("postLikes")
+      .query("likes")
       .withIndex("by_post", (q) => q.eq("postId", args.postId))
-      .order("desc")
-      .take(limit);
+      .collect();
 
     const users = await Promise.all(
       likes.map(async (like) => {
-        const profile = await ctx.db
-          .query("profiles")
-          .withIndex("by_accountId", (q) => q.eq("accountId", like.accountId))
-          .first();
-        
-        if (!profile) return null;
+        const user = await ctx.db.get(like.userId);
+        if (!user) return null;
         return {
-          id: profile._id,
-          account_id: profile.accountId,
-          username: profile.username,
-          display_name: profile.displayName ?? "",
-          avatar_url: profile.avatarUrl ?? "",
-          liked_at: new Date(like.createdAt).toISOString(),
+          id: user._id,
+          username: user.username,
+          display_name: user.displayName ?? "",
+          avatar_url: user.avatarUrl ?? "",
+          liked_at: new Date(like._creationTime).toISOString(),
         };
       })
     );
@@ -400,3 +392,177 @@ export const getLikes = query({
     return users.filter(Boolean);
   },
 });
+
+/**
+ * Get comments for a post
+ * DEPRECATED: Use comments.getByPost instead for threaded comments
+ * This is kept for backward compatibility during migration
+ */
+export const getComments = query({
+  args: {
+    postId: v.id("posts"),
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.string()), // Changed to string to support path-based cursors
+    order: v.optional(v.union(v.literal("asc"), v.literal("desc"))),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 20;
+    const currentProfile = await getCurrentProfile(ctx);
+
+    const post = await ctx.db.get(args.postId);
+    if (!post) {
+      return { data: [], hasMore: false, nextCursor: null };
+    }
+
+    // Use new comments table with path-based ordering
+    let comments: Doc<"comments">[] = [];
+
+    if (args.cursor) {
+      comments = await ctx.db
+        .query("comments")
+        .withIndex("by_post_and_path", (q) => q.eq("postId", args.postId))
+        .filter((q) => q.gt(q.field("path"), args.cursor!))
+        .take(limit + 1);
+    } else {
+      comments = await ctx.db
+        .query("comments")
+        .withIndex("by_post_and_path", (q) => q.eq("postId", args.postId))
+        .take(limit + 1);
+    }
+
+    const hasMore = comments.length > limit;
+    const data = comments.slice(0, limit);
+
+    const formattedComments = await Promise.all(
+      data.map(async (comment) => {
+        const author = (await ctx.db.get(comment.authorId)) as Doc<"profiles"> | null;
+
+        // Get likes count from new comment_likes table
+        const likes = await ctx.db
+          .query("comment_likes")
+          .withIndex("by_comment", (q) => q.eq("commentId", comment._id))
+          .collect();
+
+        // Check if current user liked this comment
+        let isLiked = false;
+        if (currentProfile) {
+          const like = await ctx.db
+            .query("comment_likes")
+            .withIndex("by_comment_and_user", (q) =>
+              q.eq("commentId", comment._id).eq("userId", currentProfile._id)
+            )
+            .first();
+          isLiked = !!like;
+        }
+
+        return {
+          id: comment._id,
+          author_id: comment.authorId,
+          parent_id: comment.parentId ?? null,
+          path: comment.path,
+          depth: comment.depth,
+          author: author
+            ? {
+                id: author._id,
+                username: author.username,
+                display_name: author.displayName ?? "",
+                avatar_url: author.avatarUrl ?? "",
+              }
+            : null,
+          text: comment.text ?? "",
+          audio_url: comment.audioUrl ?? "",
+          created_at: new Date(comment._creationTime).toISOString(),
+          likes_count: likes.length,
+          is_liked: isLiked,
+        };
+      })
+    );
+
+    return {
+      data: formattedComments,
+      hasMore,
+      nextCursor: hasMore && data.length > 0 ? data[data.length - 1].path : null,
+    };
+  },
+});
+
+/**
+ * Create a comment on a post
+ * DEPRECATED: Use comments.create instead for threaded comments
+ * This is kept for backward compatibility during migration
+ */
+export const createComment = mutation({
+  args: {
+    postId: v.id("posts"),
+    content: v.optional(v.string()),
+    audio_url: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const profile = await requireAuth(ctx);
+    
+    // Rate limit: 10 comments per minute
+    await checkRateLimit(ctx, "createComment", profile._id);
+
+    const post = await ctx.db.get(args.postId);
+    if (!post) {
+      throw new Error("Post not found");
+    }
+
+    // Sanitize and validate inputs
+    const content = sanitizeText(args.content);
+    const audioUrl = args.audio_url;
+
+    validateTextLength(content, MAX_LENGTHS.COMMENT_TEXT, "Comment text");
+    validateUrl(audioUrl);
+
+    // Content or audio must be provided
+    if (!content && !audioUrl) {
+      throw new Error("Comment must have either content or audio_url");
+    }
+
+    // Count existing top-level comments to generate path
+    const existingTopLevel = await ctx.db
+      .query("comments")
+      .withIndex("by_post", (q) => q.eq("postId", args.postId))
+      .filter((q) => q.eq(q.field("depth"), 0))
+      .collect();
+
+    const path = String(existingTopLevel.length + 1).padStart(4, "0");
+
+    // Create comment in the new comments table
+    const commentId = await ctx.db.insert("comments", {
+      postId: args.postId,
+      authorId: profile._id,
+      parentId: undefined,
+      path,
+      depth: 0,
+      text: content,
+      audioUrl: audioUrl,
+    });
+
+    const comment = await ctx.db.get(commentId);
+    if (!comment) {
+      throw new Error("Failed to create comment");
+    }
+
+    return {
+      id: comment._id,
+      author_id: comment.authorId,
+      parent_id: null,
+      path: comment.path,
+      depth: 0,
+      author: {
+        id: profile._id,
+        username: profile.username,
+        display_name: profile.displayName ?? "",
+        avatar_url: profile.avatarUrl ?? "",
+      },
+      text: comment.text ?? "",
+      audio_url: comment.audioUrl ?? "",
+      created_at: new Date(comment._creationTime).toISOString(),
+      likes_count: 0,
+      is_liked: false,
+    };
+  },
+});
+
