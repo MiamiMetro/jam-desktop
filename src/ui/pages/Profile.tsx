@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useInView } from "react-intersection-observer";
-import { Avatar, AvatarImage, AvatarFallback, AvatarBadge } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { 
   UserPlus,
@@ -67,18 +67,7 @@ function Profile() {
   const isOwnProfile = currentUser?.username === profileUser?.username;
   const isFriend = friends.some((friend: User) => friend.id === profileUser?.id);
   
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Online":
-      case "In Game":
-      case "In Queue":
-        return "bg-green-500";
-      case "Away":
-        return "bg-yellow-500";
-      default:
-        return "bg-gray-500";
-    }
-  };
+  // Status functionality removed - not available in Convex User type
 
 
   const handleAddFriend = async () => {
@@ -128,7 +117,7 @@ function Profile() {
         <div className="relative -mt-16 mb-4">
           <div className="h-24 w-24 rounded-full border-4 border-background overflow-hidden">
             <Avatar className="h-full w-full">
-              <AvatarImage src={profileUser.avatar || ""} alt={profileUser.username} />
+              <AvatarImage src={profileUser.avatar_url || ""} alt={profileUser.username} />
               <AvatarFallback className="bg-primary text-primary-foreground text-3xl font-bold h-full w-full">
                 {profileUser.username.substring(0, 2).toUpperCase()}
               </AvatarFallback>
@@ -141,9 +130,7 @@ function Profile() {
           <div className="flex items-center gap-2 mb-2">
             <h1 className="text-2xl font-bold">{profileUser.username}</h1>
           </div>
-          {profileUser.statusMessage && (
-            <p className="text-muted-foreground mb-3">{profileUser.statusMessage}</p>
-          )}
+          {/* Status message not available in Convex User type */}
           <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
             <div className="flex items-center gap-1">
               <span className="font-semibold">{userPosts.length}</span>
@@ -205,20 +192,15 @@ function Profile() {
                   >
                     <div className="flex items-center gap-3">
                       <Avatar size="sm" className="h-10 w-10">
-                        <AvatarImage src={friend.avatar || ""} alt={friend.username} />
+                        <AvatarImage src={friend.avatar_url || ""} alt={friend.username} />
                         <AvatarFallback className="bg-muted text-muted-foreground text-xs">
                           {friend.username.substring(0, 2).toUpperCase()}
                         </AvatarFallback>
-                        <AvatarBadge className={`${getStatusColor(friend.status || 'Offline')} h-3 w-3 border-2 border-background`} />
+                        {/* Status not available in Convex User type */}
                       </Avatar>
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-sm">{friend.username}</div>
-                        <div className="text-xs text-muted-foreground">{friend.status}</div>
-                        {friend.statusMessage && (
-                          <div className="text-xs text-muted-foreground mt-1 truncate">
-                            {friend.statusMessage}
-                          </div>
-                        )}
+                        {/* Status not available in Convex User type */}
                       </div>
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>

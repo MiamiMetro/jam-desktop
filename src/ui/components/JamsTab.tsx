@@ -69,7 +69,7 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
     createRoomMutation.mutate({
       userId: user.id,
       hostName: user.username,
-      hostAvatar: user.avatar,
+      hostAvatar: user.avatar_url,
       roomData: {
         name: roomForm.name.trim(),
         description: roomForm.description.trim() || undefined,

@@ -81,7 +81,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
       id: Date.now().toString(),
       userId: user?.id || "",
       username: user?.username || "Unknown",
-      avatar: user?.avatar,
+      avatar: user?.avatar_url,
       content: message.trim(),
       timestamp: new Date(),
     };
@@ -324,14 +324,14 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                     className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
                   >
                     <Avatar size="sm" className="h-8 w-8">
-                      <AvatarImage src={participant.avatar || ""} />
+                      <AvatarImage src={participant.avatar_url || ""} />
                       <AvatarFallback className="bg-muted text-muted-foreground text-xs">
                         {participant.username.substring(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{participant.username}</div>
-                      <div className="text-xs text-muted-foreground">{participant.status}</div>
+                      {/* Status not available in Convex User type */}
                     </div>
                   </div>
                 ))}
@@ -363,7 +363,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                   return (
                     <div key={msg.id} className="flex gap-2">
                       <Avatar size="sm" className="h-6 w-6 flex-shrink-0">
-                        <AvatarImage src={msg.avatar || messageUser?.avatar || ""} />
+                        <AvatarImage src={messageUser?.avatar_url || ""} />
                         <AvatarFallback className="bg-muted text-muted-foreground text-xs">
                           {msg.username.substring(0, 2).toUpperCase()}
                         </AvatarFallback>

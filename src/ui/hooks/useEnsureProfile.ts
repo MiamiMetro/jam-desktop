@@ -75,7 +75,7 @@ export function useEnsureProfile() {
           id: existingProfile.id,
           username: existingProfile.username || user.username,
           display_name: existingProfile.display_name || user.display_name,
-          avatar: existingProfile.avatar_url || user.avatar,
+          avatar_url: existingProfile.avatar_url || user.avatar_url,
         });
       }
     }

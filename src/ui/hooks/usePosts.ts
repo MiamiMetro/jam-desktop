@@ -3,8 +3,9 @@ import { useState, useEffect } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { useAuthStore } from '@/stores/authStore';
+import type { Post, Comment } from '@/lib/api/types';
 
-// Frontend Post type with Date timestamp
+// UI-friendly Post type adapted from Convex Post
 export interface FrontendPost {
   id: string;
   author: {
@@ -28,6 +29,7 @@ export interface FrontendPost {
   isGlobal?: boolean;
 }
 
+// UI-friendly Comment type adapted from Convex Comment
 export interface FrontendComment {
   id: string;
   postId: string;
@@ -51,15 +53,15 @@ export interface FrontendComment {
   repliesCount?: number;
 }
 
-// Convert Convex post to FrontendPost format
-function convertPost(post: any): FrontendPost {
+// Convert Convex Post to UI-friendly FrontendPost format
+function convertPost(post: Post): FrontendPost {
   return {
-    id: post.id || post._id,
+    id: post.id,
     author: {
       username: post.author?.username || 'unknown',
-      avatar: post.author?.avatar_url || post.author?.avatar || undefined,
+      avatar: post.author?.avatar_url || undefined,
     },
-    content: post.text || post.content || '',
+    content: post.text || '',
     text: post.text,
     audio_url: post.audio_url || null,
     audioFile: post.audio_url ? {
@@ -67,7 +69,7 @@ function convertPost(post: any): FrontendPost {
       title: 'Audio',
       duration: 0,
     } : undefined,
-    timestamp: new Date(post.created_at || post._creationTime),
+    timestamp: new Date(post.created_at),
     likes: post.likes_count || 0,
     isLiked: post.is_liked || false,
     shares: 0,
@@ -77,29 +79,29 @@ function convertPost(post: any): FrontendPost {
   };
 }
 
-// Convert Convex comment to FrontendComment format
-function convertComment(comment: any): FrontendComment {
+// Convert Convex Comment to UI-friendly FrontendComment format
+function convertComment(comment: Comment): FrontendComment {
   return {
-    id: comment.id || comment._id,
-    postId: comment.post_id || comment.postId || comment.id || comment._id,
+    id: comment.id,
+    postId: String((comment as any).post_id || comment.id), // Comment from posts.getComments has post_id
     parentId: comment.parent_id ?? null,
     path: comment.path,
     depth: comment.depth ?? 0,
     author: {
       username: comment.author?.username || 'unknown',
-      avatar: comment.author?.avatar_url || comment.author?.avatar || undefined,
+      avatar: comment.author?.avatar_url || undefined,
     },
-    content: comment.text || comment.content || '',
+    content: comment.text || '',
     audio_url: comment.audio_url || null,
     audioFile: comment.audio_url ? {
       url: comment.audio_url,
       title: 'Audio',
       duration: 0,
     } : undefined,
-    timestamp: new Date(comment.created_at || comment._creationTime),
+    timestamp: new Date(comment.created_at),
     isLiked: comment.is_liked || false,
     likes: comment.likes_count || 0,
-    repliesCount: comment.replies_count || 0,
+    repliesCount: (comment as any).replies_count || 0, // May not be present in all comment types
   };
 }
 
@@ -383,21 +385,7 @@ export const useToggleCommentLike = () => {
     mutateAsync: async (commentId: string) => {
       const result = await toggleLike({ commentId: commentId as Id<"comments"> });
       // Convert the comment result to FrontendComment format
-      return convertComment({
-        id: result.id,
-        post_id: result.post_id,
-        author_id: result.author_id,
-        parent_id: result.parent_id,
-        path: result.path,
-        depth: result.depth,
-        text: result.text,
-        audio_url: result.audio_url,
-        created_at: result.created_at,
-        author: result.author,
-        likes_count: result.likes_count,
-        replies_count: result.replies_count,
-        is_liked: result.is_liked,
-      });
+      return convertComment(result);
     },
     isPending: false,
   };
