@@ -138,7 +138,10 @@ export const getConversations = query({
     cursor: v.optional(v.id("conversations")),
   },
   handler: async (ctx, args) => {
-    const profile = await requireAuth(ctx);
+    const profile = await getCurrentProfile(ctx);
+    if (!profile) {
+      return { data: [], hasMore: false, total: 0, nextCursor: null };
+    }
     const limit = args.limit ?? 50;
 
     // Get conversations where user is user1

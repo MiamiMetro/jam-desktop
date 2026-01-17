@@ -202,6 +202,8 @@ if (!gotTheLock) {
                 preload: preloadPath,
                 nodeIntegration: false,
                 contextIsolation: true,
+                // Ensure auth cookies persist across app restarts
+                partition: 'persist:jam-desktop',
             },
         });
 

@@ -138,7 +138,6 @@ export function useEnsureProfile() {
     createProfile,
     pendingProfile,
     session?.user,
-    user,
     setUser,
     setProfileReady,
   ]);
