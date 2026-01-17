@@ -1,14 +1,17 @@
 import { create } from 'zustand';
-import { supabase } from '@/lib/supabase';
+import { authClient } from '@/lib/auth-client';
 import type { User } from '@/lib/api/types';
-import type { Id } from '../../../convex/_generated/dataModel';
+import { useConvexAuthStore } from '@/hooks/useConvexAuth';
+import { useProfileStore } from '@/hooks/useEnsureProfile';
 
 interface AuthState {
   isGuest: boolean;
   user: User | null;
   isLoading: boolean;
+  pendingProfile: { username: string; displayName?: string } | null;
   setUser: (user: User | null) => void;
   setIsGuest: (isGuest: boolean) => void;
+  setPendingProfile: (profile: { username: string; displayName?: string } | null) => void;
   login: (user: User) => void;
   logout: () => Promise<void>;
   checkSession: () => Promise<void>;
@@ -20,35 +23,35 @@ export const useAuthStore = create<AuthState>((set) => ({
   isGuest: true,
   user: null,
   isLoading: true,
+  pendingProfile: null,
   setUser: (user) => set({ user, isGuest: !user }),
-  setIsGuest: (isGuest) => set({ isGuest, user: isGuest ? null : undefined }),
+  setIsGuest: (isGuest) =>
+    set({ isGuest, user: null }),
+  setPendingProfile: (profile) => set({ pendingProfile: profile }),
   login: (user) => set({ user, isGuest: false }),
   logout: async () => {
-    await supabase.auth.signOut();
-    set({ user: null, isGuest: true });
+    await authClient.signOut();
+    useConvexAuthStore.getState().setIsAuthSet(false);
+    useProfileStore.getState().setProfileReady(false);
+    useProfileStore.getState().setAuthUserId(null);
+    set({ user: null, isGuest: true, pendingProfile: null });
   },
   checkSession: async () => {
     try {
       set({ isLoading: true });
-      const { data: { session } } = await supabase.auth.getSession();
-      
+      const result = await authClient.getSession();
+      const session = result.data;
+
       if (!session) {
+        useConvexAuthStore.getState().setIsAuthSet(false);
+        useProfileStore.getState().setProfileReady(false);
+        useProfileStore.getState().setAuthUserId(null);
         set({ isGuest: true, user: null, isLoading: false });
         return;
       }
 
-      // Get user metadata from Supabase session
-      const supabaseUser = session.user;
-      const user: User = {
-        id: supabaseUser.id as Id<"profiles">, // Supabase ID needs to be cast to Convex Id type
-        username: supabaseUser.user_metadata?.username || supabaseUser.email?.split('@')[0] || 'user',
-        display_name: supabaseUser.user_metadata?.display_name ?? "",
-        avatar_url: supabaseUser.user_metadata?.avatar_url ?? "",
-        bio: supabaseUser.user_metadata?.bio ?? "",
-        created_at: new Date().toISOString(), // Supabase doesn't provide this, use current time
-      };
-      
-      set({ user, isGuest: false, isLoading: false });
+      const user = (session as any).user as User | null | undefined;
+      set({ user: user ?? null, isGuest: false, isLoading: false, pendingProfile: null });
     } catch (error) {
       console.error('Session check failed:', error);
       set({ isGuest: true, user: null, isLoading: false });
@@ -57,27 +60,17 @@ export const useAuthStore = create<AuthState>((set) => ({
   loginWithCredentials: async (email: string, password: string) => {
     try {
       set({ isLoading: true });
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const result = await authClient.signIn.email({
         email,
         password,
       });
-      
-      if (error) {
+
+      if (result.error) {
         set({ isLoading: false });
-        throw { message: error.message, status: 401 };
+        throw { message: result.error.message, status: 401 };
       }
 
-      const supabaseUser = data.user;
-      const user: User = {
-        id: supabaseUser.id as Id<"profiles">, // Supabase ID needs to be cast to Convex Id type
-        username: supabaseUser.user_metadata?.username || supabaseUser.email?.split('@')[0] || 'user',
-        display_name: supabaseUser.user_metadata?.display_name ?? "",
-        avatar_url: supabaseUser.user_metadata?.avatar_url ?? "",
-        bio: supabaseUser.user_metadata?.bio ?? "",
-        created_at: new Date().toISOString(), // Supabase doesn't provide this, use current time
-      };
-      
-      set({ user, isGuest: false, isLoading: false });
+      set({ isGuest: false, isLoading: false });
     } catch (error) {
       set({ isLoading: false });
       throw error;
@@ -86,38 +79,22 @@ export const useAuthStore = create<AuthState>((set) => ({
   registerWithCredentials: async (email: string, password: string, username: string, display_name?: string) => {
     try {
       set({ isLoading: true });
-      const { data, error } = await supabase.auth.signUp({
+      const result = await authClient.signUp.email({
         email,
         password,
-        options: {
-          data: {
-            username,
-            display_name,
-          },
-        },
+        name: username,
       });
-      
-      if (error) {
+
+      if (result.error) {
         set({ isLoading: false });
-        throw { message: error.message, status: 400 };
+        throw { message: result.error.message, status: 400 };
       }
 
-      if (!data.user) {
-        set({ isLoading: false });
-        throw { message: 'Registration failed', status: 400 };
-      }
-
-      const supabaseUser = data.user;
-      const user: User = {
-        id: supabaseUser.id as Id<"profiles">, // Supabase ID needs to be cast to Convex Id type
-        username: supabaseUser.user_metadata?.username || username,
-        display_name: supabaseUser.user_metadata?.display_name || display_name || "",
-        avatar_url: supabaseUser.user_metadata?.avatar_url ?? "",
-        bio: supabaseUser.user_metadata?.bio ?? "",
-        created_at: new Date().toISOString(), // Supabase doesn't provide this, use current time
-      };
-      
-      set({ user, isGuest: false, isLoading: false });
+      set({
+        isGuest: false,
+        isLoading: false,
+        pendingProfile: { username, displayName: display_name },
+      });
     } catch (error) {
       set({ isLoading: false });
       throw error;

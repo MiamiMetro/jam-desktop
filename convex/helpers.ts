@@ -57,7 +57,7 @@ export function sanitizeText(text: string | undefined): string | undefined {
 // ============================================
 
 /**
- * Get the current user's profile from their Supabase ID in the auth token
+ * Get the current user's profile from their auth user ID in the auth token
  * Returns null if not authenticated or profile doesn't exist
  */
 export async function getCurrentProfile(ctx: QueryCtx | MutationCtx) {
@@ -66,12 +66,12 @@ export async function getCurrentProfile(ctx: QueryCtx | MutationCtx) {
     return null;
   }
 
-  // The subject (sub) claim contains the Supabase user ID
-  const supabaseId = identity.subject;
+  // The subject (sub) claim contains the auth user ID
+  const authUserId = identity.subject;
 
   const profile = await ctx.db
     .query("profiles")
-    .withIndex("by_supabase_id", (q) => q.eq("supabaseId", supabaseId))
+    .withIndex("by_auth_user_id", (q) => q.eq("authUserId", authUserId))
     .first();
 
   return profile;

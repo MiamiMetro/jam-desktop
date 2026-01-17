@@ -1,15 +1,18 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { api } from "./_generated/api";
+import { authComponent, createAuth } from "./auth";
 
 const http = httpRouter();
 
+authComponent.registerRoutes(http, createAuth, { cors: true });
+
 /**
- * HTTP endpoint for creating a profile after Supabase registration
- * This can be called from your frontend after a successful Supabase signup
+ * HTTP endpoint for creating a profile after authentication
+ * This can be called from your frontend after a successful Better Auth signup
  * 
  * POST /api/auth/register
- * Body: { supabaseId: string, username: string, displayName?: string, avatarUrl?: string }
+ * Body: { authUserId: string, username: string, displayName?: string, avatarUrl?: string }
  */
 http.route({
   path: "/auth/register",
@@ -17,17 +20,17 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     try {
       const body = await request.json();
-      const { supabaseId, username, displayName, avatarUrl } = body;
+      const { authUserId, username, displayName, avatarUrl } = body;
 
-      if (!supabaseId || !username) {
+      if (!authUserId || !username) {
         return new Response(
-          JSON.stringify({ error: "supabaseId and username are required" }),
+          JSON.stringify({ error: "authUserId and username are required" }),
           { status: 400, headers: { "Content-Type": "application/json" } }
         );
       }
 
       const profile = await ctx.runMutation(api.profiles.createProfile, {
-        supabaseId,
+        authUserId,
         username,
         displayName,
         avatarUrl,

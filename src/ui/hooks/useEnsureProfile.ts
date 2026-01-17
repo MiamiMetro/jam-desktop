@@ -2,56 +2,58 @@ import { useEffect, useState, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useAuthStore } from "@/stores/authStore";
-import { supabase } from "@/lib/supabase";
+import { authClient } from "@/lib/auth-client";
 import { create } from "zustand";
 
 // Store to track if profile is ready
 interface ProfileState {
   isProfileReady: boolean;
-  supabaseId: string | null;
+  authUserId: string | null;
   setProfileReady: (ready: boolean) => void;
-  setSupabaseId: (id: string | null) => void;
+  setAuthUserId: (id: string | null) => void;
 }
 
 export const useProfileStore = create<ProfileState>((set) => ({
   isProfileReady: false,
-  supabaseId: null,
+  authUserId: null,
   setProfileReady: (ready) => set({ isProfileReady: ready }),
-  setSupabaseId: (id) => set({ supabaseId: id }),
+  setAuthUserId: (id) => set({ authUserId: id }),
 }));
 
 /**
  * Hook that ensures a Convex profile exists for the authenticated user.
- * After Supabase signup, this creates the corresponding Convex profile.
- * Uses getBySupabaseId which doesn't require Convex auth to be configured.
+ * After Better Auth signup, this creates the corresponding Convex profile.
+ * Uses getByAuthUserId which doesn't require Convex auth to be configured.
  */
 export function useEnsureProfile() {
-  const { user, isGuest, setUser } = useAuthStore();
-  const { setProfileReady, setSupabaseId } = useProfileStore();
+  const { user, isGuest, setUser, pendingProfile, setPendingProfile } = useAuthStore();
+  const { setProfileReady, setAuthUserId } = useProfileStore();
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [hasAttemptedCreate, setHasAttemptedCreate] = useState(false);
-  const [localSupabaseId, setLocalSupabaseId] = useState<string | null>(null);
+  const [localAuthUserId, setLocalAuthUserId] = useState<string | null>(null);
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
   
-  // Get Supabase ID from session
+  // Get auth user ID from session
   useEffect(() => {
     if (isGuest) {
-      setLocalSupabaseId(null);
-      setSupabaseId(null);
+      setLocalAuthUserId(null);
+      setAuthUserId(null);
       return;
     }
-    
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user?.id) {
-        setLocalSupabaseId(session.user.id);
-        setSupabaseId(session.user.id);
-      }
-    });
-  }, [isGuest, setSupabaseId]);
+
+    if (session?.user?.id) {
+      setLocalAuthUserId(session.user.id);
+      setAuthUserId(session.user.id);
+    } else if (!isSessionPending) {
+      setLocalAuthUserId(null);
+      setAuthUserId(null);
+    }
+  }, [isGuest, session?.user?.id, isSessionPending, setAuthUserId]);
   
-  // Use getBySupabaseId which doesn't require Convex auth to be configured
+  // Use getByAuthUserId which doesn't require Convex auth to be configured
   const existingProfile = useQuery(
-    api.profiles.getBySupabaseId,
-    localSupabaseId ? { supabaseId: localSupabaseId } : "skip"
+    api.profiles.getByAuthUserId,
+    localAuthUserId ? { authUserId: localAuthUserId } : "skip"
   );
   
   const createProfile = useMutation(api.profiles.createProfile);
@@ -61,8 +63,9 @@ export function useEnsureProfile() {
     if (isGuest) {
       setProfileReady(false);
       setHasAttemptedCreate(false);
+      setPendingProfile(null);
     }
-  }, [isGuest, setProfileReady]);
+  }, [isGuest, setPendingProfile, setProfileReady]);
   
   // Mark profile as ready when it exists
   useEffect(() => {
@@ -70,20 +73,15 @@ export function useEnsureProfile() {
       setProfileReady(true);
       // Update user ID to match Convex profile ID
       if (user && existingProfile.id !== user.id) {
-        setUser({
-          ...user,
-          id: existingProfile.id,
-          username: existingProfile.username || user.username,
-          display_name: existingProfile.display_name || user.display_name,
-          avatar_url: existingProfile.avatar_url || user.avatar_url,
-        });
+        setUser(existingProfile);
       }
+      setPendingProfile(null);
     }
-  }, [existingProfile, setProfileReady, user, setUser]);
+  }, [existingProfile, setPendingProfile, setProfileReady, user, setUser]);
   
   const ensureProfile = useCallback(async () => {
-    // Skip if guest, no supabase ID, already creating, profile exists, or already attempted
-    if (isGuest || !localSupabaseId || isCreatingProfile || existingProfile || hasAttemptedCreate) {
+    // Skip if guest, no auth user ID, already creating, profile exists, or already attempted
+    if (isGuest || !localAuthUserId || isCreatingProfile || existingProfile || hasAttemptedCreate) {
       return;
     }
     
@@ -96,34 +94,32 @@ export function useEnsureProfile() {
     try {
       setIsCreatingProfile(true);
       setHasAttemptedCreate(true);
-      
-      // Get current Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
+
+      // Get current Better Auth session
       if (!session?.user) {
         return;
       }
-      
-      const supabaseUser = session.user;
-      const username = supabaseUser.user_metadata?.username || 
-                       supabaseUser.email?.split('@')[0] || 
-                       `user_${supabaseUser.id.substring(0, 8)}`;
-      
+
+      const authUser = session.user;
+      const fallbackUsername =
+        authUser.name ||
+        authUser.email?.split("@")[0] ||
+        `user_${authUser.id.substring(0, 8)}`;
+      const username = pendingProfile?.username || fallbackUsername;
+      const displayName = pendingProfile?.displayName || authUser.name || username;
+
       const newProfile = await createProfile({
-        supabaseId: supabaseUser.id,
+        authUserId: authUser.id,
         username,
-        displayName: supabaseUser.user_metadata?.display_name || username,
-        avatarUrl: supabaseUser.user_metadata?.avatar_url,
+        displayName,
+        avatarUrl: authUser.image ?? undefined,
       });
-      
+
       // Update the auth store with the new profile
-      if (newProfile && user) {
-        setUser({
-          ...user,
-          id: newProfile.id,
-          username: newProfile.username || user.username,
-        });
+      if (newProfile) {
+        setUser(newProfile);
       }
-      
+
       setProfileReady(true);
     } catch (error: any) {
       // Profile might already exist (race condition) - that's OK
@@ -133,14 +129,28 @@ export function useEnsureProfile() {
     } finally {
       setIsCreatingProfile(false);
     }
-  }, [isGuest, localSupabaseId, existingProfile, isCreatingProfile, hasAttemptedCreate, createProfile, user, setUser, setProfileReady]);
+  }, [
+    isGuest,
+    localAuthUserId,
+    existingProfile,
+    isCreatingProfile,
+    hasAttemptedCreate,
+    createProfile,
+    pendingProfile,
+    session?.user,
+    user,
+    setUser,
+    setProfileReady,
+  ]);
   
   useEffect(() => {
     ensureProfile();
   }, [ensureProfile]);
   
   return {
-    isLoading: (localSupabaseId && existingProfile === undefined) && !isGuest,
+    isLoading:
+      ((localAuthUserId && existingProfile === undefined) || isSessionPending) &&
+      !isGuest,
     profile: existingProfile,
     isProfileReady: useProfileStore((s) => s.isProfileReady),
   };

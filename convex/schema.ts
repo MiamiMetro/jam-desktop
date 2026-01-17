@@ -4,15 +4,15 @@ import { v } from "convex/values";
 export default defineSchema({
   // Profiles table - equivalent to Prisma Profile model
   profiles: defineTable({
-    // Supabase Auth user ID (stored as string, not Convex ID)
-    supabaseId: v.string(),
+    // Auth user ID (stored as string, not Convex ID)
+    authUserId: v.string(),
     username: v.string(),
     displayName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
     bio: v.optional(v.string()),
     dmPrivacy: v.union(v.literal("friends"), v.literal("everyone")),
   })
-    .index("by_supabase_id", ["supabaseId"])
+    .index("by_auth_user_id", ["authUserId"])
     .index("by_username", ["username"]),
 
   // Posts table - top-level posts only (comments moved to separate table)

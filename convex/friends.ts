@@ -1,7 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { requireAuth } from "./helpers";
+import { getCurrentProfile, requireAuth } from "./helpers";
 import { checkRateLimit } from "./rateLimiter";
 
 /**
@@ -253,7 +253,10 @@ export const getRequests = query({
     cursor: v.optional(v.id("friends")),
   },
   handler: async (ctx, args) => {
-    const profile = await requireAuth(ctx);
+    const profile = await getCurrentProfile(ctx);
+    if (!profile) {
+      return { data: [], hasMore: false, total: 0, nextCursor: null };
+    }
     const limit = args.limit ?? 20;
 
     // Get pending requests where current user is the friendId (recipient)
@@ -321,7 +324,10 @@ export const getRequests = query({
 export const getSentRequests = query({
   args: {},
   handler: async (ctx) => {
-    const profile = await requireAuth(ctx);
+    const profile = await getCurrentProfile(ctx);
+    if (!profile) {
+      return [];
+    }
 
     // Get pending requests where current user is the userId (sender)
     const requests = await ctx.db

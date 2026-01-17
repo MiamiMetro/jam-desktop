@@ -1,9 +1,10 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id, Doc } from "./_generated/dataModel";
-import { 
-  requireAuth, 
-  isBlocked, 
+import {
+  getCurrentProfile,
+  requireAuth,
+  isBlocked,
   areFriends,
   validateTextLength,
   validateUrl,
@@ -244,7 +245,10 @@ export const getWithUser = query({
     cursor: v.optional(v.id("messages")),
   },
   handler: async (ctx, args) => {
-    const profile = await requireAuth(ctx);
+    const profile = await getCurrentProfile(ctx);
+    if (!profile) {
+      return { data: [], hasMore: false, total: 0, nextCursor: null };
+    }
     const limit = args.limit ?? 50;
 
     // Find conversation

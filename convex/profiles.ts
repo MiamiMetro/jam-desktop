@@ -112,12 +112,12 @@ export const getByUsername = query({
 });
 
 /**
- * Create a new profile for a Supabase user
- * Called after Supabase registration
+ * Create a new profile for an authenticated user
+ * Called after Better Auth registration
  */
 export const createProfile = mutation({
   args: {
-    supabaseId: v.string(),
+    authUserId: v.string(),
     username: v.string(),
     displayName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
@@ -136,10 +136,10 @@ export const createProfile = mutation({
     validateTextLength(displayName, MAX_LENGTHS.DISPLAY_NAME, "Display name");
     validateUrl(avatarUrl);
 
-    // Check if profile already exists for this Supabase ID
+    // Check if profile already exists for this auth user ID
     const existing = await ctx.db
       .query("profiles")
-      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", args.supabaseId))
+      .withIndex("by_auth_user_id", (q) => q.eq("authUserId", args.authUserId))
       .first();
 
     if (existing) {
@@ -158,7 +158,7 @@ export const createProfile = mutation({
 
     // Create the profile
     const profileId = await ctx.db.insert("profiles", {
-      supabaseId: args.supabaseId,
+      authUserId: args.authUserId,
       username: username,
       displayName: displayName ?? username,
       avatarUrl: avatarUrl ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
@@ -176,16 +176,16 @@ export const createProfile = mutation({
 });
 
 /**
- * Get profile by Supabase ID (internal use)
+ * Get profile by auth user ID (internal use)
  */
-export const getBySupabaseId = query({
+export const getByAuthUserId = query({
   args: {
-    supabaseId: v.string(),
+    authUserId: v.string(),
   },
   handler: async (ctx, args) => {
     const profile = await ctx.db
       .query("profiles")
-      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", args.supabaseId))
+      .withIndex("by_auth_user_id", (q) => q.eq("authUserId", args.authUserId))
       .first();
 
     if (!profile) {
