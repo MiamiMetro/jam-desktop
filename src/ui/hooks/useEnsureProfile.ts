@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useAuthStore } from "@/stores/authStore";
 import { authClient } from "@/lib/auth-client";
+import { useConvexAuthStore } from "./useConvexAuth";
 import { create } from "zustand";
 
 // Store to track if profile is ready
@@ -27,10 +28,11 @@ export function useEnsureProfile() {
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [hasAttemptedCreate, setHasAttemptedCreate] = useState(false);
   const { data: session, isPending: isSessionPending } = authClient.useSession();
+  const { isAuthSet } = useConvexAuthStore();
 
   const existingProfile = useQuery(
     api.profiles.getMe,
-    isGuest ? "skip" : undefined
+    isGuest || !isAuthSet ? "skip" : {}
   );
   
   const createProfile = useMutation(api.profiles.createProfile);
@@ -58,7 +60,7 @@ export function useEnsureProfile() {
   
   const ensureProfile = useCallback(async () => {
     // Skip if guest, no auth user ID, already creating, profile exists, or already attempted
-    if (isGuest || isCreatingProfile || existingProfile || hasAttemptedCreate) {
+    if (isGuest || !isAuthSet || isCreatingProfile || existingProfile || hasAttemptedCreate) {
       return;
     }
     
@@ -107,6 +109,7 @@ export function useEnsureProfile() {
     }
   }, [
     isGuest,
+    isAuthSet,
     existingProfile,
     isCreatingProfile,
     hasAttemptedCreate,
@@ -124,6 +127,7 @@ export function useEnsureProfile() {
   return {
     isLoading:
       !isGuest &&
+      isAuthSet &&
       (isSessionPending ||
         (!!session?.user && existingProfile === undefined)),
     profile: existingProfile,
