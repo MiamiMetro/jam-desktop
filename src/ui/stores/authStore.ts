@@ -33,7 +33,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     await authClient.signOut();
     useConvexAuthStore.getState().setIsAuthSet(false);
     useProfileStore.getState().setProfileReady(false);
-    useProfileStore.getState().setAuthUserId(null);
     set({ user: null, isGuest: true, pendingProfile: null });
   },
   checkSession: async () => {
@@ -45,7 +44,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (!session) {
         useConvexAuthStore.getState().setIsAuthSet(false);
         useProfileStore.getState().setProfileReady(false);
-        useProfileStore.getState().setAuthUserId(null);
         set({ isGuest: true, user: null, isLoading: false });
         return;
       }

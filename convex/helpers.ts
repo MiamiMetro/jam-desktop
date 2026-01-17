@@ -57,7 +57,7 @@ export function sanitizeText(text: string | undefined): string | undefined {
 // ============================================
 
 /**
- * Get the current user's profile from their auth user ID in the auth token
+ * Get the current user's profile from their auth identity in the auth token
  * Returns null if not authenticated or profile doesn't exist
  */
 export async function getCurrentProfile(ctx: QueryCtx | MutationCtx) {
@@ -66,12 +66,14 @@ export async function getCurrentProfile(ctx: QueryCtx | MutationCtx) {
     return null;
   }
 
-  // The subject (sub) claim contains the auth user ID
-  const authUserId = identity.subject;
+  const authIssuer = identity.issuer;
+  const authSubject = identity.subject;
 
   const profile = await ctx.db
     .query("profiles")
-    .withIndex("by_auth_user_id", (q) => q.eq("authUserId", authUserId))
+    .withIndex("by_auth_identity", (q) =>
+      q.eq("authIssuer", authIssuer).eq("authSubject", authSubject)
+    )
     .first();
 
   return profile;

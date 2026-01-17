@@ -117,12 +117,16 @@ export const getByUsername = query({
  */
 export const createProfile = mutation({
   args: {
-    authUserId: v.string(),
     username: v.string(),
     displayName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
     // Sanitize and validate inputs
     const username = sanitizeText(args.username);
     const displayName = sanitizeText(args.displayName);
@@ -136,10 +140,12 @@ export const createProfile = mutation({
     validateTextLength(displayName, MAX_LENGTHS.DISPLAY_NAME, "Display name");
     validateUrl(avatarUrl);
 
-    // Check if profile already exists for this auth user ID
+    // Check if profile already exists for this auth identity
     const existing = await ctx.db
       .query("profiles")
-      .withIndex("by_auth_user_id", (q) => q.eq("authUserId", args.authUserId))
+      .withIndex("by_auth_identity", (q) =>
+        q.eq("authIssuer", identity.issuer).eq("authSubject", identity.subject)
+      )
       .first();
 
     if (existing) {
@@ -158,7 +164,8 @@ export const createProfile = mutation({
 
     // Create the profile
     const profileId = await ctx.db.insert("profiles", {
-      authUserId: args.authUserId,
+      authIssuer: identity.issuer,
+      authSubject: identity.subject,
       username: username,
       displayName: displayName ?? username,
       avatarUrl: avatarUrl ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
@@ -169,27 +176,6 @@ export const createProfile = mutation({
     const profile = await ctx.db.get(profileId);
     if (!profile) {
       throw new Error("Failed to create profile");
-    }
-
-    return formatProfile(profile);
-  },
-});
-
-/**
- * Get profile by auth user ID (internal use)
- */
-export const getByAuthUserId = query({
-  args: {
-    authUserId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const profile = await ctx.db
-      .query("profiles")
-      .withIndex("by_auth_user_id", (q) => q.eq("authUserId", args.authUserId))
-      .first();
-
-    if (!profile) {
-      return null;
     }
 
     return formatProfile(profile);

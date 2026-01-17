@@ -12,25 +12,33 @@ authComponent.registerRoutes(http, createAuth, { cors: true });
  * This can be called from your frontend after a successful Better Auth signup
  * 
  * POST /api/auth/register
- * Body: { authUserId: string, username: string, displayName?: string, avatarUrl?: string }
+ * Body: { username: string, displayName?: string, avatarUrl?: string }
  */
 http.route({
   path: "/auth/register",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     try {
-      const body = await request.json();
-      const { authUserId, username, displayName, avatarUrl } = body;
-
-      if (!authUserId || !username) {
+      const userId = await ctx.auth.getUserIdentity();
+      
+      if (!userId) {
         return new Response(
-          JSON.stringify({ error: "authUserId and username are required" }),
+          JSON.stringify({ error: "Authentication required" }),
+          { status: 401, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      const body = await request.json();
+      const { username, displayName, avatarUrl } = body;
+
+      if (!username) {
+        return new Response(
+          JSON.stringify({ error: "Username is required" }),
           { status: 400, headers: { "Content-Type": "application/json" } }
         );
       }
 
       const profile = await ctx.runMutation(api.profiles.createProfile, {
-        authUserId,
         username,
         displayName,
         avatarUrl,

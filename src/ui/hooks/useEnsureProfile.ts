@@ -8,52 +8,29 @@ import { create } from "zustand";
 // Store to track if profile is ready
 interface ProfileState {
   isProfileReady: boolean;
-  authUserId: string | null;
   setProfileReady: (ready: boolean) => void;
-  setAuthUserId: (id: string | null) => void;
 }
 
 export const useProfileStore = create<ProfileState>((set) => ({
   isProfileReady: false,
-  authUserId: null,
   setProfileReady: (ready) => set({ isProfileReady: ready }),
-  setAuthUserId: (id) => set({ authUserId: id }),
 }));
 
 /**
  * Hook that ensures a Convex profile exists for the authenticated user.
  * After Better Auth signup, this creates the corresponding Convex profile.
- * Uses getByAuthUserId which doesn't require Convex auth to be configured.
+ * Uses getMe which reads auth identity from the token.
  */
 export function useEnsureProfile() {
   const { user, isGuest, setUser, pendingProfile, setPendingProfile } = useAuthStore();
-  const { setProfileReady, setAuthUserId } = useProfileStore();
+  const { setProfileReady } = useProfileStore();
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [hasAttemptedCreate, setHasAttemptedCreate] = useState(false);
-  const [localAuthUserId, setLocalAuthUserId] = useState<string | null>(null);
   const { data: session, isPending: isSessionPending } = authClient.useSession();
-  
-  // Get auth user ID from session
-  useEffect(() => {
-    if (isGuest) {
-      setLocalAuthUserId(null);
-      setAuthUserId(null);
-      return;
-    }
 
-    if (session?.user?.id) {
-      setLocalAuthUserId(session.user.id);
-      setAuthUserId(session.user.id);
-    } else if (!isSessionPending) {
-      setLocalAuthUserId(null);
-      setAuthUserId(null);
-    }
-  }, [isGuest, session?.user?.id, isSessionPending, setAuthUserId]);
-  
-  // Use getByAuthUserId which doesn't require Convex auth to be configured
   const existingProfile = useQuery(
-    api.profiles.getByAuthUserId,
-    localAuthUserId ? { authUserId: localAuthUserId } : "skip"
+    api.profiles.getMe,
+    isGuest ? "skip" : undefined
   );
   
   const createProfile = useMutation(api.profiles.createProfile);
@@ -81,7 +58,7 @@ export function useEnsureProfile() {
   
   const ensureProfile = useCallback(async () => {
     // Skip if guest, no auth user ID, already creating, profile exists, or already attempted
-    if (isGuest || !localAuthUserId || isCreatingProfile || existingProfile || hasAttemptedCreate) {
+    if (isGuest || isCreatingProfile || existingProfile || hasAttemptedCreate) {
       return;
     }
     
@@ -109,7 +86,6 @@ export function useEnsureProfile() {
       const displayName = pendingProfile?.displayName || authUser.name || username;
 
       const newProfile = await createProfile({
-        authUserId: authUser.id,
         username,
         displayName,
         avatarUrl: authUser.image ?? undefined,
@@ -131,7 +107,6 @@ export function useEnsureProfile() {
     }
   }, [
     isGuest,
-    localAuthUserId,
     existingProfile,
     isCreatingProfile,
     hasAttemptedCreate,
@@ -148,8 +123,9 @@ export function useEnsureProfile() {
   
   return {
     isLoading:
-      ((localAuthUserId && existingProfile === undefined) || isSessionPending) &&
-      !isGuest,
+      !isGuest &&
+      (isSessionPending ||
+        (!!session?.user && existingProfile === undefined)),
     profile: existingProfile,
     isProfileReady: useProfileStore((s) => s.isProfileReady),
   };
