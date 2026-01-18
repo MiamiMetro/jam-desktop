@@ -10,10 +10,7 @@ declare const process: {
   env: Record<string, string | undefined>;
 };
 
-const siteUrls = [
-  process.env.SITE_URL,
-  process.env.VITE_SITE_URL,
-]
+const siteUrls = [process.env.SITE_URL, process.env.VITE_SITE_URL]
   .filter((value): value is string => !!value)
   .flatMap((value) => value.split(",").map((url) => url.trim()))
   .filter((value) => value.length > 0);
@@ -31,11 +28,17 @@ export const createAuth = (ctx: GenericCtx<DataModel>) =>
       enabled: true,
       requireEmailVerification: false,
     },
-    plugins: [crossDomain({ siteUrl: trustedOrigins[0] }), convex({ authConfig })],
+    session: {
+      expiresIn: 60 * 60 * 24 * 30, // 30 days - stay logged in
+      updateAge: 60 * 60 * 24, // Refresh session daily when user is active
+    },
+    plugins: [
+      crossDomain({ siteUrl: trustedOrigins[0] }),
+      convex({ authConfig }),
+    ],
   });
 
 export const getAuthUser = query({
   args: {},
   handler: async (ctx) => authComponent.getAuthUser(ctx),
 });
-

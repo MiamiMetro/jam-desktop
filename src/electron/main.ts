@@ -1,22 +1,10 @@
-import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { spawn, ChildProcess } from 'child_process';
-import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'fs';
+import { existsSync } from 'fs';
 import { isDev } from './util.js';
-
-// Get the path for storing encrypted tokens
-function getTokenStoragePath(): string {
-    const userDataPath = app.getPath('userData');
-    return path.join(userDataPath, 'secure-storage');
-}
-
-function getTokenFilePath(account: string): string {
-    // Sanitize account name for filesystem
-    const safeAccount = account.replace(/[^a-zA-Z0-9_-]/g, '_');
-    return path.join(getTokenStoragePath(), `${safeAccount}.enc`);
-}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -42,76 +30,6 @@ if (!gotTheLock) {
     });
 
     let mainWindow: BrowserWindow | null = null;
-
-    // IPC handlers for secure token storage using Electron's safeStorage API
-    ipcMain.handle('keytar-set', async (_event, account: string, token: string) => {
-        try {
-            if (!safeStorage.isEncryptionAvailable()) {
-                return { success: false, error: 'Encryption not available on this system' };
-            }
-            
-            // Ensure storage directory exists
-            const storagePath = getTokenStoragePath();
-            if (!existsSync(storagePath)) {
-                mkdirSync(storagePath, { recursive: true });
-            }
-            
-            // Encrypt and store the token
-            const encrypted = safeStorage.encryptString(token);
-            const filePath = getTokenFilePath(account);
-            writeFileSync(filePath, encrypted);
-            
-            return { success: true };
-        } catch (error) {
-            return { 
-                success: false, 
-                error: error instanceof Error ? error.message : 'Failed to store token' 
-            };
-        }
-    });
-
-    ipcMain.handle('keytar-get', async (_event, account: string) => {
-        try {
-            if (!safeStorage.isEncryptionAvailable()) {
-                return { success: false, error: 'Encryption not available on this system' };
-            }
-            
-            const filePath = getTokenFilePath(account);
-            
-            if (!existsSync(filePath)) {
-                return { success: true, token: null };
-            }
-            
-            // Read and decrypt the token
-            const encrypted = readFileSync(filePath);
-            const token = safeStorage.decryptString(encrypted);
-            
-            return { success: true, token };
-        } catch (error) {
-            return { 
-                success: false, 
-                error: error instanceof Error ? error.message : 'Failed to retrieve token' 
-            };
-        }
-    });
-
-    ipcMain.handle('keytar-delete', async (_event, account: string) => {
-        try {
-            const filePath = getTokenFilePath(account);
-            
-            if (existsSync(filePath)) {
-                unlinkSync(filePath);
-                return { success: true, deleted: true };
-            }
-            
-            return { success: true, deleted: false };
-        } catch (error) {
-            return { 
-                success: false, 
-                error: error instanceof Error ? error.message : 'Failed to delete token' 
-            };
-        }
-    });
 
     // IPC handler for spawning client executable
     ipcMain.handle('spawn-client', async (_event, args: string[] = []) => {
