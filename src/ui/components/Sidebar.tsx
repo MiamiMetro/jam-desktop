@@ -68,15 +68,17 @@ function Sidebar() {
   
   // Track if we should auto-scroll to bottom (when new messages arrive)
   const shouldAutoScrollRef = useRef(true);
-  // Only fetch all users when searching globally or when we need to find a chat partner
-  const shouldFetchAllUsers = showSearchUsers || !!selectedChatPartner;
+  // Only fetch all users when we have a search query OR when we need to find a chat partner
+  // Don't fetch when just opening search without typing
+  const shouldFetchAllUsers = (showSearchUsers && !!debouncedSearchQuery.trim()) || !!selectedChatPartner;
   // Use debounced query for API calls to reduce requests
   const { 
     data: allUsers = [], 
     fetchNextPage: fetchMoreUsers, 
     hasNextPage: hasMoreUsers, 
-    isFetchingNextPage: isLoadingMoreUsers 
-  } = useAllUsers(debouncedSearchQuery || undefined, shouldFetchAllUsers);
+    isFetchingNextPage: isLoadingMoreUsers,
+    isLoading: isLoadingAllUsers
+  } = useAllUsers(debouncedSearchQuery.trim() || undefined, shouldFetchAllUsers);
   const { 
     data: conversations = [], 
     fetchNextPage: _fetchMoreConversations, 
@@ -475,7 +477,7 @@ function Sidebar() {
                     </Button>
                   </div>
                   <div className="relative">
-                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-muted-foreground flex" />
                     <Input
                       type="text"
                       placeholder="Search all users..."
@@ -494,46 +496,56 @@ function Sidebar() {
                       </div>
                     ) : (
                       <>
-                        {getSearchUsers().map((searchUser: User) => (
-                          <div
-                            key={searchUser.id}
-                            className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-sidebar-accent/50 cursor-pointer group transition-colors"
-                            onClick={() => {
-                              navigate(`/profile/${searchUser.username}`);
-                              // Keep search view open for continued searching
-                            }}
-                          >
-                            <Avatar size="sm" className="relative">
-                              <AvatarImage src={searchUser.avatar_url || ""} alt={searchUser.username} />
-                              <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-                                {searchUser.username.substring(0, 2).toUpperCase()}
-                              </AvatarFallback>
-                              {/* Status not available in Convex User type */}
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium truncate">{searchUser.username}</div>
-                              <div className="text-xs text-muted-foreground truncate">
-                                {/* Status not available in Convex User type */}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                        {getSearchUsers().length === 0 && (
+                        {/* Show loading state while debouncing or fetching */}
+                        {isLoadingAllUsers || userSearchQuery.trim() !== debouncedSearchQuery.trim() ? (
                           <div className="text-center py-4 text-xs text-muted-foreground">
-                            No users found
+                            Searching...
                           </div>
-                        )}
-                        {/* Load more button for user search results */}
-                        {showSearchUsers && hasMoreUsers && (
-                          <div className="pt-2 pb-2 border-t border-sidebar-border">
-                            <button
-                              onClick={() => fetchMoreUsers()}
-                              disabled={isLoadingMoreUsers}
-                              className="w-full py-2 text-xs text-muted-foreground hover:text-foreground transition-colors text-center disabled:opacity-50"
-                            >
-                              {isLoadingMoreUsers ? 'Loading more...' : 'Load more users'}
-                            </button>
-                          </div>
+                        ) : (
+                          <>
+                            {getSearchUsers().map((searchUser: User) => (
+                              <div
+                                key={searchUser.id}
+                                className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-sidebar-accent/50 cursor-pointer group transition-colors"
+                                onClick={() => {
+                                  navigate(`/profile/${searchUser.username}`);
+                                  // Keep search view open for continued searching
+                                }}
+                              >
+                                <Avatar size="sm" className="relative">
+                                  <AvatarImage src={searchUser.avatar_url || ""} alt={searchUser.username} />
+                                  <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                                    {searchUser.username.substring(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                  {/* Status not available in Convex User type */}
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium truncate">{searchUser.username}</div>
+                                  <div className="text-xs text-muted-foreground truncate">
+                                    {/* Status not available in Convex User type */}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            {/* Only show "No users found" after search has completed and there are no results */}
+                            {getSearchUsers().length === 0 && (
+                              <div className="text-center py-4 text-xs text-muted-foreground">
+                                No users found
+                              </div>
+                            )}
+                            {/* Load more button for user search results - only show when we have results */}
+                            {showSearchUsers && hasMoreUsers && getSearchUsers().length > 0 && (
+                              <div className="pt-2 pb-2 border-t border-sidebar-border">
+                                <button
+                                  onClick={() => fetchMoreUsers()}
+                                  disabled={isLoadingMoreUsers}
+                                  className="w-full py-2 text-xs text-muted-foreground hover:text-foreground transition-colors text-center disabled:opacity-50"
+                                >
+                                  {isLoadingMoreUsers ? 'Loading more...' : 'Load more users'}
+                                </button>
+                              </div>
+                            )}
+                          </>
                         )}
                       </>
                     )}
@@ -807,8 +819,8 @@ function Sidebar() {
                     </Button>
                   </div>
                   {showFriendsSearch && (
-                    <div className="relative">
-                      <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                    <div className="relative mt-2">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground flex items-center justify-center" />
                       <Input
                         type="text"
                         placeholder="Search friends..."
@@ -920,7 +932,10 @@ function Sidebar() {
                   variant="ghost" 
                   size="icon-xs" 
                   className="h-6 w-6 relative"
-                  onClick={() => setShowFriendRequests(true)}
+                  onClick={() => {
+                    setShowFriendRequests(true);
+                    setShowSearchUsers(false);
+                  }}
                   title="Friend requests"
                 >
                   <UserCheck className="h-3 w-3" />
