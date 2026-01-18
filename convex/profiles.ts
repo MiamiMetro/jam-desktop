@@ -1,14 +1,54 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
-import { 
-  getCurrentProfile, 
-  requireAuth, 
+import {
+  getCurrentProfile,
+  requireAuth,
   formatProfile,
   validateTextLength,
   validateUrl,
   sanitizeText,
   MAX_LENGTHS,
 } from "./helpers";
+
+/**
+ * Check if a username is available
+ * Used during registration to validate username before creating auth account
+ * Rate limited: 10 requests per minute per IP
+ */
+export const checkUsernameAvailability = mutation({
+  args: {
+    username: v.string(),
+    clientId: v.optional(v.string()), // Optional client identifier (IP, session ID, etc.)
+  },
+  handler: async (ctx, { username, clientId }) => {
+
+    // Sanitize input
+    const sanitized = sanitizeText(username);
+
+    if (!sanitized) {
+      return { available: false, error: "Username is required" };
+    }
+
+    // Validate length
+    try {
+      validateTextLength(sanitized, MAX_LENGTHS.USERNAME, "Username");
+    } catch (error: any) {
+      return { available: false, error: error.message };
+    }
+
+    // Check if username exists
+    const existing = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) => q.eq("username", sanitized))
+      .first();
+
+    if (existing) {
+      return { available: false, error: "Username already taken" };
+    }
+
+    return { available: true, remaining: rateCheck.remaining };
+  },
+});
 
 /**
  * Get the current user's profile
@@ -114,6 +154,7 @@ export const getByUsername = query({
 /**
  * Create a new profile for an authenticated user
  * Called after Better Auth registration
+ * Rate limited: 3 requests per minute per user
  */
 export const createProfile = mutation({
   args: {
@@ -126,6 +167,16 @@ export const createProfile = mutation({
     if (!identity) {
       throw new Error("Not authenticated");
     }
+
+    // Rate limit profile creation to prevent abuse
+    const rateCheck = await checkRateLimit(ctx, identity.subject, "create_profile");
+    if (!rateCheck.allowed) {
+      const resetIn = rateCheck.resetAt ? Math.ceil((rateCheck.resetAt - Date.now()) / 1000) : 60;
+      throw new Error(`Too many profile creation attempts. Please try again in ${resetIn} seconds.`);
+    }
+
+    // Increment rate limit counter
+    await incrementRateLimit(ctx, identity.subject, "create_profile");
 
     // Sanitize and validate inputs
     const username = sanitizeText(args.username);
@@ -152,7 +203,7 @@ export const createProfile = mutation({
       throw new Error("Profile already exists for this user");
     }
 
-    // Check username uniqueness
+    // Check username uniqueness (CRITICAL: Server-side validation cannot be bypassed)
     const usernameExists = await ctx.db
       .query("profiles")
       .withIndex("by_username", (q) => q.eq("username", username))

@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AutoLinkedText } from "@/components/AutoLinkedText";
 import { 
   DropdownMenu,
   DropdownMenuContent,
@@ -86,6 +87,7 @@ function Sidebar() {
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [showSearchUsers, setShowSearchUsers] = useState(false);
   const [showFriendsSearch, setShowFriendsSearch] = useState(false);
   const [showFriendRequests, setShowFriendRequests] = useState(false);
@@ -432,14 +434,17 @@ function Sidebar() {
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const { loginWithCredentials, registerWithCredentials } = useAuthStore.getState();
-    
+
     try {
       setAuthError(null);
+      setIsAuthSubmitting(true);
+
       if (isLogin) {
         await loginWithCredentials(email, password);
       } else {
         await registerWithCredentials(email, password, username);
       }
+
       setShowAuthForm(false);
       setEmail("");
       setPassword("");
@@ -447,9 +452,25 @@ function Sidebar() {
       setAuthError(null);
     } catch (error: unknown) {
       // Extract error message from API error response
-      const errorMessage = error instanceof Error ? error.message : 'An error occurred. Please try again.';
+      let errorMessage = 'An error occurred. Please try again.';
+
+      if (error && typeof error === 'object') {
+        // Check if it's a structured error with message property
+        if ('message' in error && typeof error.message === 'string') {
+          errorMessage = error.message;
+        }
+        // Check for better-auth style errors
+        else if ('code' in error && 'message' in error) {
+          errorMessage = (error as any).message;
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
       setAuthError(errorMessage);
       console.error('Auth error:', error);
+    } finally {
+      setIsAuthSubmitting(false);
     }
   };
 
@@ -625,6 +646,7 @@ function Sidebar() {
                         setAuthError(null);
                       }}
                       required={!isLogin}
+                      disabled={isAuthSubmitting}
                       className="h-8 text-sm"
                     />
                   </div>
@@ -641,6 +663,7 @@ function Sidebar() {
                       setAuthError(null);
                     }}
                     required
+                    disabled={isAuthSubmitting}
                     className="h-8 text-sm"
                   />
                 </div>
@@ -656,11 +679,19 @@ function Sidebar() {
                       setAuthError(null);
                     }}
                     required
+                    disabled={isAuthSubmitting}
                     className="h-8 text-sm"
                   />
                 </div>
-                <Button type="submit" className="w-full h-8 text-sm">
-                  {isLogin ? "Login" : "Sign Up"}
+                <Button type="submit" className="w-full h-8 text-sm" disabled={isAuthSubmitting}>
+                  {isAuthSubmitting ? (
+                    <span className="flex items-center gap-2">
+                      <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"></span>
+                      {isLogin ? "Logging in..." : "Signing up..."}
+                    </span>
+                  ) : (
+                    isLogin ? "Login" : "Sign Up"
+                  )}
                 </Button>
                 {authError && (
                   <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
@@ -918,7 +949,11 @@ function Sidebar() {
                                         : "bg-muted text-foreground"
                                     }`}
                                   >
-                                    <div className="wrap-break-word whitespace-pre-wrap">{message.content || ''}</div>
+                                    <AutoLinkedText
+                                      text={message.content || ''}
+                                      className="wrap-break-word whitespace-pre-wrap"
+                                      linkClassName={isOwn ? "underline text-primary-foreground hover:opacity-80" : "underline text-blue-500 hover:text-blue-600"}
+                                    />
                                     <div className={`text-[10px] mt-1 flex items-center gap-1 ${
                                       isOwn ? "text-primary-foreground/70 justify-end" : "text-muted-foreground"
                                     }`}>

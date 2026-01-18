@@ -100,9 +100,18 @@ export function useEnsureProfile() {
 
       setProfileReady(true);
     } catch (error: any) {
+      console.error('Profile creation failed:', error);
       // Profile might already exist (race condition) - that's OK
       if (error.message?.includes("already exists")) {
         setProfileReady(true);
+      } else if (error.message?.includes("Username already taken")) {
+        // Username was taken between check and creation (rare race condition)
+        // This shouldn't happen with our pre-check, but handle it anyway
+        console.error('Username conflict detected:', error.message);
+        // Force logout to prevent broken state
+        await authClient.signOut();
+        setUser(null);
+        setProfileReady(false);
       }
     } finally {
       setIsCreatingProfile(false);

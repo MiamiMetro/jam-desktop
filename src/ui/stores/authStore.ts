@@ -3,6 +3,8 @@ import { authClient } from '@/lib/auth-client';
 import type { User } from '@/lib/api/types';
 import { useConvexAuthStore } from '@/hooks/useConvexAuth';
 import { useProfileStore } from '@/hooks/useEnsureProfile';
+import { ConvexHttpClient } from 'convex/browser';
+import { api } from '../../../convex/_generated/api';
 
 interface AuthState {
   isGuest: boolean;
@@ -65,10 +67,13 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       if (result.error) {
         set({ isLoading: false });
-        throw { message: result.error.message, status: 401 };
+        // Extract the actual error message from better-auth response
+        const errorMessage = result.error.message || 'Login failed';
+        throw new Error(errorMessage);
       }
 
-      set({ isGuest: false, isLoading: false });
+      // After successful login, fetch the session to get user data
+      await useAuthStore.getState().checkSession();
     } catch (error) {
       set({ isLoading: false });
       throw error;
@@ -77,6 +82,27 @@ export const useAuthStore = create<AuthState>((set) => ({
   registerWithCredentials: async (email: string, password: string, username: string, display_name?: string) => {
     try {
       set({ isLoading: true });
+
+      // First, check if username is available
+      const convexUrl = import.meta.env.VITE_CONVEX_URL;
+      if (convexUrl) {
+        const convexClient = new ConvexHttpClient(convexUrl);
+        // Generate a client identifier for rate limiting (you could use a session ID or fingerprint)
+        const clientId = sessionStorage.getItem('clientId') || Math.random().toString(36).substring(7);
+        sessionStorage.setItem('clientId', clientId);
+
+        const usernameCheck = await convexClient.mutation(api.profiles.checkUsernameAvailability, {
+          username,
+          clientId,
+        });
+
+        if (!usernameCheck.available) {
+          set({ isLoading: false });
+          throw new Error(usernameCheck.error || 'Username is not available');
+        }
+      }
+
+      // Username is available, proceed with registration
       const result = await authClient.signUp.email({
         email,
         password,
@@ -85,7 +111,9 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       if (result.error) {
         set({ isLoading: false });
-        throw { message: result.error.message, status: 400 };
+        // Extract the actual error message from better-auth response
+        const errorMessage = result.error.message || 'Registration failed';
+        throw new Error(errorMessage);
       }
 
       set({
@@ -93,6 +121,9 @@ export const useAuthStore = create<AuthState>((set) => ({
         isLoading: false,
         pendingProfile: { username, displayName: display_name },
       });
+
+      // After successful registration, fetch the session to get user data
+      await useAuthStore.getState().checkSession();
     } catch (error) {
       set({ isLoading: false });
       throw error;

@@ -1,8 +1,12 @@
 import { useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import MainPage from "@/pages/MainPage";
+import { useDeepLink } from "@/hooks/useDeepLink";
 
 function App() {
+  // Enable deep linking (jam:// protocol and yourapp.com domain links)
+  useDeepLink();
+
   // Clear jam room ID on app startup (when app reopens, user should not be in a room)
   useEffect(() => {
     localStorage.removeItem("currentJamRoomId");

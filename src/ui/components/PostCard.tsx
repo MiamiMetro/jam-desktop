@@ -1,11 +1,12 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { 
+import {
   Heart,
   MessageCircle,
   Share2,
   Hash as HashIcon,
 } from "lucide-react";
 import { PostAudioPlayer } from "@/components/PostAudioPlayer";
+import { AutoLinkedText } from "@/components/AutoLinkedText";
 
 import type { FrontendPost } from '@/hooks/usePosts';
 
@@ -79,7 +80,11 @@ export function PostCard({
             </span>
           </div>
           {post.content && (
-            <p className="text-sm mb-3 whitespace-pre-wrap">{post.content}</p>
+            <AutoLinkedText
+              text={post.content}
+              className="text-sm mb-3 whitespace-pre-wrap block"
+              linkClassName="text-blue-500 hover:text-blue-600 underline"
+            />
           )}
           {post.audioFile && (
             <PostAudioPlayer
