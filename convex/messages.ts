@@ -300,7 +300,7 @@ export const getWithUser = query({
   handler: async (ctx, args) => {
     const profile = await getCurrentProfile(ctx);
     if (!profile) {
-      return { data: [], hasMore: false, nextCursor: null, lastReadMessageAt: null };
+      return { data: [], hasMore: false, nextCursor: null, lastReadMessageAt: null, otherParticipantLastRead: null };
     }
     const limit = args.limit ?? 50;
 
@@ -322,6 +322,7 @@ export const getWithUser = query({
         hasMore: false,
         nextCursor: null,
         lastReadMessageAt: null,
+        otherParticipantLastRead: null,
       };
     }
 
@@ -330,7 +331,7 @@ export const getWithUser = query({
     // Check if conversation is merged (orphan) - redirect
     const conversation = await ctx.db.get(conversationId);
     if (!conversation) {
-      return { data: [], hasMore: false, nextCursor: null, lastReadMessageAt: null };
+      return { data: [], hasMore: false, nextCursor: null, lastReadMessageAt: null, otherParticipantLastRead: null };
     }
 
     if (conversation.mergedIntoConversationId != null) {
@@ -341,14 +342,23 @@ export const getWithUser = query({
         hasMore: false,
         nextCursor: null,
         lastReadMessageAt: null,
+        otherParticipantLastRead: null,
       };
     }
 
-    // Get participant's lastReadMessageAt for divider
+    // Get current user's participant record for divider
     const participant = await ctx.db
       .query("conversation_participants")
       .withIndex("by_conversation_and_profile", (q) => 
         q.eq("conversationId", conversationId).eq("profileId", profile._id)
+      )
+      .first();
+
+    // Get other participant's lastReadMessageAt for read indicators
+    const otherParticipant = await ctx.db
+      .query("conversation_participants")
+      .withIndex("by_conversation_and_profile", (q) => 
+        q.eq("conversationId", conversationId).eq("profileId", args.userId)
       )
       .first();
 
@@ -397,6 +407,8 @@ export const getWithUser = query({
       hasMore,
       nextCursor,
       lastReadMessageAt: participant?.lastReadMessageAt ?? null,
+      // For read indicators: when did the other person last read?
+      otherParticipantLastRead: otherParticipant?.lastReadMessageAt ?? null,
     };
   },
 });

@@ -140,6 +140,7 @@ function Sidebar() {
     isFetchingNextPage: isLoadingOlderMessages,
     lastReadMessageAt,
     conversationOpenedAt,
+    otherParticipantLastRead,
   } = useMessages(user?.id || "", selectedChatPartner || "");
   const sendMessageMutation = useSendMessage();
   const markAsReadMutation = useMarkAsRead();
@@ -918,10 +919,30 @@ function Sidebar() {
                                     }`}
                                   >
                                     <div className="wrap-break-word whitespace-pre-wrap">{message.content || ''}</div>
-                                    <div className={`text-[10px] mt-1 ${
-                                      isOwn ? "text-primary-foreground/70" : "text-muted-foreground"
+                                    <div className={`text-[10px] mt-1 flex items-center gap-1 ${
+                                      isOwn ? "text-primary-foreground/70 justify-end" : "text-muted-foreground"
                                     }`}>
-                                      {message.timestamp ? formatTime(message.timestamp) : 'now'}
+                                      <span>{message.timestamp ? formatTime(message.timestamp) : 'now'}</span>
+                                      {/* 
+                                        Read indicator for sent messages - dot style
+                                        A message is marked as "Read" when its _creationTime (timestamp when the message was created)
+                                        is less than or equal to otherParticipantLastRead (the last timestamp when the other user
+                                        marked messages as read). Otherwise, it's marked as "Delivered".
+                                      */}
+                                      {isOwn && (
+                                        <span 
+                                          className={`inline-block w-1.5 h-1.5 rounded-full ${
+                                            message._creationTime && otherParticipantLastRead && message._creationTime <= otherParticipantLastRead
+                                              ? "bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.6)]" // Read - glowing teal/emerald
+                                              : "bg-primary-foreground/40" // Delivered - muted
+                                          }`}
+                                          title={
+                                            message._creationTime && otherParticipantLastRead && message._creationTime <= otherParticipantLastRead
+                                              ? "Read"
+                                              : "Delivered"
+                                          }
+                                        />
+                                      )}
                                     </div>
                                   </div>
                                 </div>

@@ -408,6 +408,8 @@ export const useMessages = (userId: string, partnerId: string) => {
     refetch: reset,
     lastReadMessageAt: initialLastReadMessageAt,
     conversationOpenedAt: conversationOpenedAtRef.current,
+    // For read indicators: reactive - updates when other person reads
+    otherParticipantLastRead: firstPageResult?.otherParticipantLastRead ?? null,
     redirect: firstPageResult && 'redirect' in firstPageResult ? firstPageResult.redirect : false,
     canonicalConversationId: firstPageResult && 'canonicalConversationId' in firstPageResult 
       ? (firstPageResult.canonicalConversationId as string) 
