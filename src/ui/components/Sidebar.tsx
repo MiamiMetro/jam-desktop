@@ -16,7 +16,6 @@ import {
 import { 
   Search, 
   MoreVertical,
-
   LogIn,
   UserPlus,
   ArrowLeft,
@@ -25,11 +24,59 @@ import {
   Send,
   Check,
   UserCheck,
+  ChevronDown,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
-import { useAllUsers, useConversations, useMessages, useSendMessage } from "@/hooks/useUsers";
+import { useAllUsers, useConversations, useMessages, useSendMessage, useMarkAsRead } from "@/hooks/useUsers";
 import { useFriends, useFriendRequests, useAcceptFriend, useDeclineFriend } from "@/hooks/useFriends";
 import type { User } from "@/lib/api/types";
+
+// Helper type for message with creation time
+type MessageWithTime = {
+  id: string;
+  senderId?: string;
+  _creationTime?: number;
+};
+
+/**
+ * Determines if the "New Messages" divider should be shown before a message.
+ * Shows divider for:
+ * 1. Historical unread messages (from before opening conversation)
+ * 2. Messages that arrived while user was scrolled up
+ */
+function shouldShowUnreadDivider(
+  message: MessageWithTime,
+  index: number,
+  messages: MessageWithTime[],
+  isOwn: boolean,
+  lastReadMessageAt: number | null,
+  conversationOpenedAt: number | null,
+  scrollUpStartMessageId: string | null
+): boolean {
+  const messageTime = message._creationTime;
+  
+  // Historical unread: messages newer than lastReadMessageAt but older than when we opened
+  const isHistoricalUnread = 
+    !isOwn &&
+    lastReadMessageAt != null &&
+    messageTime != null &&
+    messageTime > lastReadMessageAt &&
+    (conversationOpenedAt == null || messageTime < conversationOpenedAt);
+  
+  // Check if this is the first message after where user scrolled up
+  const isFirstAfterScrollUp = 
+    !isOwn &&
+    scrollUpStartMessageId != null &&
+    index > 0 &&
+    messages[index - 1]?.id === scrollUpStartMessageId;
+  
+  // Is this the first unread message?
+  const isFirstHistoricalUnread = 
+    isHistoricalUnread && 
+    (index === 0 || (messages[index - 1]._creationTime ?? 0) <= (lastReadMessageAt ?? 0));
+  
+  return isFirstHistoricalUnread || isFirstAfterScrollUp;
+}
 
 function Sidebar() {
   const navigate = useNavigate();
@@ -49,16 +96,11 @@ function Sidebar() {
   });
   const [selectedChatPartner, setSelectedChatPartner] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
-  const MAX_MESSAGE_LENGTH = 1000;
+  const [sendError, setSendError] = useState<string | null>(null);
+  const MAX_MESSAGE_LENGTH = 300; // Keep in sync with convex/helpers.ts MAX_LENGTHS.MESSAGE_TEXT
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const { isGuest, user } = useAuthStore();
-  
-  // Reverse infinite scroll: detect when user scrolls near top (load older messages)
-  const { ref: loadOlderMessagesRef, inView: topInView } = useInView({
-    threshold: 0,
-    rootMargin: '200px',
-  });
   
   // Infinite scroll for friends list: detect when user scrolls near bottom
   const { ref: loadMoreFriendsRef, inView: friendsInView } = useInView({
@@ -68,6 +110,15 @@ function Sidebar() {
   
   // Track if we should auto-scroll to bottom (when new messages arrive)
   const shouldAutoScrollRef = useRef(true);
+  // Track if user just sent a message (force scroll to bottom)
+  const justSentMessageRef = useRef(false);
+  // Track if user is scrolled up (for showing scroll-to-bottom button)
+  const [isScrolledUp, setIsScrolledUp] = useState(false);
+  // Track new messages that arrived while scrolled up
+  const [newMessagesWhileScrolledUp, setNewMessagesWhileScrolledUp] = useState(0);
+  // Track the message ID where "scroll up" started (for divider placement)
+  // Using state instead of ref so it can be safely read during render
+  const [scrollUpStartMessageId, setScrollUpStartMessageId] = useState<string | null>(null);
   // Only fetch all users when we have a search query OR when we need to find a chat partner
   // Don't fetch when just opening search without typing
   const shouldFetchAllUsers = (showSearchUsers && !!debouncedSearchQuery.trim()) || !!selectedChatPartner;
@@ -80,18 +131,18 @@ function Sidebar() {
     isLoading: isLoadingAllUsers
   } = useAllUsers(debouncedSearchQuery.trim() || undefined, shouldFetchAllUsers);
   const { 
-    data: conversations = [], 
-    fetchNextPage: _fetchMoreConversations, 
-    hasNextPage: _hasMoreConversations, 
-    isFetchingNextPage: _isLoadingMoreConversations 
+    data: conversations = []
   } = useConversations(user?.id || "");
   const { 
     data: messages = [], 
     fetchNextPage: loadOlderMessages, 
     hasNextPage: hasOlderMessages, 
-    isFetchingNextPage: isLoadingOlderMessages 
+    isFetchingNextPage: isLoadingOlderMessages,
+    lastReadMessageAt,
+    conversationOpenedAt,
   } = useMessages(user?.id || "", selectedChatPartner || "");
   const sendMessageMutation = useSendMessage();
+  const markAsReadMutation = useMarkAsRead();
   const { 
     data: friends = [], 
     fetchNextPage: fetchMoreFriends, 
@@ -110,10 +161,16 @@ function Sidebar() {
   // Store scroll state when loading older messages
   const scrollStateRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const prevMessagesLengthRef = useRef(messages.length);
+  // Track if we're actively loading older messages
+  const isLoadingOlderRef = useRef(false);
+  // Track if we just loaded older messages (to skip auto-scroll for that render)
+  const justLoadedOlderMessagesRef = useRef(false);
   
-  // Save scroll state before loading older messages
+  // Save scroll state when starting to load older messages
   useEffect(() => {
-    if (isLoadingOlderMessages) {
+    if (isLoadingOlderMessages && !isLoadingOlderRef.current) {
+      // Just started loading
+      isLoadingOlderRef.current = true;
       const container = messagesContainerRef.current;
       if (container) {
         scrollStateRef.current = {
@@ -121,18 +178,21 @@ function Sidebar() {
           scrollTop: container.scrollTop,
         };
       }
+    } else if (!isLoadingOlderMessages) {
+      isLoadingOlderRef.current = false;
     }
   }, [isLoadingOlderMessages]);
   
   // Restore scroll position after older messages are loaded (prepended)
   useLayoutEffect(() => {
     const container = messagesContainerRef.current;
-    if (!container || !selectedChatPartner || !scrollStateRef.current) return;
+    if (!container || !selectedChatPartner) return;
     
     // Check if messages were prepended (older messages loaded)
     const messagesIncreased = messages.length > prevMessagesLengthRef.current;
     
-    if (messagesIncreased && scrollStateRef.current && !shouldAutoScrollRef.current) {
+    // Only restore scroll if we have saved state AND loading just finished
+    if (messagesIncreased && scrollStateRef.current && !isLoadingOlderMessages) {
       const { scrollHeight: oldScrollHeight, scrollTop: oldScrollTop } = scrollStateRef.current;
       const newScrollHeight = container.scrollHeight;
       const heightDifference = newScrollHeight - oldScrollHeight;
@@ -140,25 +200,46 @@ function Sidebar() {
       // Adjust scroll position to maintain the same visual position
       container.scrollTop = oldScrollTop + heightDifference;
       
+      // Clear the saved state immediately
       scrollStateRef.current = null;
+      // Mark that we just loaded older messages - skip auto-scroll effect
+      justLoadedOlderMessagesRef.current = true;
     }
     
     prevMessagesLengthRef.current = messages.length;
-  }, [messages.length, selectedChatPartner]);
+  }, [messages.length, selectedChatPartner, isLoadingOlderMessages]);
   
-  // Auto-load older messages when scrolling to top
-  useEffect(() => {
-    if (topInView && hasOlderMessages && !isLoadingOlderMessages && selectedChatPartner) {
-      loadOlderMessages();
-    }
-  }, [topInView, hasOlderMessages, isLoadingOlderMessages, selectedChatPartner, loadOlderMessages]);
+  // Get the last message ID to detect new messages (length might not change after 50)
+  const lastMessageId = messages.length > 0 ? messages[messages.length - 1]?.id : null;
   
   // Scroll to bottom when new messages arrive (but not when loading older messages)
   useEffect(() => {
-    if (shouldAutoScrollRef.current && messagesEndRef.current && selectedChatPartner) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    // Skip if we just loaded older messages (they're prepended, not appended)
+    if (justLoadedOlderMessagesRef.current) {
+      justLoadedOlderMessagesRef.current = false;
+      return;
     }
-  }, [messages.length, selectedChatPartner]);
+    
+    const scrollToBottom = () => {
+      const container = messagesContainerRef.current;
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    };
+    
+    // Force scroll if user just sent a message
+    if (justSentMessageRef.current) {
+      justSentMessageRef.current = false;
+      // Use setTimeout to ensure DOM is updated
+      setTimeout(scrollToBottom, 0);
+      setTimeout(scrollToBottom, 100); // Backup scroll
+      return;
+    }
+    
+    if (shouldAutoScrollRef.current && selectedChatPartner) {
+      scrollToBottom();
+    }
+  }, [lastMessageId, selectedChatPartner]); // Use lastMessageId instead of messages.length
   
   // Reset auto-scroll flag when chat partner changes
   useEffect(() => {
@@ -176,14 +257,72 @@ function Sidebar() {
     const container = messagesContainerRef.current;
     if (!container || !selectedChatPartner) return;
     
+    // Capture current value to avoid stale closure
+    let currentScrollUpStartId = scrollUpStartMessageId;
+    
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = container;
       const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
       shouldAutoScrollRef.current = isNearBottom;
+      
+      // Update scrolled up state for UI (button visibility)
+      const wasScrolledUp = !shouldAutoScrollRef.current;
+      setIsScrolledUp(!isNearBottom);
+      
+      // When user scrolls back to bottom, reset new messages counter
+      if (isNearBottom && wasScrolledUp) {
+        setNewMessagesWhileScrolledUp(0);
+        setScrollUpStartMessageId(null);
+        currentScrollUpStartId = null;
+      }
+      
+      // When user starts scrolling up, record the last message ID
+      if (!isNearBottom && !currentScrollUpStartId && messages.length > 0) {
+        const newId = messages[messages.length - 1]?.id || null;
+        setScrollUpStartMessageId(newId);
+        currentScrollUpStartId = newId;
+      }
     };
     
     container.addEventListener('scroll', handleScroll, { passive: true });
     return () => container.removeEventListener('scroll', handleScroll);
+  }, [selectedChatPartner, messages, scrollUpStartMessageId]);
+  
+  // Track the last message ID to detect NEW messages (not older messages from "Load more")
+  const lastMessageIdRef = useRef<string | null>(null);
+  
+  // Track new messages arriving while scrolled up
+  // Only count as "new" if the LAST message changed (new message at end)
+  // Not when older messages are prepended via "Load more"
+  useEffect(() => {
+    const currentLastId = messages.length > 0 ? messages[messages.length - 1]?.id : null;
+    
+    if (isScrolledUp && currentLastId && lastMessageIdRef.current && currentLastId !== lastMessageIdRef.current) {
+      // Last message changed = new message arrived at the end
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setNewMessagesWhileScrolledUp(prev => prev + 1);
+    }
+    
+    lastMessageIdRef.current = currentLastId ?? null;
+  }, [messages, isScrolledUp]);
+  
+  // Reset ALL scroll state when conversation changes
+  // This is a valid pattern for resetting state when a key prop changes
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setIsScrolledUp(false);
+    setNewMessagesWhileScrolledUp(0);
+    setSendError(null);
+    setScrollUpStartMessageId(null);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    lastMessageIdRef.current = null;
+    // Reset load-more related refs
+    scrollStateRef.current = null;
+    isLoadingOlderRef.current = false;
+    justLoadedOlderMessagesRef.current = false;
+    justSentMessageRef.current = false;
+    prevMessagesLengthRef.current = 0;
+    shouldAutoScrollRef.current = true;
   }, [selectedChatPartner]);
   
   // Auto-load more friends when scrolling to bottom (in sidebar)
@@ -192,6 +331,72 @@ function Sidebar() {
       fetchMoreFriends();
     }
   }, [friendsInView, hasMoreFriends, isLoadingMoreFriends, showFriendsSearch, userSearchQuery, fetchMoreFriends]);
+  
+  // Track if user has been in the conversation long enough (to mark on leave)
+  const canMarkOnLeaveRef = useRef(false);
+  const currentPartnerRef = useRef<string | null>(null);
+  // Track if we've already marked this "unread session" - reset when hasUnread transitions
+  const hasMarkedCurrentUnreadRef = useRef(false);
+  const prevHasUnreadRef = useRef(false);
+  
+  // Find current conversation's unread state
+  const currentConversation = conversations.find((c) => String(c.userId) === String(selectedChatPartner));
+  const hasUnread = currentConversation?.hasUnread ?? false;
+  
+  // Reset mark flag when hasUnread transitions from false to true (new incoming message)
+  useEffect(() => {
+    if (hasUnread && !prevHasUnreadRef.current) {
+      // New unread messages arrived - allow re-marking
+      hasMarkedCurrentUnreadRef.current = false;
+    }
+    prevHasUnreadRef.current = hasUnread;
+  }, [hasUnread]);
+  
+  // Mark as read when user is in conversation with unread messages
+  // Uses 1 second debounce to avoid excessive function calls
+  useEffect(() => {
+    if (!selectedChatPartner) {
+      canMarkOnLeaveRef.current = false;
+      return;
+    }
+    
+    // Track current partner for cleanup
+    currentPartnerRef.current = selectedChatPartner;
+    
+    // Don't mark if not unread or already marked this batch
+    if (!hasUnread) return;
+    if (hasMarkedCurrentUnreadRef.current) return;
+    
+    // After 500ms, enable "mark on leave" behavior
+    const enableLeaveTimer = setTimeout(() => {
+      canMarkOnLeaveRef.current = true;
+    }, 500);
+    
+    // Debounce: mark as read after 1 second of viewing
+    const timer = setTimeout(() => {
+      markAsReadMutation.mutate(selectedChatPartner);
+      hasMarkedCurrentUnreadRef.current = true;
+      canMarkOnLeaveRef.current = false;
+    }, 1000);
+    
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(enableLeaveTimer);
+      // Mark as read on cleanup if user was in chat long enough
+      if (canMarkOnLeaveRef.current && currentPartnerRef.current && !hasMarkedCurrentUnreadRef.current) {
+        markAsReadMutation.mutate(currentPartnerRef.current);
+        hasMarkedCurrentUnreadRef.current = true;
+      }
+      canMarkOnLeaveRef.current = false;
+    };
+  }, [selectedChatPartner, hasUnread, markAsReadMutation]);
+  
+  // Reset refs when conversation changes
+  useEffect(() => {
+    hasMarkedCurrentUnreadRef.current = false;
+    prevHasUnreadRef.current = false;
+    canMarkOnLeaveRef.current = false;
+  }, [selectedChatPartner]);
   
   // Filter users based on search mode
   const getSearchUsers = () => {
@@ -239,9 +444,9 @@ function Sidebar() {
       setPassword("");
       setUsername("");
       setAuthError(null);
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Extract error message from API error response
-      const errorMessage = error?.message || 'An error occurred. Please try again.';
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred. Please try again.';
       setAuthError(errorMessage);
       console.error('Auth error:', error);
     }
@@ -252,6 +457,59 @@ function Sidebar() {
     setEmail("");
     setPassword("");
     setUsername("");
+  };
+
+  // Handle sending a message - defined at component level to avoid ref access during render
+  const handleSendMessage = () => {
+    if (!messageInput.trim() || !user || !selectedChatPartner) return;
+    
+    // Reset all scroll state BEFORE sending - ensure we scroll to see sent message
+    shouldAutoScrollRef.current = true;
+    justSentMessageRef.current = true;
+    justLoadedOlderMessagesRef.current = false;
+    setIsScrolledUp(false);
+    setNewMessagesWhileScrolledUp(0);
+    setScrollUpStartMessageId(null);
+    
+    // Clear any previous error
+    setSendError(null);
+    
+    sendMessageMutation.mutate(
+      {
+        senderId: user.id,
+        receiverId: selectedChatPartner,
+        content: messageInput.trim(),
+      },
+      {
+        onError: (error) => {
+          // Show error message (e.g., rate limit)
+          const errorMessage = error.message || "Failed to send message";
+          if (errorMessage.includes("Rate limit")) {
+            setSendError("Slow down! Please wait a moment before sending again.");
+          } else {
+            setSendError(errorMessage);
+          }
+          // Auto-clear error after 5 seconds
+          setTimeout(() => setSendError(null), 5000);
+        },
+      }
+    );
+    setMessageInput("");
+  };
+
+  // Format time for message timestamps
+  const formatTime = (date: Date | string) => {
+    const dateObj = date instanceof Date ? date : new Date(date);
+    if (isNaN(dateObj.getTime())) return "now";
+    const now = new Date();
+    const diff = now.getTime() - dateObj.getTime();
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return "now";
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
   };
 
   return (
@@ -557,29 +815,6 @@ function Sidebar() {
               <>
                 {(() => {
                   const chatPartner = allUsers.find((u: { id: string }) => u.id === selectedChatPartner);
-                  const formatTime = (date: Date | string) => {
-                    const dateObj = date instanceof Date ? date : new Date(date);
-                    if (isNaN(dateObj.getTime())) return "now"; // Handle invalid dates
-                    const now = new Date();
-                    const diff = now.getTime() - dateObj.getTime();
-                    const minutes = Math.floor(diff / 60000);
-                    if (minutes < 1) return "now";
-                    if (minutes < 60) return `${minutes}m ago`;
-                    const hours = Math.floor(minutes / 60);
-                    if (hours < 24) return `${hours}h ago`;
-                    const days = Math.floor(hours / 24);
-                    return `${days}d ago`;
-                  };
-                  
-                  const handleSendMessage = () => {
-                    if (!messageInput.trim() || !user || !selectedChatPartner) return;
-                    sendMessageMutation.mutate({
-                      senderId: user.id,
-                      receiverId: selectedChatPartner,
-                      content: messageInput.trim(),
-                    });
-                    setMessageInput("");
-                  };
                   
                   return (
                     <>
@@ -600,7 +835,7 @@ function Sidebar() {
                             <>
                               <button
                                 onClick={() => navigate(`/profile/${chatPartner.username}`)}
-                                className="p-0 m-0 border-0 bg-transparent cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0"
+                                className="p-0 m-0 border-0 bg-transparent cursor-pointer hover:opacity-80 transition-opacity shrink-0"
                                 aria-label={`Go to ${chatPartner.username}'s profile`}
                               >
                                 <Avatar size="sm" className="relative pointer-events-none">
@@ -630,39 +865,64 @@ function Sidebar() {
                       {/* Messages */}
                       <div 
                         ref={messagesContainerRef}
-                        className="flex-1 overflow-y-auto"
+                        className="flex-1 overflow-y-auto relative"
                       >
                         <div className="px-3 py-2 space-y-2">
-                          {/* Infinite scroll trigger at top (load older messages) */}
+                          {/* Load More button at top (load older messages) */}
                           {hasOlderMessages && (
-                            <div ref={loadOlderMessagesRef} className="py-2 text-center">
-                              {isLoadingOlderMessages && (
-                                <div className="text-xs text-muted-foreground">
-                                  Loading older messages...
-                                </div>
-                              )}
+                            <div className="py-2 text-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => loadOlderMessages()}
+                                disabled={isLoadingOlderMessages}
+                                className="text-xs text-muted-foreground hover:text-foreground"
+                              >
+                                {isLoadingOlderMessages ? "Loading..." : "Load older messages"}
+                              </Button>
                             </div>
                           )}
-                          {messages.map((message) => {
+                          {messages.map((message, index) => {
                             const isOwn = message.senderId === user?.id;
+                            const isFirstUnread = shouldShowUnreadDivider(
+                              message,
+                              index,
+                              messages,
+                              isOwn,
+                              lastReadMessageAt,
+                              conversationOpenedAt,
+                              scrollUpStartMessageId
+                            );
+                            
                             return (
-                              <div
-                                key={message.id}
-                                data-message-id={message.id}
-                                className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
-                              >
+                              <div key={message.id}>
+                                {/* New Messages divider - only for messages from others */}
+                                {isFirstUnread && (
+                                  <div className="flex items-center gap-2 py-2">
+                                    <div className="flex-1 h-px bg-primary/30" />
+                                    <span className="text-[10px] text-primary font-medium px-2">
+                                      New Messages
+                                    </span>
+                                    <div className="flex-1 h-px bg-primary/30" />
+                                  </div>
+                                )}
                                 <div
-                                  className={`max-w-[80%] rounded-lg px-2 py-1 text-xs ${
-                                    isOwn
-                                      ? "bg-primary text-primary-foreground"
-                                      : "bg-muted text-foreground"
-                                  }`}
+                                  data-message-id={message.id}
+                                  className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
                                 >
-                                  <div>{message.content || ''}</div>
-                                  <div className={`text-[10px] mt-1 ${
-                                    isOwn ? "text-primary-foreground/70" : "text-muted-foreground"
-                                  }`}>
-                                    {message.timestamp ? formatTime(message.timestamp) : 'now'}
+                                  <div
+                                    className={`max-w-[80%] rounded-lg px-2 py-1 text-xs wrap-break-word ${
+                                      isOwn
+                                        ? "bg-primary text-primary-foreground"
+                                        : "bg-muted text-foreground"
+                                    }`}
+                                  >
+                                    <div className="wrap-break-word whitespace-pre-wrap">{message.content || ''}</div>
+                                    <div className={`text-[10px] mt-1 ${
+                                      isOwn ? "text-primary-foreground/70" : "text-muted-foreground"
+                                    }`}>
+                                      {message.timestamp ? formatTime(message.timestamp) : 'now'}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -670,7 +930,41 @@ function Sidebar() {
                           })}
                           <div ref={messagesEndRef} />
                         </div>
+                        
+                        {/* Scroll to bottom button - shows when scrolled up */}
+                        {isScrolledUp && (
+                          <div className="sticky bottom-2 flex justify-end pr-4 pointer-events-none">
+                            <Button
+                              variant="secondary"
+                              size="icon"
+                              className="h-8 w-8 rounded-full shadow-md relative pointer-events-auto"
+                              onClick={() => {
+                                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                                shouldAutoScrollRef.current = true;
+                                setNewMessagesWhileScrolledUp(0);
+                                setScrollUpStartMessageId(null);
+                              }}
+                            >
+                              <ChevronDown className="h-4 w-4" />
+                              {newMessagesWhileScrolledUp > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] rounded-full h-4 min-w-4 px-1 flex items-center justify-center">
+                                  {newMessagesWhileScrolledUp > 99 ? "99+" : newMessagesWhileScrolledUp}
+                                </span>
+                              )}
+                            </Button>
+                          </div>
+                        )}
                       </div>
+                      
+                      {/* Error indicator */}
+                      {sendError && (
+                        <div className="px-3 py-2 border-t border-orange-500/30 bg-orange-500/10">
+                          <div className="flex items-center gap-2 text-xs text-orange-400">
+                            <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                            {sendError}
+                          </div>
+                        </div>
+                      )}
                       
                       {/* Message Input */}
                       <div className="px-3 py-2 border-t border-sidebar-border">
@@ -689,13 +983,6 @@ function Sidebar() {
                             className="h-7 text-xs flex-1"
                             maxLength={MAX_MESSAGE_LENGTH}
                             autoFocus
-                            onFocus={() => {
-                              // Auto-scroll to bottom when input is focused
-                              shouldAutoScrollRef.current = true;
-                              setTimeout(() => {
-                                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-                              }, 100);
-                            }}
                           />
                           <Button
                             variant="default"
@@ -861,20 +1148,17 @@ function Sidebar() {
                               {/* Status not available in Convex User type */}
                             </Avatar>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1">
-                                <div className="text-sm font-medium truncate">{friend.username}</div>
-                                {conversation && (conversation.unreadCount || 0) > 0 && (
-                                  <span className="bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                                    {conversation.unreadCount}
-                                  </span>
-                                )}
-                              </div>
+                              <div className="text-sm font-medium truncate">{friend.username}</div>
                               {conversation?.lastMessage?.content && (
                                 <div className="text-xs text-muted-foreground truncate">
                                   {conversation.lastMessage.content}
                                 </div>
                               )}
                             </div>
+                            {/* Unread dot indicator - right side, bright orange */}
+                            {conversation?.hasUnread && (
+                              <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0 shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
+                            )}
                           </div>
                         );
                       })}
@@ -940,7 +1224,7 @@ function Sidebar() {
                 >
                   <UserCheck className="h-3 w-3" />
                   {friendRequests.length > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] px-1 rounded-full min-w-[16px] text-center">
+                    <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] px-1 rounded-full min-w-4 text-center">
                       {friendRequests.length}
                     </span>
                   )}

@@ -78,23 +78,46 @@ export default defineSchema({
     .index("by_blocked", ["blockedId"])
     .index("by_blocker_and_blocked", ["blockerId", "blockedId"]),
 
-  // Conversations table - DM threads between two users
-  conversations: defineTable({
-    user1: v.id("profiles"), // Always the smaller ID (lexicographically)
-    user2: v.id("profiles"), // Always the larger ID
+  // DM lookup table - provides practical uniqueness for 1:1 conversations
+  // Uses _creationTime for canonical selection (no custom timestamp needed)
+  dm_keys: defineTable({
+    dmKey: v.string(), // "idA:idB" lexicographically sorted
+    conversationId: v.id("conversations"),
   })
-    .index("by_user1", ["user1"])
-    .index("by_user2", ["user2"])
-    .index("by_users", ["user1", "user2"]),
+    .index("by_dmKey", ["dmKey"])
+    .index("by_conversation", ["conversationId"]),
+  // Conversations table - supports 1:1 now, groups later
+  conversations: defineTable({
+    isGroup: v.boolean(), // Always false for now
+    name: v.optional(v.string()), // For future group names
+    // Denormalized for O(1) unread check (avoids N+1)
+    lastMessageAt: v.optional(v.number()),
+    // For duplicate DM cleanup - points to canonical conversation
+    mergedIntoConversationId: v.optional(v.id("conversations")),
+  })
+    .index("by_lastMessageAt", ["lastMessageAt"]),
 
-  // Messages table - DM messages
+  // Participants - who's in each conversation + read tracking
+  conversation_participants: defineTable({
+    conversationId: v.id("conversations"),
+    profileId: v.id("profiles"),
+    // Uses message _creationTime (not wall clock) - prevents clock skew
+    lastReadMessageAt: v.optional(v.number()),
+    joinedAt: v.number(),
+  })
+    .index("by_conversation", ["conversationId"])
+    .index("by_profile", ["profileId"])
+    .index("by_conversation_and_profile", ["conversationId", "profileId"]),
+
+  // Messages table - DM messages with index for cursor pagination
+  // Note: Convex automatically appends _creationTime to all indexes
   messages: defineTable({
     conversationId: v.id("conversations"),
     senderId: v.id("profiles"),
     text: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
   })
-    .index("by_conversation", ["conversationId"])
+    .index("by_conversation_time", ["conversationId"])
     .index("by_sender", ["senderId"]),
 });
 

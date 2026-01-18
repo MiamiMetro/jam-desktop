@@ -9,7 +9,7 @@ import type { Id } from "./_generated/dataModel";
 export const MAX_LENGTHS = {
   POST_TEXT: 5000,
   COMMENT_TEXT: 2000,
-  MESSAGE_TEXT: 2000,
+  MESSAGE_TEXT: 300,
   USERNAME: 30,
   DISPLAY_NAME: 50,
   BIO: 500,
