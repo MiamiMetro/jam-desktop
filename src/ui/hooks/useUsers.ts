@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useConvex } from "convex/react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { User } from '@/lib/api/types';
@@ -157,17 +157,14 @@ export const useAllUsers = (search?: string, enabled: boolean = true) => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [currentSearch, setCurrentSearch] = useState<string | undefined>(search);
   
-  // Reset when search query changes - this is a valid pattern for resetting pagination
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (currentSearch !== search) {
-      setCurrentSearch(search);
-      setCursor(null);
-      setAllUsers([]);
-      setIsInitialLoad(true);
-    }
-  }, [search, currentSearch]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  // Reset when search query changes during render (before DOM commit)
+  // Safe: only updates state when prop actually changes, avoiding infinite loops
+  if (currentSearch !== search) {
+    setCurrentSearch(search);
+    setCursor(null);
+    setAllUsers([]);
+    setIsInitialLoad(true);
+  }
   
   // Query with current cursor and search
   const result = useQuery(
@@ -293,24 +290,29 @@ export const useMessages = (userId: string, partnerId: string) => {
   // Track if we're currently loading older messages
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   
+  // Tracks which partnerId we last reset state for (prevents duplicate resets)
+  const [lastResetPartnerId, setLastResetPartnerId] = useState<string | null>(null);
+  
   // Initial lastReadMessageAt - captured once when conversation opens
   const [initialLastReadMessageAt, setInitialLastReadMessageAt] = useState<number | null>(null);
   const [hasInitializedLastRead, setHasInitializedLastRead] = useState(false);
-  // Track when conversation was opened
-  const [conversationOpenedAt, setConversationOpenedAt] = useState<number | null>(null);
+  // Track when conversation was opened (ref since it's a side-effect timestamp, not derived state)
+  // Note: This is intentionally non-reactive - it captures a moment in time
+  // and is only used for comparison, not for triggering re-renders
+  const conversationOpenedAtRef = useRef<number>(Date.now());
   
-  // Reset when partner changes
-  useEffect(() => {
-    if (partnerId) {
-      setOlderMessages([]);
-      setNextCursor(null);
-      setHasMore(false);
-      setIsLoadingMore(false);
-      setInitialLastReadMessageAt(null);
-      setHasInitializedLastRead(false);
-      setConversationOpenedAt(Date.now());
-    }
-  }, [partnerId]);
+  // Reset state when partner changes during render (before DOM commit)
+  // Safe: only updates state when prop actually changes, avoiding infinite loops
+  if (partnerId && partnerId !== lastResetPartnerId) {
+    setLastResetPartnerId(partnerId);
+    setOlderMessages([]);
+    setNextCursor(null);
+    setHasMore(false);
+    setIsLoadingMore(false);
+    setInitialLastReadMessageAt(null);
+    setHasInitializedLastRead(false);
+    conversationOpenedAtRef.current = Date.now();
+  }
   
   // ALWAYS subscribe to the first page (newest messages) - this stays reactive
   const firstPageResult = useQuery(
@@ -405,7 +407,7 @@ export const useMessages = (userId: string, partnerId: string) => {
     fetchNextPage,
     refetch: reset,
     lastReadMessageAt: initialLastReadMessageAt,
-    conversationOpenedAt,
+    conversationOpenedAt: conversationOpenedAtRef.current,
     redirect: firstPageResult && 'redirect' in firstPageResult ? firstPageResult.redirect : false,
     canonicalConversationId: firstPageResult && 'canonicalConversationId' in firstPageResult 
       ? (firstPageResult.canonicalConversationId as string) 
