@@ -21,7 +21,7 @@ async function formatPost(
 
   // Get likes count
   const likes = await ctx.db
-    .query("likes")
+    .query("post_likes")
     .withIndex("by_post", (q: any) => q.eq("postId", post._id))
     .collect();
   const likesCount = likes.length;
@@ -37,7 +37,7 @@ async function formatPost(
   let isLiked = false;
   if (currentUserId) {
     const like = await ctx.db
-      .query("likes")
+      .query("post_likes")
       .withIndex("by_post_and_user", (q: any) =>
         q.eq("postId", post._id).eq("userId", currentUserId)
       )
@@ -262,7 +262,7 @@ export const remove = mutation({
 
     // Delete all likes for this post
     const likes = await ctx.db
-      .query("likes")
+      .query("post_likes")
       .withIndex("by_post", (q) => q.eq("postId", args.postId))
       .collect();
     for (const like of likes) {
@@ -316,7 +316,7 @@ export const toggleLike = mutation({
 
     // Check if already liked
     const existingLike = await ctx.db
-      .query("likes")
+      .query("post_likes")
       .withIndex("by_post_and_user", (q) =>
         q.eq("postId", args.postId).eq("userId", profile._id)
       )
@@ -327,7 +327,7 @@ export const toggleLike = mutation({
       await ctx.db.delete(existingLike._id);
     } else {
       // Like
-      await ctx.db.insert("likes", {
+      await ctx.db.insert("post_likes", {
         postId: args.postId,
         userId: profile._id,
       });
@@ -348,7 +348,7 @@ export const getLikes = query({
   },
   handler: async (ctx, args) => {
     const likes = await ctx.db
-      .query("likes")
+      .query("post_likes")
       .withIndex("by_post", (q) => q.eq("postId", args.postId))
       .collect();
 

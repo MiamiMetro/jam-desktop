@@ -40,8 +40,8 @@ export default defineSchema({
     .index("by_author", ["authorId"])
     .index("by_parent", ["parentId"]),
 
-  // Likes table - for posts
-  likes: defineTable({
+  // Post likes table - for posts
+  post_likes: defineTable({
     postId: v.id("posts"),
     userId: v.id("profiles"),
   })
