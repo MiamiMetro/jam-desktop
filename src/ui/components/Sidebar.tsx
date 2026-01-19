@@ -2,20 +2,33 @@ import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useInView } from "react-intersection-observer";
 import { useDebouncedValue } from "@tanstack/react-pacer";
+import { useMutation } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import { authClient } from "@/lib/auth-client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AutoLinkedText } from "@/components/AutoLinkedText";
-import { 
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { 
-  Search, 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Search,
   MoreVertical,
   LogIn,
   UserPlus,
@@ -28,6 +41,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
+import { useEnsureProfile, useProfileStore } from "@/hooks/useEnsureProfile";
 import { useAllUsers, useConversations, useMessages, useSendMessage, useMarkAsRead } from "@/hooks/useUsers";
 import { useFriends, useFriendRequests, useAcceptFriend, useDeclineFriend } from "@/hooks/useFriends";
 import type { User } from "@/lib/api/types";
@@ -85,9 +99,12 @@ function Sidebar() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
+  const [showUsernameStep, setShowUsernameStep] = useState(false);
   const [showSearchUsers, setShowSearchUsers] = useState(false);
   const [showFriendsSearch, setShowFriendsSearch] = useState(false);
   const [showFriendRequests, setShowFriendRequests] = useState(false);
@@ -102,7 +119,22 @@ function Sidebar() {
   const MAX_MESSAGE_LENGTH = 300; // Keep in sync with convex/helpers.ts MAX_LENGTHS.MESSAGE_TEXT
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const { isGuest, user } = useAuthStore();
+  const { isGuest, user, setUser } = useAuthStore();
+
+  // Check if profile exists for authenticated users
+  useEnsureProfile();
+  const { needsUsernameSetup } = useProfileStore();
+
+  // Mutation for creating profile
+  const createProfile = useMutation(api.profiles.createProfile);
+
+  // If user is authenticated but has no profile, show username step
+  useEffect(() => {
+    if (needsUsernameSetup && !showUsernameStep && !isGuest) {
+      setShowAuthForm(true);
+      setShowUsernameStep(true);
+    }
+  }, [needsUsernameSetup, showUsernameStep, isGuest]);
   
   // Infinite scroll for friends list: detect when user scrolls near bottom
   const { ref: loadMoreFriendsRef, inView: friendsInView } = useInView({
@@ -427,8 +459,9 @@ function Sidebar() {
     setShowAuthForm(true);
     setEmail("");
     setPassword("");
-    setUsername("");
+    setConfirmPassword("");
     setAuthError(null);
+    setShowUsernameStep(false);
   };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -441,15 +474,25 @@ function Sidebar() {
 
       if (isLogin) {
         await loginWithCredentials(email, password);
+        setShowAuthForm(false);
+        setEmail("");
+        setPassword("");
+        setAuthError(null);
       } else {
-        await registerWithCredentials(email, password, username);
-      }
+        // Validate password match
+        if (password !== confirmPassword) {
+          setAuthError("Passwords don't match");
+          setIsAuthSubmitting(false);
+          return;
+        }
 
-      setShowAuthForm(false);
-      setEmail("");
-      setPassword("");
-      setUsername("");
-      setAuthError(null);
+        // Create auth account
+        await registerWithCredentials(email, password);
+
+        // Show username step
+        setShowUsernameStep(true);
+        setAuthError(null);
+      }
     } catch (error: unknown) {
       // Extract error message from API error response
       let errorMessage = 'An error occurred. Please try again.';
@@ -478,7 +521,104 @@ function Sidebar() {
     setShowAuthForm(false);
     setEmail("");
     setPassword("");
-    setUsername("");
+    setConfirmPassword("");
+    setShowUsernameStep(false);
+  };
+
+  const handleUsernameSubmit = async () => {
+    if (!username.trim()) {
+      setAuthError("Username is required");
+      return;
+    }
+
+    try {
+      setAuthError(null);
+      setIsAuthSubmitting(true);
+
+      // Create profile with username
+      const profile = await createProfile({
+        username: username.trim(),
+        displayName: displayName.trim() || username.trim(),
+      });
+
+      // Update user in store and mark profile as ready
+      if (profile) {
+        setUser(profile);
+        // Clear the needsUsernameSetup flag
+        const { setNeedsUsernameSetup, setProfileReady } = useProfileStore.getState();
+        setNeedsUsernameSetup(false);
+        setProfileReady(true);
+      }
+
+      // Close form and reset
+      setShowAuthForm(false);
+      setShowUsernameStep(false);
+      setEmail("");
+      setPassword("");
+      setConfirmPassword("");
+      setUsername("");
+      setDisplayName("");
+      setAuthError(null);
+    } catch (error: any) {
+      // Parse error code from error message
+      // Convex format: "[requestId] Server Error Uncaught Error: ERROR_CODE: message at handler..."
+      const errorMessage = error.message || "Failed to create profile";
+
+      // Extract clean error message from our error codes
+      const extractMessage = (msg: string) => {
+        // Find the error code pattern and extract everything after it
+        // Match until " at handler" or " at (" (stack trace patterns) or end of string
+        const match = msg.match(/([A-Z_]+):\s*(.+?)(?:\s+at\s+(?:handler|\()|$)/);
+        if (match && match[2]) {
+          return match[2].trim();
+        }
+        // Fallback: return the original message
+        return msg;
+      };
+
+      if (errorMessage.includes("USERNAME_TAKEN:")) {
+        setAuthError("Username already taken. Please try a different one.");
+      } else if (errorMessage.includes("USERNAME_TOO_SHORT:")) {
+        setAuthError(extractMessage(errorMessage));
+      } else if (errorMessage.includes("USERNAME_TOO_LONG:")) {
+        setAuthError(extractMessage(errorMessage));
+      } else if (errorMessage.includes("USERNAME_INVALID_CHARS:")) {
+        setAuthError(extractMessage(errorMessage));
+      } else if (errorMessage.includes("USERNAME_REQUIRED:")) {
+        setAuthError(extractMessage(errorMessage));
+      } else if (errorMessage.includes("PROFILE_EXISTS:")) {
+        setAuthError(extractMessage(errorMessage));
+      } else if (errorMessage.includes("PROFILE_CREATE_FAILED:")) {
+        setAuthError(extractMessage(errorMessage));
+      } else {
+        setAuthError(errorMessage);
+      }
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  };
+
+  const handleCancelUsernameSetup = async () => {
+    try {
+      // Delete the auth account (permanently removes user from database)
+      await authClient.deleteUser();
+
+      // Reset form
+      setShowAuthForm(false);
+      setShowUsernameStep(false);
+      setEmail("");
+      setPassword("");
+      setConfirmPassword("");
+      setUsername("");
+      setDisplayName("");
+      setAuthError(null);
+
+      // Clear user state
+      setUser(null);
+    } catch (error) {
+      console.error("Failed to delete account:", error);
+      setAuthError("Failed to delete account. Please try again.");
+    }
   };
 
   // Handle sending a message - defined at component level to avoid ref access during render
@@ -627,96 +767,168 @@ function Sidebar() {
                   {isLogin ? "Login" : "Sign Up"}
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  {isLogin 
+                  {isLogin
                     ? "Enter your credentials to continue"
                     : "Create an account to join communities, post, and jam!"}
                 </p>
               </div>
-              <form onSubmit={handleAuthSubmit} className="space-y-3">
-                {!isLogin && (
+
+              {/* Email + Password (Login or Signup) */}
+              {(
+                <form onSubmit={handleAuthSubmit} className="space-y-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="sidebar-username" className="text-xs">Username</Label>
+                    <Label htmlFor="sidebar-email" className="text-xs">Email</Label>
+                    <Input
+                      id="sidebar-email"
+                      type="email"
+                      placeholder="your@email.com"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        setAuthError(null);
+                      }}
+                      required
+                      disabled={isAuthSubmitting}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="sidebar-password" className="text-xs">Password</Label>
+                    <Input
+                      id="sidebar-password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        setAuthError(null);
+                      }}
+                      required
+                      disabled={isAuthSubmitting}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  {!isLogin && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="sidebar-confirm-password" className="text-xs">Confirm Password</Label>
+                      <Input
+                        id="sidebar-confirm-password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={confirmPassword}
+                        onChange={(e) => {
+                          setConfirmPassword(e.target.value);
+                          setAuthError(null);
+                        }}
+                        required={!isLogin}
+                        disabled={isAuthSubmitting}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  )}
+                  <Button type="submit" className="w-full h-8 text-sm" disabled={isAuthSubmitting}>
+                    {isAuthSubmitting ? (
+                      <span className="flex items-center gap-2">
+                        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"></span>
+                        {isLogin ? "Logging in..." : "Creating account..."}
+                      </span>
+                    ) : (
+                      isLogin ? "Login" : "Continue"
+                    )}
+                  </Button>
+                  {authError && (
+                    <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                      {authError}
+                    </div>
+                  )}
+                </form>
+              )}
+
+              {/* Step 2: Username Setup (Only after signup) */}
+              {showUsernameStep && (
+                <form onSubmit={handleUsernameSubmit} className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="sidebar-username" className="text-xs">Username *</Label>
                     <Input
                       id="sidebar-username"
                       type="text"
-                      placeholder="Choose a username"
+                      placeholder="johndoe"
                       value={username}
                       onChange={(e) => {
                         setUsername(e.target.value);
                         setAuthError(null);
                       }}
-                      required={!isLogin}
+                      required
                       disabled={isAuthSubmitting}
+                      minLength={3}
+                      maxLength={30}
                       className="h-8 text-sm"
                     />
                   </div>
-                )}
-                <div className="space-y-1.5">
-                  <Label htmlFor="sidebar-email" className="text-xs">Email</Label>
-                  <Input
-                    id="sidebar-email"
-                    type="email"
-                    placeholder="your@email.com"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      setAuthError(null);
-                    }}
-                    required
-                    disabled={isAuthSubmitting}
-                    className="h-8 text-sm"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="sidebar-password" className="text-xs">Password</Label>
-                  <Input
-                    id="sidebar-password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      setAuthError(null);
-                    }}
-                    required
-                    disabled={isAuthSubmitting}
-                    className="h-8 text-sm"
-                  />
-                </div>
-                <Button type="submit" className="w-full h-8 text-sm" disabled={isAuthSubmitting}>
-                  {isAuthSubmitting ? (
-                    <span className="flex items-center gap-2">
-                      <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"></span>
-                      {isLogin ? "Logging in..." : "Signing up..."}
-                    </span>
-                  ) : (
-                    isLogin ? "Login" : "Sign Up"
-                  )}
-                </Button>
-                {authError && (
-                  <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
-                    {authError}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="sidebar-display-name" className="text-xs">Display Name (optional)</Label>
+                    <Input
+                      id="sidebar-display-name"
+                      type="text"
+                      placeholder="John Doe"
+                      value={displayName}
+                      onChange={(e) => {
+                        setDisplayName(e.target.value);
+                        setAuthError(null);
+                      }}
+                      disabled={isAuthSubmitting}
+                      maxLength={50}
+                      className="h-8 text-sm"
+                    />
                   </div>
-                )}
-              </form>
-              <div className="mt-3 pt-3 border-t border-sidebar-border">
-                <button
-                  onClick={() => {
-                    setIsLogin(!isLogin);
-                    setEmail("");
-                    setPassword("");
-                    setUsername("");
-                    setAuthError(null);
-                  }}
-                  className="text-xs text-muted-foreground hover:text-sidebar-foreground transition-colors w-full text-center"
-                >
-                  {isLogin ? (
-                    <>Don't have an account? <span className="font-medium text-primary">Sign up</span></>
-                  ) : (
-                    <>Already have an account? <span className="font-medium text-primary">Login</span></>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleCancelUsernameSetup}
+                      disabled={isAuthSubmitting}
+                      className="flex-1 h-8 text-sm"
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={isAuthSubmitting} className="flex-1 h-8 text-sm">
+                      {isAuthSubmitting ? (
+                        <span className="flex items-center gap-2">
+                          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"></span>
+                          Creating...
+                        </span>
+                      ) : (
+                        "Create Profile"
+                      )}
+                    </Button>
+                  </div>
+                  {authError && (
+                    <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                      {authError}
+                    </div>
                   )}
-                </button>
-              </div>
+                </form>
+              )}
+              {!showUsernameStep && (
+                <div className="mt-3 pt-3 border-t border-sidebar-border">
+                  <button
+                    onClick={() => {
+                      setIsLogin(!isLogin);
+                      setEmail("");
+                      setPassword("");
+                      setConfirmPassword("");
+                      setAuthError(null);
+                    }}
+                    className="text-xs text-muted-foreground hover:text-sidebar-foreground transition-colors w-full text-center cursor-pointer"
+                  >
+                    {isLogin ? (
+                      <>Don't have an account? <span className="font-medium text-primary hover:underline">Sign up</span></>
+                    ) : (
+                      <>Already have an account? <span className="font-medium text-primary hover:underline">Login</span></>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             /* Guest Login/Signup Buttons */
@@ -1290,6 +1502,79 @@ function Sidebar() {
           </div>
         </div>
       </div>
+
+      {/* Username Setup Dialog */}
+      <AlertDialog open={showUsernameStep} onOpenChange={setShowUsernameStep}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Complete Your Profile</AlertDialogTitle>
+            <AlertDialogDescription>
+              Choose a unique username to complete your profile setup.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                type="text"
+                placeholder="johndoe"
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  setAuthError(null);
+                }}
+                required
+                disabled={isAuthSubmitting}
+                minLength={3}
+                maxLength={15}
+                pattern="[a-zA-Z0-9][a-zA-Z0-9_]*"
+              />
+              <p className="text-xs text-muted-foreground">
+                3-15 characters · Letters, numbers, underscores · Must start with letter or number
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="display-name">Display Name (Optional)</Label>
+              <Input
+                id="display-name"
+                type="text"
+                placeholder="John Doe"
+                value={displayName}
+                onChange={(e) => {
+                  setDisplayName(e.target.value);
+                  setAuthError(null);
+                }}
+                disabled={isAuthSubmitting}
+                maxLength={50}
+              />
+              <p className="text-xs text-muted-foreground">
+                Your display name shown to others
+              </p>
+            </div>
+            {authError && (
+              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                {authError}
+              </div>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={handleCancelUsernameSetup}
+              disabled={isAuthSubmitting}
+              className="text-destructive hover:text-destructive"
+            >
+              Cancel & Delete Account
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleUsernameSubmit}
+              disabled={!username.trim() || isAuthSubmitting}
+            >
+              {isAuthSubmitting ? "Creating..." : "Create Profile"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -10,10 +10,15 @@ export const MAX_LENGTHS = {
   POST_TEXT: 5000,
   COMMENT_TEXT: 2000,
   MESSAGE_TEXT: 300,
-  USERNAME: 30,
+  USERNAME: 15, // Like Twitter/X
   DISPLAY_NAME: 50,
   BIO: 500,
   URL: 2048,
+} as const;
+
+/** Minimum lengths for user-generated content */
+export const MIN_LENGTHS = {
+  USERNAME: 3,
 } as const;
 
 /**
@@ -26,6 +31,45 @@ export function validateTextLength(
 ): void {
   if (text && text.length > maxLength) {
     throw new Error(`${fieldName} exceeds maximum length of ${maxLength} characters`);
+  }
+}
+
+/**
+ * Validate username:
+ * - Length: 3-15 characters (same as Twitter/X)
+ * - Allowed: letters (a-z, A-Z), numbers (0-9), underscores (_)
+ * - Must start with a letter or number (not underscore)
+ * - Case insensitive (stored as lowercase for consistency)
+ *
+ * This prevents:
+ * - URL slug issues (safe for jam.com/username)
+ * - Impersonation with Unicode lookalikes
+ * - XSS attacks with special characters
+ * - Confusion with spaces or special symbols
+ */
+export function validateUsername(username: string | undefined): void {
+  if (!username) {
+    throw new Error("USERNAME_REQUIRED: Username is required");
+  }
+
+  const trimmed = username.trim();
+
+  if (trimmed.length < MIN_LENGTHS.USERNAME) {
+    throw new Error(`USERNAME_TOO_SHORT: Username must be at least ${MIN_LENGTHS.USERNAME} characters`);
+  }
+
+  if (trimmed.length > MAX_LENGTHS.USERNAME) {
+    throw new Error(`USERNAME_TOO_LONG: Username exceeds maximum length of ${MAX_LENGTHS.USERNAME} characters`);
+  }
+
+  // Only allow letters, numbers, and underscores (like Twitter)
+  // Must start with letter or number (not underscore)
+  const usernameRegex = /^[a-zA-Z0-9][a-zA-Z0-9_]*$/;
+
+  if (!usernameRegex.test(trimmed)) {
+    throw new Error(
+      "USERNAME_INVALID_CHARS: Username can only contain letters, numbers, and underscores, and must start with a letter or number"
+    );
   }
 }
 

@@ -3,8 +3,6 @@ import { authClient } from '@/lib/auth-client';
 import type { User } from '@/lib/api/types';
 import { useConvexAuthStore } from '@/hooks/useConvexAuth';
 import { useProfileStore } from '@/hooks/useEnsureProfile';
-import { ConvexHttpClient } from 'convex/browser';
-import { api } from '../../../convex/_generated/api';
 
 interface AuthState {
   isGuest: boolean;
@@ -18,7 +16,7 @@ interface AuthState {
   logout: () => Promise<void>;
   checkSession: () => Promise<void>;
   loginWithCredentials: (email: string, password: string) => Promise<void>;
-  registerWithCredentials: (email: string, password: string, username: string, display_name?: string) => Promise<void>;
+  registerWithCredentials: (email: string, password: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -79,34 +77,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       throw error;
     }
   },
-  registerWithCredentials: async (email: string, password: string, username: string, display_name?: string) => {
+  registerWithCredentials: async (email: string, password: string) => {
     try {
       set({ isLoading: true });
 
-      // First, check if username is available
-      const convexUrl = import.meta.env.VITE_CONVEX_URL;
-      if (convexUrl) {
-        const convexClient = new ConvexHttpClient(convexUrl);
-        // Generate a client identifier for rate limiting (you could use a session ID or fingerprint)
-        const clientId = sessionStorage.getItem('clientId') || Math.random().toString(36).substring(7);
-        sessionStorage.setItem('clientId', clientId);
-
-        const usernameCheck = await convexClient.mutation(api.profiles.checkUsernameAvailability, {
-          username,
-          clientId,
-        });
-
-        if (!usernameCheck.available) {
-          set({ isLoading: false });
-          throw new Error(usernameCheck.error || 'Username is not available');
-        }
-      }
-
-      // Username is available, proceed with registration
+      // Create auth account without username (profile creation happens after)
       const result = await authClient.signUp.email({
         email,
         password,
-        name: username,
+        name: email, // Use email as placeholder name
       });
 
       if (result.error) {
@@ -119,7 +98,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({
         isGuest: false,
         isLoading: false,
-        pendingProfile: { username, displayName: display_name },
       });
 
       // After successful registration, fetch the session to get user data

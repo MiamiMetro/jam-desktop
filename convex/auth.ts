@@ -32,6 +32,11 @@ export const createAuth = (ctx: GenericCtx<DataModel>) =>
       expiresIn: 60 * 60 * 24 * 30, // 30 days - stay logged in
       updateAge: 60 * 60 * 24, // Refresh session daily when user is active
     },
+    user: {
+      deleteUser: {
+        enabled: true,
+      },
+    },
     plugins: [
       crossDomain({ siteUrl: trustedOrigins[0] }),
       convex({ authConfig }),
