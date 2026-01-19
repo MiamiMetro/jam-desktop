@@ -80,19 +80,27 @@ export const rateLimiter = new RateLimiter(components.rateLimiter as any, {
     capacity: 3 
   },
   
+  // Profile creation: 3 per minute (strict - should only need 1)
+  createProfile: {
+    kind: "token bucket",
+    rate: 3,
+    period: MINUTE,
+    capacity: 1
+  },
+
   // General fallback: 20 per minute
-  general: { 
-    kind: "token bucket", 
-    rate: 20, 
-    period: MINUTE, 
-    capacity: 5 
+  general: {
+    kind: "token bucket",
+    rate: 20,
+    period: MINUTE,
+    capacity: 5
   },
 });
 
 /**
  * Rate limit types for type-safe usage
  */
-export type RateLimitName = 
+export type RateLimitName =
   | "createPost"
   | "createComment"
   | "replyToComment"
@@ -102,6 +110,7 @@ export type RateLimitName =
   | "updateProfile"
   | "deleteAction"
   | "blockAction"
+  | "createProfile"
   | "general";
 
 /**

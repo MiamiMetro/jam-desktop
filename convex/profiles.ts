@@ -10,6 +10,7 @@ import {
   sanitizeText,
   MAX_LENGTHS,
 } from "./helpers";
+import { checkRateLimit } from "./rateLimiter";
 
 /**
  * Get the current user's profile
@@ -131,6 +132,9 @@ export const createProfile = mutation({
     if (!identity) {
       throw new Error("Not authenticated");
     }
+
+    // Rate limit: 3 requests per minute per auth identity
+    await checkRateLimit(ctx, "createProfile", `${identity.issuer}:${identity.subject}`);
 
     // Sanitize and validate inputs
     const usernameInput = sanitizeText(args.username);
