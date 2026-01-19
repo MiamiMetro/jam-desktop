@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, usePaginatedQuery } from "convex/react";
 import { useState, useEffect } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -250,26 +250,29 @@ export const useDeleteFriend = () => {
 /**
  * Get pending friend requests sent by the current user
  * Returns a set of user IDs for easy lookup
+ * Uses usePaginatedQuery for efficient cursor-based pagination
  */
 export const useSentFriendRequests = () => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
   const { isAuthSet } = useConvexAuthStore();
-  
+
   // Only query when fully authenticated AND profile is ready
   const canQuery = !isGuest && isAuthSet && isProfileReady;
-  
-  const sentRequests = useQuery(
+
+  const { results, status } = usePaginatedQuery(
     api.friends.getSentRequests,
-    canQuery ? {} : "skip"
+    canQuery ? {} : "skip",
+    { initialNumItems: 50 }
   );
-  
+
   // Convert to Set for O(1) lookup
-  const sentRequestIds = new Set(sentRequests || []);
-  
+  const sentRequestIds = new Set(results);
+
   return {
     data: sentRequestIds,
-    isLoading: sentRequests === undefined && canQuery,
+    isLoading: status === "LoadingFirstPage",
     hasPendingRequest: (userId: Id<"profiles"> | string) => sentRequestIds.has(userId as Id<"profiles">),
+    hasMore: status === "CanLoadMore",
   };
 };

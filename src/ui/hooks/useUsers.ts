@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useConvex } from "convex/react";
+import { useQuery, useMutation, useConvex, usePaginatedQuery } from "convex/react";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -119,17 +119,20 @@ function convertConversation(conv: {
 }
 
 export const useOnlineUsers = () => {
-  const result = useQuery(api.users.getOnline, { limit: 50 });
-  
-  const users = result?.data?.map(convertUser) || [];
-  const isLoading = result === undefined;
-  
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.users.getOnline,
+    {},
+    { initialNumItems: 50 }
+  );
+
+  const users = results.map(convertUser);
+
   return {
     data: users,
-    isLoading,
-    hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: false,
-    fetchNextPage: () => {},
+    isLoading: status === "LoadingFirstPage",
+    hasNextPage: status === "CanLoadMore",
+    isFetchingNextPage: status === "LoadingMore",
+    fetchNextPage: loadMore,
     error: null,
   };
 };

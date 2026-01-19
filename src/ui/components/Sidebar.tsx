@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useInView } from "react-intersection-observer";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -135,13 +134,7 @@ function Sidebar() {
       setShowUsernameStep(true);
     }
   }, [needsUsernameSetup, showUsernameStep, isGuest]);
-  
-  // Infinite scroll for friends list: detect when user scrolls near bottom
-  const { ref: loadMoreFriendsRef, inView: friendsInView } = useInView({
-    threshold: 0,
-    rootMargin: '200px',
-  });
-  
+
   // Track if we should auto-scroll to bottom (when new messages arrive)
   const shouldAutoScrollRef = useRef(true);
   // Track if user just sent a message (force scroll to bottom)
@@ -359,14 +352,7 @@ function Sidebar() {
     prevMessagesLengthRef.current = 0;
     shouldAutoScrollRef.current = true;
   }, [selectedChatPartner]);
-  
-  // Auto-load more friends when scrolling to bottom (in sidebar)
-  useEffect(() => {
-    if (friendsInView && hasMoreFriends && !isLoadingMoreFriends && !showFriendsSearch && !userSearchQuery.trim()) {
-      fetchMoreFriends();
-    }
-  }, [friendsInView, hasMoreFriends, isLoadingMoreFriends, showFriendsSearch, userSearchQuery, fetchMoreFriends]);
-  
+
   // Track if user has been in the conversation long enough (to mark on leave)
   const canMarkOnLeaveRef = useRef(false);
   const currentPartnerRef = useRef<string | null>(null);
@@ -1440,17 +1426,19 @@ function Sidebar() {
                           No friends yet
                         </div>
                       )}
-                      {/* Infinite scroll trigger for friends list (when not searching) */}
-                      {!showFriendsSearch && !userSearchQuery.trim() && hasMoreFriends && (
-                        <div ref={loadMoreFriendsRef} className="py-2 text-center">
-                          {isLoadingMoreFriends && (
-                            <div className="text-xs text-muted-foreground">
-                              Loading more friends...
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </div>
+                    {/* Load More button for friends list (when not searching) */}
+                    {!showFriendsSearch && !userSearchQuery.trim() && hasMoreFriends && (
+                      <div className="pt-2 pb-2 border-t border-sidebar-border">
+                        <button
+                          onClick={() => fetchMoreFriends()}
+                          disabled={isLoadingMoreFriends}
+                          className="w-full py-2 text-xs text-muted-foreground hover:text-foreground transition-colors text-center disabled:opacity-50"
+                        >
+                          {isLoadingMoreFriends ? 'Loading more...' : 'Load more friends'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </>

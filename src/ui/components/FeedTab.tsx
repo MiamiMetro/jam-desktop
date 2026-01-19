@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useInView } from "react-intersection-observer";
 import { useAuthStore } from "@/stores/authStore";
 import { usePosts, useCreatePost, useToggleLike, type FrontendPost } from "@/hooks/usePosts";
 import { useCommunities } from "@/hooks/useCommunities";
@@ -8,6 +7,7 @@ import { PostCard } from "@/components/PostCard";
 import { ComposePost } from "@/components/ComposePost";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
+import { LoadMoreButton } from "@/components/LoadMoreButton";
 import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
 import { Music } from "lucide-react";
 // Post type is inferred from usePosts hook
@@ -23,20 +23,7 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
   const { data: communities = [] } = useCommunities();
   const createPostMutation = useCreatePost();
   const toggleLikeMutation = useToggleLike();
-  
-  // Infinite scroll: detect when user scrolls near bottom
-  const { ref: loadMoreRef, inView } = useInView({
-    threshold: 0,
-    rootMargin: '200px', // Start loading 200px before reaching the element
-  });
-  
-  // Auto-load next page when scroll reaches trigger point
-  useEffect(() => {
-    if (inView && hasNextPage && !isFetchingNextPage && !postsLoading) {
-      fetchNextPage();
-    }
-  }, [inView, hasNextPage, isFetchingNextPage, postsLoading, fetchNextPage]);
-  
+
   const handleAuthorClick = (username: string) => {
     navigate(`/profile/${username}`);
   };
@@ -120,16 +107,12 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
               />
             );
             })}
-            {/* Infinite scroll trigger - invisible element at bottom */}
-            {hasNextPage && (
-              <div ref={loadMoreRef} className="py-4 text-center">
-                {isFetchingNextPage && (
-                  <div className="text-sm text-muted-foreground">
-                    Loading more posts...
-                  </div>
-                )}
-              </div>
-            )}
+            {/* Load More button for pagination */}
+            <LoadMoreButton
+              hasNextPage={hasNextPage}
+              isFetchingNextPage={isFetchingNextPage}
+              fetchNextPage={fetchNextPage}
+            />
           </>
         )}
       </div>

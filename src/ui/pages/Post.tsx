@@ -1,6 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
-import { useInView } from "react-intersection-observer";
+import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { 
@@ -19,6 +18,7 @@ import { useCommunities } from "@/hooks/useCommunities";
 import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
+import { LoadMoreButton } from "@/components/LoadMoreButton";
 import { useAudioPlayer } from "@/hooks/useAudioPlayer";
 import { CommentAudioPlayer } from "@/components/CommentAudioPlayer";
 import { ComposePost } from "@/components/ComposePost";
@@ -31,19 +31,7 @@ function Post() {
   const commentsQuery = useComments(id || "");
   const comments = (commentsQuery.data || []) as FrontendComment[];
   const { isLoading: commentsLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = commentsQuery;
-  
-  // Infinite scroll: detect when user scrolls near bottom of comments
-  const { ref: loadMoreCommentsRef, inView } = useInView({
-    threshold: 0,
-    rootMargin: '200px',
-  });
-  
-  // Auto-load next page when scroll reaches trigger point
-  useEffect(() => {
-    if (inView && hasNextPage && !isFetchingNextPage && !commentsLoading) {
-      fetchNextPage();
-    }
-  }, [inView, hasNextPage, isFetchingNextPage, commentsLoading, fetchNextPage]);
+
   const createCommentMutation = useCreateComment();
   const toggleLikeMutation = useToggleLike();
   const toggleCommentLikeMutation = useToggleCommentLike();
@@ -347,16 +335,11 @@ function Post() {
                 );
                 })}
               </div>
-              {/* Infinite scroll trigger - invisible element at bottom */}
-              {hasNextPage && (
-                <div ref={loadMoreCommentsRef} className="mt-4 py-4 text-center">
-                  {isFetchingNextPage && (
-                    <div className="text-sm text-muted-foreground">
-                      Loading more comments...
-                    </div>
-                  )}
-                </div>
-              )}
+              <LoadMoreButton
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                fetchNextPage={fetchNextPage}
+              />
             </>
           )}
         </div>

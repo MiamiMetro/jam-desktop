@@ -186,54 +186,112 @@ export const send = mutation({
 export const getConversations = query({
   args: {
     limit: v.optional(v.number()),
+    cursor: v.optional(v.id("conversation_participants")),
   },
   handler: async (ctx, args) => {
     const profile = await getCurrentProfile(ctx);
     if (!profile) {
-      return { data: [], hasMore: false, total: 0 };
+      return { data: [], hasMore: false, nextCursor: null };
     }
     const limit = args.limit ?? 50;
 
-    // Get all participant records for current user
-    const participations = await ctx.db
-      .query("conversation_participants")
-      .withIndex("by_profile", (q) => q.eq("profileId", profile._id))
-      .collect();
+    // Get participant records for current user with cursor-based pagination
+    // Fetch more than needed to account for filtered/merged conversations
+    const FETCH_SIZE_MULTIPLIER = 2;
+    const fetchSize = limit * FETCH_SIZE_MULTIPLIER;
+
+    let participations: Doc<"conversation_participants">[] = [];
+
+    // Start from the provided cursor (if any), then iteratively fetch older
+    // participation records until we either run out or have fetched enough
+    // candidates to satisfy the limit after filtering merged conversations.
+    let nextCreationTime: number | undefined;
+    if (args.cursor) {
+      const cursorParticipation = await ctx.db.get(args.cursor);
+      if (cursorParticipation) {
+        nextCreationTime = cursorParticipation._creationTime;
+      } else {
+        // Invalid cursor: treat as no data available from this position.
+        nextCreationTime = undefined;
+      }
+    }
+
+    // Iteratively page through conversation_participants
+    // Stop when:
+    // - we receive fewer than fetchSize rows (no more data), or
+    // - we've accumulated at least fetchSize rows (enough to likely fill `limit` after filtering).
+    let done = false;
+    while (!done) {
+      const queryBuilder = ctx.db
+        .query("conversation_participants")
+        .withIndex("by_profile", (q) => q.eq("profileId", profile._id));
+
+      if (nextCreationTime !== undefined) {
+        queryBuilder.filter((q) =>
+          q.lt(q.field("_creationTime"), nextCreationTime!)
+        );
+      }
+
+      const batch = await queryBuilder.order("desc").take(fetchSize);
+
+      if (batch.length === 0) {
+        // No more data
+        done = true;
+        break;
+      }
+
+      participations = participations.concat(batch);
+
+      if (batch.length < fetchSize) {
+        // Reached the end of the index; no more data to fetch.
+        done = true;
+      } else {
+        // Prepare for next page: continue from just before the last item in this batch.
+        const last = batch[batch.length - 1];
+        nextCreationTime = last._creationTime;
+      }
+
+      // We've fetched at least one full batch; that should be enough
+      // to satisfy `limit` once merged/orphaned conversations are filtered.
+      if (participations.length >= fetchSize) {
+        done = true;
+      }
+    }
 
     // For each participation, get conversation and compute hasUnread
     const conversations = await Promise.all(
       participations.map(async (p) => {
         const conv = await ctx.db.get(p.conversationId);
-        
+
         // Skip merged (orphaned) conversations
         if (!conv || conv.mergedIntoConversationId != null) return null;
-        
+
         // O(1) unread check using denormalized lastMessageAt
-        const hasUnread = 
+        const hasUnread =
           conv.lastMessageAt != null &&
           (p.lastReadMessageAt ?? 0) < conv.lastMessageAt;
 
-        // Get other participants for display
-        const allParticipants = await ctx.db
-          .query("conversation_participants")
-          .withIndex("by_conversation", (q) => q.eq("conversationId", conv._id))
-          .collect();
-
-        // For 1:1 DM, get the other user
-        const otherParticipant = allParticipants.find(
-          (part) => part.profileId !== profile._id
-        );
-
+        // For 1:1 DMs, get the other participant directly without fetching a list
         let otherUser = null;
-        if (otherParticipant) {
-          const otherProfile = await ctx.db.get(otherParticipant.profileId);
-          if (otherProfile) {
-            otherUser = {
-              id: otherProfile._id,
-              username: otherProfile.username,
-              display_name: otherProfile.displayName ?? "",
-              avatar_url: otherProfile.avatarUrl ?? "",
-            };
+        if (!conv.isGroup) {
+          const otherParticipant = await ctx.db
+            .query("conversation_participants")
+            .withIndex("by_conversation", (q) =>
+              q.eq("conversationId", conv._id)
+            )
+            .filter((q) => q.neq(q.field("profileId"), profile._id))
+            .first();
+
+          if (otherParticipant) {
+            const otherProfile = await ctx.db.get(otherParticipant.profileId);
+            if (otherProfile) {
+              otherUser = {
+                id: otherProfile._id,
+                username: otherProfile.username,
+                display_name: otherProfile.displayName ?? "",
+                avatar_url: otherProfile.avatarUrl ?? "",
+              };
+            }
           }
         }
 
@@ -245,24 +303,27 @@ export const getConversations = query({
           .first();
 
         return {
-          id: conv._id,
-          isGroup: conv.isGroup,
-          name: conv.name,
-          hasUnread,
-          other_user: otherUser,
-          last_message: lastMessage
-            ? {
-                id: lastMessage._id,
-                conversation_id: lastMessage.conversationId,
-                sender_id: lastMessage.senderId,
-                text: lastMessage.text ?? "",
-                audio_url: lastMessage.audioUrl ?? "",
-                created_at: new Date(lastMessage._creationTime).toISOString(),
-              }
-            : null,
-          updated_at: conv.lastMessageAt
-            ? new Date(conv.lastMessageAt).toISOString()
-            : new Date(conv._creationTime).toISOString(),
+          conversation: {
+            id: conv._id,
+            isGroup: conv.isGroup,
+            name: conv.name,
+            hasUnread,
+            other_user: otherUser,
+            last_message: lastMessage
+              ? {
+                  id: lastMessage._id,
+                  conversation_id: lastMessage.conversationId,
+                  sender_id: lastMessage.senderId,
+                  text: lastMessage.text ?? "",
+                  audio_url: lastMessage.audioUrl ?? "",
+                  created_at: new Date(lastMessage._creationTime).toISOString(),
+                }
+              : null,
+            updated_at: conv.lastMessageAt
+              ? new Date(conv.lastMessageAt).toISOString()
+              : new Date(conv._creationTime).toISOString(),
+          },
+          participation: p,
         };
       })
     );
@@ -270,18 +331,20 @@ export const getConversations = query({
     // Filter out nulls (merged convos) and sort by last message time
     const validConversations = conversations
       .filter((c): c is NonNullable<typeof c> => c !== null)
-      .sort((a, b) => 
-        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      .sort((a, b) =>
+        new Date(b.conversation.updated_at).getTime() - new Date(a.conversation.updated_at).getTime()
       );
 
     // Apply limit
-    const dataConversations = validConversations.slice(0, limit);
     const hasMore = validConversations.length > limit;
+    const dataConversations = validConversations.slice(0, limit);
 
     return {
-      data: dataConversations,
+      data: dataConversations.map(c => c.conversation),
       hasMore,
-      total: validConversations.length,
+      nextCursor: hasMore && dataConversations.length > 0
+        ? dataConversations[dataConversations.length - 1].participation._id
+        : null,
     };
   },
 });

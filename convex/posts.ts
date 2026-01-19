@@ -1,4 +1,5 @@
 import { query, mutation } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Id, Doc } from "./_generated/dataModel";
 import { 
@@ -342,18 +343,24 @@ export const toggleLike = mutation({
  * Get users who liked a post
  * Equivalent to GET /posts/:postId/likes
  */
+/**
+ * Get users who liked a post
+ * Supports cursor-based pagination using Convex .paginate()
+ */
 export const getLikes = query({
   args: {
     postId: v.id("posts"),
+    paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
-    const likes = await ctx.db
+    const result = await ctx.db
       .query("post_likes")
       .withIndex("by_post", (q) => q.eq("postId", args.postId))
-      .collect();
+      .order("desc")
+      .paginate(args.paginationOpts);
 
     const users = await Promise.all(
-      likes.map(async (like) => {
+      result.page.map(async (like) => {
         const user = await ctx.db.get(like.userId);
         if (!user) return null;
         return {
@@ -366,7 +373,10 @@ export const getLikes = query({
       })
     );
 
-    return users.filter(Boolean);
+    return {
+      ...result,
+      page: users.filter(Boolean),
+    };
   },
 });
 

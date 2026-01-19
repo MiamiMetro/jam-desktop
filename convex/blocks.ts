@@ -136,16 +136,9 @@ export const list = query({
       })
     );
 
-    // Get total count
-    const allBlocks = await ctx.db
-      .query("blocks")
-      .withIndex("by_blocker", (q) => q.eq("blockerId", profile._id))
-      .collect();
-
     return {
       data: formattedBlocks.filter(Boolean),
       hasMore,
-      total: allBlocks.length,
       nextCursor: hasMore && data.length > 0 ? data[data.length - 1]._id : null,
     };
   },

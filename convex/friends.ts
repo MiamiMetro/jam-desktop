@@ -1,4 +1,5 @@
 import { query, mutation } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { getCurrentProfile, requireAuth } from "./helpers";
@@ -166,39 +167,86 @@ export const list = query({
   handler: async (ctx, args) => {
     const profile = await getCurrentProfile(ctx);
     if (!profile) {
-      return { data: [], hasMore: false, total: 0, nextCursor: null };
+      return { data: [], hasMore: false, nextCursor: null };
     }
     const limit = args.limit ?? 50;
 
-    // Get friendships where user is userId
-    const friendships1 = await ctx.db
-      .query("friends")
-      .withIndex("by_user", (q) => q.eq("userId", profile._id))
-      .filter((q) => q.eq(q.field("status"), "accepted"))
-      .collect();
+    // For non-search queries, use efficient single-batch pagination.
+    // For search queries, iteratively fetch pages to ensure we have enough matches.
+    const nonSearchFetchSize = limit + 1;
 
-    // Get friendships where user is friendId
-    const friendships2 = await ctx.db
-      .query("friends")
-      .withIndex("by_friend", (q) => q.eq("friendId", profile._id))
-      .filter((q) => q.eq(q.field("status"), "accepted"))
-      .collect();
+    let friendships1: Doc<"friends">[] = [];
+    let friendships2: Doc<"friends">[] = [];
 
-    // Combine and sort by creation time
-    const allFriendships = [...friendships1, ...friendships2].sort(
+    if (args.search) {
+      // Iteratively fetch from both directions when searching, since additional
+      // filtering may reduce the number of matching results.
+      const pageSize = 100;
+      // Upper bound to avoid unbounded scans; can be tuned if needed.
+      const maxToFetch = limit * 3 + 1;
+
+      // Helper to fetch accepted friendships for a given index/field combination.
+      const fetchAcceptedFriendships = async (
+        indexName: "by_user" | "by_friend",
+        fieldName: "userId" | "friendId"
+      ): Promise<Doc<"friends">[]> => {
+        let results: Doc<"friends">[] = [];
+        let cursor: string | null = null;
+        let done = false;
+        while (!done && results.length < maxToFetch) {
+          const page = await ctx.db
+            .query("friends")
+            .withIndex(indexName, (q) => q.eq(fieldName, profile._id))
+            .filter((q) => q.eq(q.field("status"), "accepted"))
+            .order("desc")
+            .paginate({ cursor, numItems: pageSize });
+          results = results.concat(page.page);
+          done = page.isDone;
+          cursor = page.continueCursor;
+        }
+        return results;
+      };
+
+      // Fetch friendships where profile is userId and where profile is friendId in parallel.
+      [friendships1, friendships2] = await Promise.all([
+        fetchAcceptedFriendships("by_user", "userId"),
+        fetchAcceptedFriendships("by_friend", "friendId"),
+      ]);
+    } else {
+      // Get friendships where user is userId (limited by nonSearchFetchSize)
+      friendships1 = await ctx.db
+        .query("friends")
+        .withIndex("by_user", (q) => q.eq("userId", profile._id))
+        .filter((q) => q.eq(q.field("status"), "accepted"))
+        .order("desc")
+        .take(nonSearchFetchSize);
+
+      // Get friendships where user is friendId (limited by nonSearchFetchSize)
+      friendships2 = await ctx.db
+        .query("friends")
+        .withIndex("by_friend", (q) => q.eq("friendId", profile._id))
+        .filter((q) => q.eq(q.field("status"), "accepted"))
+        .order("desc")
+        .take(nonSearchFetchSize);
+    }
+    // Combine and sort by creation time (descending - newest first)
+    let allFriendships = [...friendships1, ...friendships2].sort(
       (a, b) => b._creationTime - a._creationTime
     );
 
     // Apply cursor if provided
-    let startIndex = 0;
     if (args.cursor) {
-      const cursorIndex = allFriendships.findIndex((f) => f._id === args.cursor);
-      if (cursorIndex !== -1) {
-        startIndex = cursorIndex + 1;
+      const cursorFriendship = await ctx.db.get(args.cursor);
+      if (cursorFriendship) {
+        // Filter friendships older than cursor
+        allFriendships = allFriendships.filter(
+          (f) => f._creationTime < cursorFriendship._creationTime
+        );
       }
     }
 
-    const paginatedFriendships = allFriendships.slice(startIndex, startIndex + limit + 1);
+    // Take page size + 1 to check if there are more results
+    const paginatedFriendships = allFriendships.slice(0, limit + 1);
     const hasMore = paginatedFriendships.length > limit;
     const dataFriendships = paginatedFriendships.slice(0, limit);
 
@@ -237,9 +285,8 @@ export const list = query({
     return {
       data: validFriends.map(({ _friendshipId, ...rest }) => rest),
       hasMore,
-      total: allFriendships.length,
-      nextCursor: hasMore && dataFriendships.length > 0 
-        ? dataFriendships[dataFriendships.length - 1]._id 
+      nextCursor: hasMore && dataFriendships.length > 0
+        ? dataFriendships[dataFriendships.length - 1]._id
         : null,
     };
   },
@@ -258,13 +305,13 @@ export const getRequests = query({
   handler: async (ctx, args) => {
     const profile = await getCurrentProfile(ctx);
     if (!profile) {
-      return { data: [], hasMore: false, total: 0, nextCursor: null };
+      return { data: [], hasMore: false, nextCursor: null };
     }
     const limit = args.limit ?? 20;
 
     // Get pending requests where current user is the friendId (recipient)
     let requests: Doc<"friends">[] = [];
-    
+
     if (args.cursor) {
       const cursorRequest = await ctx.db.get(args.cursor);
       if (cursorRequest) {
@@ -288,13 +335,6 @@ export const getRequests = query({
     const hasMore = requests.length > limit;
     const data = requests.slice(0, limit);
 
-    // Get total count
-    const allRequests = await ctx.db
-      .query("friends")
-      .withIndex("by_friend", (q) => q.eq("friendId", profile._id))
-      .filter((q) => q.eq(q.field("status"), "pending"))
-      .collect();
-
     const formattedRequests = await Promise.all(
       data.map(async (request) => {
         const user = await ctx.db.get(request.userId);
@@ -313,7 +353,6 @@ export const getRequests = query({
     return {
       data: formattedRequests.filter(Boolean),
       hasMore,
-      total: allRequests.length,
       nextCursor: hasMore && data.length > 0 ? data[data.length - 1]._id : null,
     };
   },
@@ -323,24 +362,31 @@ export const getRequests = query({
  * Get pending friend requests sent by me
  * Equivalent to GET /friends/sent-requests
  * Returns a simple list of user IDs that have pending requests from the current user
+ * Uses Convex .paginate() for efficient cursor-based pagination
  */
 export const getSentRequests = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
     const profile = await getCurrentProfile(ctx);
     if (!profile) {
-      return [];
+      return { page: [], isDone: true, continueCursor: "" };
     }
 
     // Get pending requests where current user is the userId (sender)
-    const requests = await ctx.db
+    const result = await ctx.db
       .query("friends")
       .withIndex("by_user", (q) => q.eq("userId", profile._id))
       .filter((q) => q.eq(q.field("status"), "pending"))
-      .collect();
+      .order("desc")
+      .paginate(args.paginationOpts);
 
-    // Return just the friend IDs for easy lookup
-    return requests.map((request) => request.friendId);
+    // Return friend IDs for easy lookup
+    return {
+      ...result,
+      page: result.page.map((request) => request.friendId),
+    };
   },
 });
 
