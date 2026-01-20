@@ -1473,41 +1473,70 @@ function Sidebar() {
                       FRIENDS ({showFriendsSearch && userSearchQuery.trim() ? getSearchUsers().length : friends.length})
                     </div>
                     <div className="space-y-1">
-                      {(showFriendsSearch && userSearchQuery.trim() ? getSearchUsers() : friends).map((friend: User) => {
-                        const conversation = conversations.find((c) => String(c.userId) === String(friend.id));
-                        return (
-                          <div
-                            key={friend.id}
-                            className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-sidebar-accent/50 cursor-pointer group transition-colors"
-                            onClick={() => {
-                              setSelectedChatPartner(friend.id);
-                              setShowSearchUsers(false);
-                              setShowFriendsSearch(false);
-                              setUserSearchQuery("");
-                            }}
-                          >
-                            <Avatar size="sm" className="relative">
-                              <AvatarImage src={friend.avatar_url || ""} alt={friend.username} />
-                              <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-                                {friend.username.substring(0, 2).toUpperCase()}
-                              </AvatarFallback>
-                              {/* Status not available in Convex User type */}
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium truncate">{friend.username}</div>
-                              {conversation?.lastMessage?.content && (
-                                <div className="text-xs text-muted-foreground truncate">
-                                  {conversation.lastMessage.content}
-                                </div>
+                      {(() => {
+                        // Get the list to display (search results or all friends)
+                        const friendsList = showFriendsSearch && userSearchQuery.trim() ? getSearchUsers() : friends;
+
+                        // Sort friends: prioritize those with conversations (by last message time), then others
+                        const sortedFriends = [...friendsList].sort((a, b) => {
+                          const convA = conversations.find((c) => String(c.userId) === String(a.id));
+                          const convB = conversations.find((c) => String(c.userId) === String(b.id));
+
+                          // If both have conversations, sort by last message time
+                          if (convA && convB) {
+                            const timeA = convA.lastMessage?.timestamp
+                              ? new Date(convA.lastMessage.timestamp).getTime()
+                              : 0;
+                            const timeB = convB.lastMessage?.timestamp
+                              ? new Date(convB.lastMessage.timestamp).getTime()
+                              : 0;
+                            return timeB - timeA; // Most recent first
+                          }
+
+                          // Friends with conversations come first
+                          if (convA && !convB) return -1;
+                          if (!convA && convB) return 1;
+
+                          // Both have no conversations, maintain original order
+                          return 0;
+                        });
+
+                        return sortedFriends.map((friend: User) => {
+                          const conversation = conversations.find((c) => String(c.userId) === String(friend.id));
+                          return (
+                            <div
+                              key={friend.id}
+                              className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-sidebar-accent/50 cursor-pointer group transition-colors"
+                              onClick={() => {
+                                setSelectedChatPartner(friend.id);
+                                setShowSearchUsers(false);
+                                setShowFriendsSearch(false);
+                                setUserSearchQuery("");
+                              }}
+                            >
+                              <Avatar size="sm" className="relative">
+                                <AvatarImage src={friend.avatar_url || ""} alt={friend.username} />
+                                <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                                  {friend.username.substring(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                                {/* Status not available in Convex User type */}
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{friend.username}</div>
+                                {conversation?.lastMessage?.content && (
+                                  <div className="text-xs text-muted-foreground truncate">
+                                    {conversation.lastMessage.content}
+                                  </div>
+                                )}
+                              </div>
+                              {/* Unread dot indicator - right side, bright orange */}
+                              {conversation?.hasUnread && (
+                                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0 shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
                               )}
                             </div>
-                            {/* Unread dot indicator - right side, bright orange */}
-                            {conversation?.hasUnread && (
-                              <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0 shadow-[0_0_6px_rgba(249,115,22,0.6)]" />
-                            )}
-                          </div>
-                        );
-                      })}
+                          );
+                        });
+                      })()}
                       {showFriendsSearch && userSearchQuery.trim() && getSearchUsers().length === 0 && (
                         <div className="text-center py-4 text-xs text-muted-foreground">
                           No friends found
