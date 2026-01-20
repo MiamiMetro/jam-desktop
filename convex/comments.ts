@@ -29,19 +29,9 @@ async function formatComment(
 ) {
   const author = await ctx.db.get(comment.authorId);
 
-  // Get likes count
-  const likes = await ctx.db
-    .query("comment_likes")
-    .withIndex("by_comment", (q: any) => q.eq("commentId", comment._id))
-    .collect();
-  const likesCount = likes.length;
-
-  // Get reply count (direct children only)
-  const replies = await ctx.db
-    .query("comments")
-    .withIndex("by_parent", (q: any) => q.eq("parentId", comment._id))
-    .collect();
-  const repliesCount = replies.length;
+  // Use denormalized counts for O(1) performance
+  const likesCount = comment.likesCount ?? 0;
+  const repliesCount = comment.repliesCount ?? 0;
 
   // Check if current user liked this comment
   let isLiked = false;
@@ -128,7 +118,17 @@ export const create = mutation({
       depth: 0,
       text,
       audioUrl,
+      likesCount: 0,
+      repliesCount: 0,
     });
+
+    // Increment post's comments count
+    const parentPost = await ctx.db.get(args.postId);
+    if (parentPost) {
+      await ctx.db.patch(args.postId, {
+        commentsCount: (parentPost.commentsCount ?? 0) + 1,
+      });
+    }
 
     const comment = await ctx.db.get(commentId);
     if (!comment) {
@@ -188,6 +188,13 @@ export const reply = mutation({
       depth: parent.depth + 1,
       text,
       audioUrl,
+      likesCount: 0,
+      repliesCount: 0,
+    });
+
+    // Increment parent comment's replies count
+    await ctx.db.patch(args.parentId, {
+      repliesCount: (parent.repliesCount ?? 0) + 1,
     });
 
     const comment = await ctx.db.get(commentId);
@@ -401,15 +408,25 @@ export const toggleLike = mutation({
     if (existingLike) {
       // Unlike
       await ctx.db.delete(existingLike._id);
+      // Decrement counter
+      await ctx.db.patch(args.commentId, {
+        likesCount: Math.max(0, (comment.likesCount ?? 0) - 1),
+      });
     } else {
       // Like
       await ctx.db.insert("comment_likes", {
         commentId: args.commentId,
         userId: profile._id,
       });
+      // Increment counter
+      await ctx.db.patch(args.commentId, {
+        likesCount: (comment.likesCount ?? 0) + 1,
+      });
     }
 
-    return await formatComment(ctx, comment, profile._id);
+    // Refetch comment to get updated count
+    const updatedComment = await ctx.db.get(args.commentId);
+    return await formatComment(ctx, updatedComment!, profile._id);
   },
 });
 
@@ -437,36 +454,79 @@ export const remove = mutation({
       throw new Error("You can only delete your own comments");
     }
 
-    // Delete likes on this comment
-    const likes = await ctx.db
-      .query("comment_likes")
-      .withIndex("by_comment", (q) => q.eq("commentId", args.commentId))
-      .collect();
-    for (const like of likes) {
-      await ctx.db.delete(like._id);
+    // Delete likes on this comment in batches
+    let hasMoreLikes = true;
+    while (hasMoreLikes) {
+      const likes = await ctx.db
+        .query("comment_likes")
+        .withIndex("by_comment", (q) => q.eq("commentId", args.commentId))
+        .take(100);
+      if (likes.length === 0) break;
+      for (const like of likes) {
+        await ctx.db.delete(like._id);
+      }
+      hasMoreLikes = likes.length === 100;
     }
 
     if (args.cascade) {
-      // Get all comments and filter by path prefix to find descendants
-      const allComments = await ctx.db
-        .query("comments")
-        .withIndex("by_post", (q) => q.eq("postId", comment.postId))
-        .collect();
+      // Get all comments in batches and filter by path prefix to find descendants
+      let hasMoreComments = true;
+      let lastCreationTime: number | null = null;
 
-      const descendants = allComments.filter(
-        (c) => c.path.startsWith(comment.path + ".") && c._id !== comment._id
-      );
+      while (hasMoreComments) {
+        let query = ctx.db
+          .query("comments")
+          .withIndex("by_post", (q) => q.eq("postId", comment.postId))
+          .order("desc");
 
-      for (const descendant of descendants) {
-        // Delete likes on descendant
-        const descendantLikes = await ctx.db
-          .query("comment_likes")
-          .withIndex("by_comment", (q) => q.eq("commentId", descendant._id))
-          .collect();
-        for (const like of descendantLikes) {
-          await ctx.db.delete(like._id);
+        if (lastCreationTime !== null) {
+          query = query.filter((q) => q.lt(q.field("_creationTime"), lastCreationTime!));
         }
-        await ctx.db.delete(descendant._id);
+
+        const batch = await query.take(100);
+        if (batch.length === 0) break;
+
+        const descendants = batch.filter(
+          (c) => c.path.startsWith(comment.path + ".") && c._id !== comment._id
+        );
+
+        for (const descendant of descendants) {
+          // Delete likes on descendant in batches
+          let hasMoreDescendantLikes = true;
+          while (hasMoreDescendantLikes) {
+            const descendantLikes = await ctx.db
+              .query("comment_likes")
+              .withIndex("by_comment", (q) => q.eq("commentId", descendant._id))
+              .take(100);
+            if (descendantLikes.length === 0) break;
+            for (const like of descendantLikes) {
+              await ctx.db.delete(like._id);
+            }
+            hasMoreDescendantLikes = descendantLikes.length === 100;
+          }
+          await ctx.db.delete(descendant._id);
+        }
+
+        lastCreationTime = batch[batch.length - 1]._creationTime;
+        hasMoreComments = batch.length === 100;
+      }
+    }
+
+    // Decrement parent comment's replies count (if it has a parent)
+    if (comment.parentId) {
+      const parentComment = await ctx.db.get(comment.parentId);
+      if (parentComment) {
+        await ctx.db.patch(comment.parentId, {
+          repliesCount: Math.max(0, (parentComment.repliesCount ?? 0) - 1),
+        });
+      }
+    } else {
+      // Top-level comment - decrement post's comments count
+      const postDoc = await ctx.db.get(comment.postId);
+      if (postDoc) {
+        await ctx.db.patch(comment.postId, {
+          commentsCount: Math.max(0, (postDoc.commentsCount ?? 0) - 1),
+        });
       }
     }
 

@@ -25,6 +25,9 @@ export default defineSchema({
     authorId: v.id("profiles"),
     text: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
+    // Denormalized counts for O(1) read performance
+    likesCount: v.optional(v.number()),
+    commentsCount: v.optional(v.number()),
   })
     .index("by_author", ["authorId"]),
 
@@ -38,6 +41,9 @@ export default defineSchema({
     depth: v.number(), // 0 for top-level, 1 for first reply, etc.
     text: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
+    // Denormalized counts for O(1) read performance
+    likesCount: v.optional(v.number()),
+    repliesCount: v.optional(v.number()),
   })
     .index("by_post", ["postId"])
     .index("by_post_and_path", ["postId", "path"])

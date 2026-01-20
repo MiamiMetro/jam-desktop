@@ -20,19 +20,9 @@ async function formatPost(
 ) {
   const author = await ctx.db.get(post.authorId);
 
-  // Get likes count
-  const likes = await ctx.db
-    .query("post_likes")
-    .withIndex("by_post", (q: any) => q.eq("postId", post._id))
-    .collect();
-  const likesCount = likes.length;
-
-  // Get comments count from the new comments table
-  const comments = await ctx.db
-    .query("comments")
-    .withIndex("by_post", (q: any) => q.eq("postId", post._id))
-    .collect();
-  const commentsCount = comments.length;
+  // Use denormalized counts for O(1) performance
+  const likesCount = post.likesCount ?? 0;
+  const commentsCount = post.commentsCount ?? 0;
 
   // Check if current user liked this post
   let isLiked = false;
@@ -97,6 +87,8 @@ export const create = mutation({
       authorId: profile._id,
       text: text,
       audioUrl: audioUrl,
+      likesCount: 0,
+      commentsCount: 0,
     });
 
     const post = await ctx.db.get(postId);
@@ -261,30 +253,45 @@ export const remove = mutation({
       throw new Error("You can only delete your own posts");
     }
 
-    // Delete all likes for this post
-    const likes = await ctx.db
-      .query("post_likes")
-      .withIndex("by_post", (q) => q.eq("postId", args.postId))
-      .collect();
-    for (const like of likes) {
-      await ctx.db.delete(like._id);
-    }
-
-    // Delete all comments from the new comments table
-    const comments = await ctx.db
-      .query("comments")
-      .withIndex("by_post", (q) => q.eq("postId", args.postId))
-      .collect();
-    for (const comment of comments) {
-      // Delete likes on comments
-      const commentLikes = await ctx.db
-        .query("comment_likes")
-        .withIndex("by_comment", (q) => q.eq("commentId", comment._id))
-        .collect();
-      for (const like of commentLikes) {
+    // Delete all likes for this post in batches to avoid memory issues
+    let hasMoreLikes = true;
+    while (hasMoreLikes) {
+      const likes = await ctx.db
+        .query("post_likes")
+        .withIndex("by_post", (q) => q.eq("postId", args.postId))
+        .take(100);
+      if (likes.length === 0) break;
+      for (const like of likes) {
         await ctx.db.delete(like._id);
       }
-      await ctx.db.delete(comment._id);
+      hasMoreLikes = likes.length === 100;
+    }
+
+    // Delete all comments from the new comments table in batches
+    let hasMoreComments = true;
+    while (hasMoreComments) {
+      const comments = await ctx.db
+        .query("comments")
+        .withIndex("by_post", (q) => q.eq("postId", args.postId))
+        .take(100);
+      if (comments.length === 0) break;
+      for (const comment of comments) {
+        // Delete likes on comments in batches
+        let hasMoreCommentLikes = true;
+        while (hasMoreCommentLikes) {
+          const commentLikes = await ctx.db
+            .query("comment_likes")
+            .withIndex("by_comment", (q) => q.eq("commentId", comment._id))
+            .take(100);
+          if (commentLikes.length === 0) break;
+          for (const like of commentLikes) {
+            await ctx.db.delete(like._id);
+          }
+          hasMoreCommentLikes = commentLikes.length === 100;
+        }
+        await ctx.db.delete(comment._id);
+      }
+      hasMoreComments = comments.length === 100;
     }
 
     // Comments are now in the separate comments table, handled above
@@ -326,16 +333,25 @@ export const toggleLike = mutation({
     if (existingLike) {
       // Unlike
       await ctx.db.delete(existingLike._id);
+      // Decrement counter
+      await ctx.db.patch(args.postId, {
+        likesCount: Math.max(0, (post.likesCount ?? 0) - 1),
+      });
     } else {
       // Like
       await ctx.db.insert("post_likes", {
         postId: args.postId,
         userId: profile._id,
       });
+      // Increment counter
+      await ctx.db.patch(args.postId, {
+        likesCount: (post.likesCount ?? 0) + 1,
+      });
     }
 
-    // Return updated post
-    return await formatPost(ctx, post, profile._id);
+    // Return updated post (refetch to get updated count)
+    const updatedPost = await ctx.db.get(args.postId);
+    return await formatPost(ctx, updatedPost!, profile._id);
   },
 });
 
