@@ -165,30 +165,22 @@ export async function isBlocked(
 
 /**
  * Check if two users are friends (accepted status)
+ * OPTIMIZED: Only queries one direction thanks to bidirectional records!
  */
 export async function areFriends(
   ctx: QueryCtx | MutationCtx,
   userId1: Id<"profiles">,
   userId2: Id<"profiles">
 ): Promise<boolean> {
-  // Check friendship in both directions
-  const friendship1 = await ctx.db
+  // With bidirectional records, we only need to check one direction
+  const friendship = await ctx.db
     .query("friends")
     .withIndex("by_user_and_friend", (q) =>
       q.eq("userId", userId1).eq("friendId", userId2)
     )
     .first();
 
-  if (friendship1?.status === "accepted") return true;
-
-  const friendship2 = await ctx.db
-    .query("friends")
-    .withIndex("by_user_and_friend", (q) =>
-      q.eq("userId", userId2).eq("friendId", userId1)
-    )
-    .first();
-
-  return friendship2?.status === "accepted";
+  return friendship?.status === "accepted";
 }
 
 /**

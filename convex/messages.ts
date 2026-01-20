@@ -14,10 +14,12 @@ import {
 import { checkRateLimit } from "./rateLimiter";
 
 /**
- * Mark participants of a merged conversation as inactive
- * Call this when merging duplicate conversations
+ * Mark participants of a merged conversation as inactive.
+ * Call this when merging duplicate conversations.
+ *
+ * Helper function for conversation merge features. This function is part of the public API.
  */
-async function markConversationAsInactive(
+export async function markConversationAsInactive(
   ctx: any,
   conversationId: Id<"conversations">
 ): Promise<void> {
@@ -443,7 +445,7 @@ export const getWithUser = query({
     const data = results.slice(0, limit);
 
     // Next cursor is the oldest message's _creationTime (for loading older)
-    // Must be computed BEFORE the reverse() call on line 385 (critical ordering constraint).
+    // Must be computed BEFORE the reverse() call below (critical ordering constraint).
     // data is ordered DESC (newest first), so data[data.length - 1] is the oldest message
     const nextCursor = hasMore && data.length > 0 ? data[data.length - 1]._creationTime : null;
 

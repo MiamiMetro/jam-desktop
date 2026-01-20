@@ -75,6 +75,7 @@ export const sendRequest = mutation({
 /**
  * Accept a friend request
  * Equivalent to POST /friends/:userId/accept
+ * Creates bidirectional friendship records
  */
 export const acceptRequest = mutation({
   args: {
@@ -82,7 +83,7 @@ export const acceptRequest = mutation({
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
-    
+
     // Rate limit: 10 friend actions per minute
     await checkRateLimit(ctx, "friendRequest", profile._id);
 
@@ -102,9 +103,25 @@ export const acceptRequest = mutation({
       throw new Error("Friend request is not pending");
     }
 
-    // Update to accepted
+    // Update original request to accepted
     await ctx.db.patch(request._id, { status: "accepted" });
 
+    // Create mirror record for bidirectional lookup
+    // This allows O(1) friend checks without querying both directions
+    const existingMirror = await ctx.db
+      .query("friends")
+      .withIndex("by_user_and_friend", (q) =>
+        q.eq("userId", profile._id).eq("friendId", args.userId)
+      )
+      .first();
+
+    if (!existingMirror) {
+      await ctx.db.insert("friends", {
+        userId: profile._id,
+        friendId: args.userId,
+        status: "accepted",
+      });
+    }
     return { message: "Friend request accepted", status: "accepted" };
   },
 });
@@ -112,6 +129,7 @@ export const acceptRequest = mutation({
 /**
  * Remove a friend or cancel a friend request
  * Equivalent to DELETE /friends/:userId
+ * For accepted friendships, deletes both bidirectional records
  */
 export const remove = mutation({
   args: {
@@ -119,11 +137,11 @@ export const remove = mutation({
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
-    
+
     // Rate limit: 10 friend actions per minute
     await checkRateLimit(ctx, "friendRequest", profile._id);
 
-    // Find friendship in either direction
+    // Find friendship in both directions
     const friendship1 = await ctx.db
       .query("friends")
       .withIndex("by_user_and_friend", (q) =>
@@ -142,6 +160,8 @@ export const remove = mutation({
       throw new Error("Friendship not found");
     }
 
+    // Delete both records (for accepted friendships, both exist)
+    // For pending requests, only one exists
     if (friendship1) {
       await ctx.db.delete(friendship1._id);
     }
@@ -171,13 +191,6 @@ export const list = query({
     }
     const limit = args.limit ?? 50;
 
-    // For non-search queries, use efficient single-batch pagination.
-    // For search queries, iteratively fetch pages to ensure we have enough matches.
-    const nonSearchFetchSize = limit + 1;
-
-    let friendships1: Doc<"friends">[] = [];
-    let friendships2: Doc<"friends">[] = [];
-
     // Apply cursor at query level for efficiency
     let cursorTime: number | undefined;
     if (args.cursor) {
@@ -189,106 +202,63 @@ export const list = query({
       cursorTime = cursorFriendship._creationTime;
     }
 
+    let friendships: Doc<"friends">[] = [];
+
     if (args.search) {
-      // Iteratively fetch from both directions when searching, since additional
-      // filtering may reduce the number of matching results.
+      // For search: iteratively fetch pages to ensure enough matches after filtering
       const pageSize = 100;
-      // Upper bound to avoid unbounded scans; can be tuned if needed.
-      const maxToFetch = limit * 3 + 1;
+      const maxToFetch = limit * 3 + 1; // Upper bound to prevent unbounded scans
 
-      // Helper to fetch accepted friendships for a given index/field combination.
-      const fetchAcceptedFriendships = async (
-        indexName: "by_user" | "by_friend",
-        fieldName: "userId" | "friendId"
-      ): Promise<Doc<"friends">[]> => {
-        let results: Doc<"friends">[] = [];
-        let cursor: string | null = null;
-        let done = false;
-        while (!done && results.length < maxToFetch) {
-          const query = ctx.db
-            .query("friends")
-            .withIndex(indexName, (q) => q.eq(fieldName, profile._id))
-            .filter((q) => {
-              // Combine status and cursor filters
-              if (cursorTime !== undefined) {
-                return q.and(
-                  q.eq(q.field("status"), "accepted"),
-                  q.lt(q.field("_creationTime"), cursorTime)
-                );
-              }
-              return q.eq(q.field("status"), "accepted");
-            })
-            .order("desc");
+      let cursor: string | null = null;
+      let done = false;
 
-          const page = await query.paginate({ cursor, numItems: pageSize });
-          results = results.concat(page.page);
-          done = page.isDone;
-          cursor = page.continueCursor;
+      while (!done && friendships.length < maxToFetch) {
+        // Use compound index for efficient filtering by user + status
+        let query = ctx.db
+          .query("friends")
+          .withIndex("by_user_and_status", (q) =>
+            q.eq("userId", profile._id).eq("status", "accepted")
+          )
+          .order("desc");
+
+        // Apply cursor filter if provided
+        if (cursorTime !== undefined) {
+          query = query.filter((q) => q.lt(q.field("_creationTime"), cursorTime));
         }
-        return results;
-      };
 
-      // Fetch friendships where profile is userId and where profile is friendId in parallel.
-      [friendships1, friendships2] = await Promise.all([
-        fetchAcceptedFriendships("by_user", "userId"),
-        fetchAcceptedFriendships("by_friend", "friendId"),
-      ]);
+        const page = await query.paginate({ cursor, numItems: pageSize });
+        friendships = friendships.concat(page.page);
+        done = page.isDone;
+        cursor = page.continueCursor;
+      }
     } else {
-      // Get friendships where user is userId (limited by nonSearchFetchSize)
-      const query1 = ctx.db
+      // Non-search: efficient single-batch query
+      const fetchSize = limit + 1;
+
+      // Use compound index for efficient filtering by user + status
+      let query = ctx.db
         .query("friends")
-        .withIndex("by_user", (q) => q.eq("userId", profile._id))
-        .filter((q) => {
-          // Combine status and cursor filters at query level
-          if (cursorTime !== undefined) {
-            return q.and(
-              q.eq(q.field("status"), "accepted"),
-              q.lt(q.field("_creationTime"), cursorTime)
-            );
-          }
-          return q.eq(q.field("status"), "accepted");
-        })
+        .withIndex("by_user_and_status", (q) =>
+          q.eq("userId", profile._id).eq("status", "accepted")
+        )
         .order("desc");
 
-      friendships1 = await query1.take(nonSearchFetchSize);
+      // Apply cursor filter if provided
+      if (cursorTime !== undefined) {
+        query = query.filter((q) => q.lt(q.field("_creationTime"), cursorTime));
+      }
 
-      // Get friendships where user is friendId (limited by nonSearchFetchSize)
-      const query2 = ctx.db
-        .query("friends")
-        .withIndex("by_friend", (q) => q.eq("friendId", profile._id))
-        .filter((q) => {
-          // Combine status and cursor filters at query level
-          if (cursorTime !== undefined) {
-            return q.and(
-              q.eq(q.field("status"), "accepted"),
-              q.lt(q.field("_creationTime"), cursorTime)
-            );
-          }
-          return q.eq(q.field("status"), "accepted");
-        })
-        .order("desc");
-
-      friendships2 = await query2.take(nonSearchFetchSize);
+      friendships = await query.take(fetchSize);
     }
 
-    // Combine and sort by creation time (descending - newest first)
-    // No need to filter by cursor again - already done at query level!
-    const allFriendships = [...friendships1, ...friendships2].sort(
-      (a, b) => b._creationTime - a._creationTime
-    );
+    // Check if there are more results
+    const hasMore = friendships.length > limit;
+    const dataFriendships = friendships.slice(0, limit);
 
-    // Take page size + 1 to check if there are more results
-    const paginatedFriendships = allFriendships.slice(0, limit + 1);
-    const hasMore = paginatedFriendships.length > limit;
-    const dataFriendships = paginatedFriendships.slice(0, limit);
-
+    // Fetch friend profiles
     const friends = await Promise.all(
       dataFriendships.map(async (friendship) => {
-        const friendId =
-          friendship.userId === profile._id
-            ? friendship.friendId
-            : friendship.userId;
-        const friend = await ctx.db.get(friendId);
+        const friend = await ctx.db.get(friendship.friendId);
         if (!friend) return null;
 
         return {

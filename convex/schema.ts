@@ -63,14 +63,18 @@ export default defineSchema({
     .index("by_comment_and_user", ["commentId", "userId"]),
 
   // Friends table - for friend requests and friendships
+  // BIDIRECTIONAL MODEL:
+  // - Pending requests: ONE record (userId = requester, friendId = recipient)
+  // - Accepted friendships: TWO records (one for each direction)
   friends: defineTable({
-    userId: v.id("profiles"), // The one who sent the request
-    friendId: v.id("profiles"), // The one who received the request
+    userId: v.id("profiles"), // The owner of this friendship record
+    friendId: v.id("profiles"), // The friend
     status: v.union(v.literal("pending"), v.literal("accepted")),
   })
     .index("by_user", ["userId"])
-    .index("by_friend", ["friendId"])
     .index("by_status", ["status"])
+    .index("by_user_and_status", ["userId", "status"]) // Optimized for filtering accepted friends
+    .index("by_friend", ["friendId"])
     .index("by_user_and_friend", ["userId", "friendId"]),
 
   // Blocks table

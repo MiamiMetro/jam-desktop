@@ -72,24 +72,45 @@ export const search = query({
       }
 
       if (!args.cursor || cursorTime !== undefined) {
-        // Use search index to find profiles matching the search term
+        // Use search index to find profiles matching the search term.
+        // The search index cannot express our cursor condition (creationTime < cursorTime)
+        // or "exclude current user" directly, so we intentionally over-fetch and then apply
+        // those filters on the application side.
+        //
+        // When paginating (cursorTime !== undefined) we cap the search fetch size at 100 to
+        // balance correctness and performance:
+        //   - Larger values reduce the chance that we need an additional round trip to find
+        //     enough post-cursor results, but increase index load and network usage.
+        //   - Smaller values reduce per-request cost but may require more requests from the
+        //     client to page through a large result set.
+        // If this endpoint becomes a hotspot, revisit this constant or introduce a more
+        // sophisticated paging strategy.
+        const searchFetchSize = cursorTime !== undefined ? 100 : fetchSize;
+
         const searchResults = await ctx.db
           .query("profiles")
           .withSearchIndex("search_profiles", (q) => {
-            // Search by username
-            let query = q.search("username", args.search!);
-            // Apply cursor filter if provided
-            if (cursorTime !== undefined) {
-              query = query.lt("_creationTime", cursorTime);
-            }
-            return query;
+            // Search by username only (filterFields in schema)
+            return q.search("username", args.search!);
           })
-          .take(fetchSize);
+          .take(searchFetchSize);
 
-        // Exclude current user if authenticated
-        profiles = currentProfile
-          ? searchResults.filter((p) => p._id !== currentProfile._id)
-          : searchResults;
+        // Apply cursor filter and exclude current user
+        let filteredProfiles = searchResults;
+
+        if (cursorTime !== undefined) {
+          filteredProfiles = filteredProfiles.filter(
+            (p) => p._creationTime < cursorTime
+          );
+        }
+
+        if (currentProfile) {
+          filteredProfiles = filteredProfiles.filter(
+            (p) => p._id !== currentProfile._id
+          );
+        }
+
+        profiles = filteredProfiles.slice(0, fetchSize);
 
         // Check displayName separately (search index only supports username)
         // If we didn't get enough results from username search, also search displayName
