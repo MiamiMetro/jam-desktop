@@ -1,4 +1,5 @@
 import { query, mutation } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id, Doc } from "./_generated/dataModel";
 import {
@@ -18,18 +19,28 @@ import { checkRateLimit } from "./rateLimiter";
  * Call this when merging duplicate conversations.
  *
  * Helper function for conversation merge features. This function is part of the public API.
+ * Uses batched processing to prevent OOM on large group conversations.
  */
 export async function markConversationAsInactive(
-  ctx: any,
+  ctx: MutationCtx,
   conversationId: Id<"conversations">
 ): Promise<void> {
-  const participants = await ctx.db
-    .query("conversation_participants")
-    .withIndex("by_conversation", (q: any) => q.eq("conversationId", conversationId))
-    .collect();
+  // Process in batches of 100 to prevent OOM on large groups
+  let hasMore = true;
 
-  for (const participant of participants) {
-    await ctx.db.patch(participant._id, { isActive: false });
+  while (hasMore) {
+    const batch = await ctx.db
+      .query("conversation_participants")
+      .withIndex("by_conversation", (q: any) => q.eq("conversationId", conversationId))
+      .take(100);
+
+    if (batch.length === 0) break;
+
+    for (const participant of batch) {
+      await ctx.db.patch(participant._id, { isActive: false });
+    }
+
+    hasMore = batch.length === 100;
   }
 }
 
@@ -38,7 +49,7 @@ export async function markConversationAsInactive(
  * Uses dm_keys for practical uniqueness with deterministic canonical selection
  */
 async function findOrCreateDM(
-  ctx: any,
+  ctx: MutationCtx,
   profileA: Id<"profiles">,
   profileB: Id<"profiles">
 ): Promise<{ conversationId: Id<"conversations">; participantId: Id<"conversation_participants"> }> {

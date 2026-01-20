@@ -89,6 +89,7 @@ export const create = mutation({
       audioUrl: audioUrl,
       likesCount: 0,
       commentsCount: 0,
+      nextCommentSequence: 0, // Initialize atomic counter for comment path generation
     });
 
     const post = await ctx.db.get(postId);

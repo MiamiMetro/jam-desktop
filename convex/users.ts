@@ -1,7 +1,7 @@
 import { query } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentProfile } from "./helpers";
 
 /**
@@ -55,15 +55,19 @@ export const search = query({
       hasMore = profiles.length > limit;
       profiles = profiles.slice(0, limit);
     } else {
-      // Search queries: use search index for efficient server-side filtering
-      const fetchSize = limit + 1;
+      // Search queries: iterative fetch with controlled batching
+      // This approach reduces over-fetching while ensuring stable pagination
+      const targetCount = limit + 1; // Need one extra to determine hasMore
+      const batchSize = 50; // Smaller batches reduce waste from filtering
 
-      // Build cursor filter options
+      // Build cursor filter
       let cursorTime: number | undefined;
+      let cursorId: Id<"profiles"> | undefined;
       if (args.cursor) {
         const cursorProfile = await ctx.db.get(args.cursor);
         if (cursorProfile) {
           cursorTime = cursorProfile._creationTime;
+          cursorId = cursorProfile._id;
         } else {
           // Invalid cursor: return empty
           profiles = [];
@@ -72,106 +76,110 @@ export const search = query({
       }
 
       if (!args.cursor || cursorTime !== undefined) {
-        // Use search index to find profiles matching the search term.
-        // The search index cannot express our cursor condition (creationTime < cursorTime)
-        // or "exclude current user" directly, so we intentionally over-fetch and then apply
-        // those filters on the application side.
-        //
-        // When paginating (cursorTime !== undefined) we cap the search fetch size at 100 to
-        // balance correctness and performance:
-        //   - Larger values reduce the chance that we need an additional round trip to find
-        //     enough post-cursor results, but increase index load and network usage.
-        //   - Smaller values reduce per-request cost but may require more requests from the
-        //     client to page through a large result set.
-        // If this endpoint becomes a hotspot, revisit this constant or introduce a more
-        // sophisticated paging strategy.
-        const searchFetchSize = cursorTime !== undefined ? 100 : fetchSize;
+        const searchLower = args.search!.toLowerCase();
+        const matchedProfiles: Doc<"profiles">[] = [];
+        let searchExhausted = false;
+        let currentBatchStart = 0;
 
-        const searchResults = await ctx.db
-          .query("profiles")
-          .withSearchIndex("search_profiles", (q) => {
-            // Search by username only (filterFields in schema)
-            return q.search("username", args.search!);
-          })
-          .take(searchFetchSize);
+        // Iteratively fetch search results in batches until we have enough matches
+        while (matchedProfiles.length < targetCount && !searchExhausted) {
+          // Fetch next batch from search index
+          const searchBatch = await ctx.db
+            .query("profiles")
+            .withSearchIndex("search_profiles", (q) => {
+              return q.search("username", args.search!);
+            })
+            .take(batchSize + currentBatchStart);
 
-        // Apply cursor filter and exclude current user
-        let filteredProfiles = searchResults;
+          // Extract only the new results (skip already processed)
+          const newResults = searchBatch.slice(currentBatchStart);
 
-        if (cursorTime !== undefined) {
-          filteredProfiles = filteredProfiles.filter(
-            (p) => p._creationTime < cursorTime
-          );
-        }
+          if (newResults.length === 0) {
+            searchExhausted = true;
+            break;
+          }
 
-        if (currentProfile) {
-          filteredProfiles = filteredProfiles.filter(
-            (p) => p._id !== currentProfile._id
-          );
-        }
-
-        profiles = filteredProfiles.slice(0, fetchSize);
-
-        // Check displayName separately (search index only supports username)
-        // If we didn't get enough results from username search, also search displayName
-        if (profiles.length < limit) {
-          const searchLower = args.search!.toLowerCase();
-
-          // Get additional profiles that match displayName (fallback to old method for displayName)
-          const displayNameMatches: Doc<"profiles">[] = [];
-          const batchSize = 50;
-          let lastCreationTime = cursorTime ?? null;
-
-          // Only fetch if we need more results
-          while (displayNameMatches.length + profiles.length <= limit) {
-            let q = ctx.db.query("profiles").order("desc");
-
-            if (lastCreationTime !== null) {
-              q = q.filter((queryBuilder) =>
-                queryBuilder.lt(queryBuilder.field("_creationTime"), lastCreationTime!)
-              );
+          // Filter this batch by cursor and current user
+          for (const profile of newResults) {
+            // Skip if before cursor (for pagination)
+            if (cursorTime !== undefined) {
+              if (profile._creationTime > cursorTime) continue;
+              if (profile._creationTime === cursorTime && profile._id >= cursorId!) continue;
             }
 
-            const batch = await q.take(batchSize);
+            // Skip current user
+            if (currentProfile && profile._id === currentProfile._id) continue;
+
+            // Username matches (from search index)
+            matchedProfiles.push(profile);
+
+            if (matchedProfiles.length >= targetCount) break;
+          }
+
+          currentBatchStart += batchSize;
+
+          // Stop if we've fetched a lot and still don't have enough
+          // (prevents excessive fetching on sparse matches)
+          if (currentBatchStart >= 200) {
+            searchExhausted = true;
+          }
+        }
+
+        profiles = matchedProfiles;
+
+        // Fallback: search displayName if we don't have enough results
+        // This scans profiles in batches to find displayName matches
+        if (matchedProfiles.length < targetCount) {
+          const displayNameMatches: Doc<"profiles">[] = [];
+          const displayBatchSize = 50;
+          let lastCreationTime = cursorTime;
+          let scanExhausted = false;
+
+          while (matchedProfiles.length + displayNameMatches.length < targetCount && !scanExhausted) {
+            let q = ctx.db.query("profiles").order("desc");
+
+            if (lastCreationTime !== undefined) {
+              q = q.filter((qb) => qb.lt(qb.field("_creationTime"), lastCreationTime!));
+            }
+
+            const batch = await q.take(displayBatchSize);
 
             if (batch.length === 0) {
+              scanExhausted = true;
               break;
             }
 
-            // Exclude current user and profiles already found by username search
-            const filteredBatch = batch.filter((p) =>
-              (!currentProfile || p._id !== currentProfile._id) &&
-              !profiles.some((existing) => existing._id === p._id)
-            );
+            // Filter and check displayName
+            for (const profile of batch) {
+              // Skip if already matched by username
+              if (matchedProfiles.some((p) => p._id === profile._id)) continue;
 
-            // Update lastCreationTime for next iteration
-            if (filteredBatch.length > 0) {
-              lastCreationTime = filteredBatch[filteredBatch.length - 1]._creationTime;
-            } else if (batch.length > 0) {
-              lastCreationTime = batch[batch.length - 1]._creationTime;
-            }
+              // Skip current user
+              if (currentProfile && profile._id === currentProfile._id) continue;
 
-            // Filter by displayName
-            for (const p of filteredBatch) {
-              if (p.displayName?.toLowerCase().includes(searchLower)) {
-                displayNameMatches.push(p);
-                if (displayNameMatches.length + profiles.length > limit) {
+              // Check displayName match
+              if (profile.displayName?.toLowerCase().includes(searchLower)) {
+                displayNameMatches.push(profile);
+                if (matchedProfiles.length + displayNameMatches.length >= targetCount) {
                   break;
                 }
               }
             }
 
-            if (displayNameMatches.length + profiles.length > limit) {
-              break;
+            lastCreationTime = batch[batch.length - 1]._creationTime;
+
+            if (batch.length < displayBatchSize) {
+              scanExhausted = true;
             }
 
-            if (batch.length < batchSize) {
+            // Cap at 200 total scanned to prevent excessive work
+            if (displayNameMatches.length + matchedProfiles.length >= targetCount) {
               break;
             }
           }
 
-          // Merge username and displayName matches, sort by creation time
-          profiles = [...profiles, ...displayNameMatches].sort(
+          // Merge and sort by creation time (desc)
+          profiles = [...matchedProfiles, ...displayNameMatches].sort(
             (a, b) => b._creationTime - a._creationTime
           );
         }

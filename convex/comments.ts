@@ -101,14 +101,22 @@ export const create = mutation({
       throw new Error("Comment must have either text or audio");
     }
 
-    // Count existing top-level comments to generate path
-    const existingTopLevel = await ctx.db
-      .query("comments")
-      .withIndex("by_post", (q) => q.eq("postId", args.postId))
-      .filter((q) => q.eq(q.field("depth"), 0))
-      .collect();
+    // Get parent post for atomic sequence counter
+    const parentPost = await ctx.db.get(args.postId);
+    if (!parentPost) {
+      throw new Error("Post not found");
+    }
 
-    const path = generateNextSegment(existingTopLevel.length);
+    // Atomically increment sequence counter to generate unique path
+    // This guarantees no duplicate paths even under concurrent comment creation
+    const nextSeq = (parentPost.nextCommentSequence ?? 0) + 1;
+    await ctx.db.patch(args.postId, {
+      nextCommentSequence: nextSeq,
+      commentsCount: (parentPost.commentsCount ?? 0) + 1,
+    });
+
+    // Generate path using the atomic sequence
+    const path = generateNextSegment(nextSeq);
 
     const commentId = await ctx.db.insert("comments", {
       postId: args.postId,
@@ -120,15 +128,8 @@ export const create = mutation({
       audioUrl,
       likesCount: 0,
       repliesCount: 0,
+      nextReplySequence: 0, // Initialize counter for this comment's replies
     });
-
-    // Increment post's comments count
-    const parentPost = await ctx.db.get(args.postId);
-    if (parentPost) {
-      await ctx.db.patch(args.postId, {
-        commentsCount: (parentPost.commentsCount ?? 0) + 1,
-      });
-    }
 
     const comment = await ctx.db.get(commentId);
     if (!comment) {
@@ -171,13 +172,16 @@ export const reply = mutation({
       throw new Error("Reply must have either text or audio");
     }
 
-    // Count existing replies to this parent to generate path segment
-    const existingReplies = await ctx.db
-      .query("comments")
-      .withIndex("by_parent", (q) => q.eq("parentId", args.parentId))
-      .collect();
+    // Atomically increment sequence counter to generate unique path
+    // This guarantees no duplicate paths even under concurrent reply creation
+    const nextSeq = (parent.nextReplySequence ?? 0) + 1;
+    await ctx.db.patch(args.parentId, {
+      nextReplySequence: nextSeq,
+      repliesCount: (parent.repliesCount ?? 0) + 1,
+    });
 
-    const newSegment = generateNextSegment(existingReplies.length);
+    // Generate path using the atomic sequence
+    const newSegment = generateNextSegment(nextSeq);
     const path = `${parent.path}.${newSegment}`;
 
     const commentId = await ctx.db.insert("comments", {
@@ -190,11 +194,7 @@ export const reply = mutation({
       audioUrl,
       likesCount: 0,
       repliesCount: 0,
-    });
-
-    // Increment parent comment's replies count
-    await ctx.db.patch(args.parentId, {
-      repliesCount: (parent.repliesCount ?? 0) + 1,
+      nextReplySequence: 0, // Initialize counter for this comment's replies
     });
 
     const comment = await ctx.db.get(commentId);
@@ -472,6 +472,7 @@ export const remove = mutation({
       // Get all comments in batches and filter by path prefix to find descendants
       let hasMoreComments = true;
       let lastCreationTime: number | null = null;
+      let totalDescendantsDeleted = 0;
 
       while (hasMoreComments) {
         let query = ctx.db
@@ -504,7 +505,19 @@ export const remove = mutation({
             }
             hasMoreDescendantLikes = descendantLikes.length === 100;
           }
+
+          // Decrement parent's reply counter for each descendant at depth 1
+          if (descendant.parentId && descendant.depth === comment.depth + 1) {
+            const parentOfDescendant = await ctx.db.get(descendant.parentId);
+            if (parentOfDescendant) {
+              await ctx.db.patch(descendant.parentId, {
+                repliesCount: Math.max(0, (parentOfDescendant.repliesCount ?? 0) - 1),
+              });
+            }
+          }
+
           await ctx.db.delete(descendant._id);
+          totalDescendantsDeleted++;
         }
 
         lastCreationTime = batch[batch.length - 1]._creationTime;
@@ -545,12 +558,11 @@ export const getCountByPost = query({
     postId: v.id("posts"),
   },
   handler: async (ctx, args) => {
-    const comments = await ctx.db
-      .query("comments")
-      .withIndex("by_post", (q) => q.eq("postId", args.postId))
-      .collect();
-
-    return comments.length;
+    // Use denormalized counter for O(1) performance instead of .collect()
+    // This prevents OOM issues on posts with many comments
+    const post = await ctx.db.get(args.postId);
+    if (!post) return 0;
+    return post.commentsCount ?? 0;
   },
 });
 

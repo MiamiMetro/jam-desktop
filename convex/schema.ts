@@ -28,6 +28,9 @@ export default defineSchema({
     // Denormalized counts for O(1) read performance
     likesCount: v.optional(v.number()),
     commentsCount: v.optional(v.number()),
+    // Atomic sequence counter for generating unique comment paths
+    // Guarantees no duplicate paths even under high concurrency
+    nextCommentSequence: v.optional(v.number()),
   })
     .index("by_author", ["authorId"]),
 
@@ -44,6 +47,9 @@ export default defineSchema({
     // Denormalized counts for O(1) read performance
     likesCount: v.optional(v.number()),
     repliesCount: v.optional(v.number()),
+    // Atomic sequence counter for generating unique reply paths
+    // Guarantees no duplicate paths even under high concurrency
+    nextReplySequence: v.optional(v.number()),
   })
     .index("by_post", ["postId"])
     .index("by_post_and_path", ["postId", "path"])
