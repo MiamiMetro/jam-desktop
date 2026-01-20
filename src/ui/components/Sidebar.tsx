@@ -42,7 +42,7 @@ import {
 import { useAuthStore } from "@/stores/authStore";
 import { useEnsureProfile, useProfileStore } from "@/hooks/useEnsureProfile";
 import { useAllUsers, useConversations, useMessages, useSendMessage, useMarkAsRead } from "@/hooks/useUsers";
-import { useFriends, useFriendRequests, useAcceptFriend, useDeclineFriend } from "@/hooks/useFriends";
+import { useFriends, useFriendRequests, useSentFriendRequests, useAcceptFriend, useDeclineFriend, useCancelFriendRequest } from "@/hooks/useFriends";
 import type { User } from "@/lib/api/types";
 
 // Helper type for message with creation time
@@ -107,6 +107,8 @@ function Sidebar() {
   const [showSearchUsers, setShowSearchUsers] = useState(false);
   const [showFriendsSearch, setShowFriendsSearch] = useState(false);
   const [showFriendRequests, setShowFriendRequests] = useState(false);
+  const [showPendingRequests, setShowPendingRequests] = useState(true);
+  const [showSentRequests, setShowSentRequests] = useState(true);
   const [userSearchQuery, setUserSearchQuery] = useState("");
   // Debounce search query to avoid excessive API calls (wait 300ms after user stops typing)
   const [debouncedSearchQuery] = useDebouncedValue(userSearchQuery, {
@@ -177,14 +179,21 @@ function Sidebar() {
     hasNextPage: hasMoreFriends, 
     isFetchingNextPage: isLoadingMoreFriends 
   } = useFriends(showFriendsSearch ? debouncedSearchQuery : undefined);
-  const { 
-    data: friendRequests = [], 
-    fetchNextPage: fetchMoreFriendRequests, 
-    hasNextPage: hasMoreFriendRequests, 
-    isFetchingNextPage: isLoadingMoreFriendRequests 
+  const {
+    data: friendRequests = [],
+    fetchNextPage: fetchMoreFriendRequests,
+    hasNextPage: hasMoreFriendRequests,
+    isFetchingNextPage: isLoadingMoreFriendRequests
   } = useFriendRequests();
+  const {
+    data: sentRequests = [],
+    fetchNextPage: fetchMoreSentRequests,
+    hasNextPage: hasMoreSentRequests,
+    isFetchingNextPage: isLoadingMoreSentRequests
+  } = useSentFriendRequests();
   const acceptFriendMutation = useAcceptFriend();
   const declineFriendMutation = useDeclineFriend();
+  const cancelFriendMutation = useCancelFriendRequest();
   
   // Store scroll state when loading older messages
   const scrollStateRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
@@ -327,7 +336,6 @@ function Sidebar() {
     
     if (isScrolledUp && currentLastId && lastMessageIdRef.current && currentLastId !== lastMessageIdRef.current) {
       // Last message changed = new message arrived at the end
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNewMessagesWhileScrolledUp(prev => prev + 1);
     }
     
@@ -337,12 +345,10 @@ function Sidebar() {
   // Reset ALL scroll state when conversation changes
   // This is a valid pattern for resetting state when a key prop changes
   useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect */
     setIsScrolledUp(false);
     setNewMessagesWhileScrolledUp(0);
     setSendError(null);
     setScrollUpStartMessageId(null);
-    /* eslint-enable react-hooks/set-state-in-effect */
     lastMessageIdRef.current = null;
     // Reset load-more related refs
     scrollStateRef.current = null;
@@ -1254,7 +1260,7 @@ function Sidebar() {
                 })()}
               </>
             ) : showFriendRequests ? (
-              /* Friend Requests Interface */
+              /* Friend Requests Interface with Collapsible Sections */
               <>
                 <div className="px-3 py-2 border-b border-sidebar-border">
                   <div className="flex items-center justify-between mb-0">
@@ -1275,64 +1281,150 @@ function Sidebar() {
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto">
-                  <div className="px-3 py-2">
-                    {friendRequests.length === 0 ? (
-                      <div className="text-center py-4 text-xs text-muted-foreground">
-                        No pending friend requests
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        {friendRequests.map((requestUser: User) => (
-                          <div
-                            key={requestUser.id}
-                            className="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-sidebar-accent/50 group transition-colors"
-                          >
-                            <Avatar size="sm" className="relative">
-                              <AvatarImage src={requestUser.avatar_url || ""} alt={requestUser.username} />
-                              <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-                                {requestUser.username.substring(0, 2).toUpperCase()}
-                              </AvatarFallback>
-                              {/* Status not available in Convex User type */}
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium truncate">{requestUser.username}</div>
+                  <div className="px-3 py-2 space-y-3">
+                    {/* Pending Requests Section (Incoming) */}
+                    <div>
+                      <button
+                        onClick={() => setShowPendingRequests(!showPendingRequests)}
+                        className="w-full flex items-center justify-between py-2 text-xs font-medium text-sidebar-foreground hover:text-primary transition-colors cursor-pointer"
+                      >
+                        <span className="uppercase tracking-wider">
+                          Pending ({friendRequests.length})
+                        </span>
+                        <ChevronDown
+                          className={`h-3 w-3 transition-transform ${
+                            showPendingRequests ? "" : "-rotate-90"
+                          }`}
+                        />
+                      </button>
+                      {showPendingRequests && (
+                        <>
+                          {friendRequests.length === 0 ? (
+                            <div className="text-center py-4 text-xs text-muted-foreground">
+                              No pending friend requests
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="icon-xs"
-                              className="h-6 w-6 text-green-600 hover:text-green-700 hover:bg-green-500/20"
-                              onClick={() => acceptFriendMutation.mutate(requestUser.id)}
-                              disabled={acceptFriendMutation.isPending || declineFriendMutation.isPending}
-                              title="Accept request"
-                            >
-                              <Check className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon-xs"
-                              className="h-6 w-6 text-red-600 hover:text-red-700 hover:bg-red-500/20"
-                              onClick={() => declineFriendMutation.mutate(requestUser.id)}
-                              disabled={acceptFriendMutation.isPending || declineFriendMutation.isPending}
-                              title="Decline request"
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {/* Load more button for friend requests */}
-                    {hasMoreFriendRequests && (
-                      <div className="pt-2 pb-2 border-t border-sidebar-border mt-2">
-                        <button
-                          onClick={() => fetchMoreFriendRequests()}
-                          disabled={isLoadingMoreFriendRequests}
-                          className="w-full py-2 text-xs text-muted-foreground hover:text-foreground transition-colors text-center disabled:opacity-50"
-                        >
-                          {isLoadingMoreFriendRequests ? 'Loading more...' : 'Load more requests'}
-                        </button>
-                      </div>
-                    )}
+                          ) : (
+                            <div className="space-y-1">
+                              {friendRequests.map((requestUser: User) => (
+                                <div
+                                  key={requestUser.id}
+                                  className="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-sidebar-accent/50 group transition-colors"
+                                >
+                                  <Avatar size="sm" className="relative">
+                                    <AvatarImage src={requestUser.avatar_url || ""} alt={requestUser.username} />
+                                    <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                                      {requestUser.username.substring(0, 2).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium truncate">{requestUser.username}</div>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    className="h-6 w-6 text-green-600 hover:text-green-700 hover:bg-green-500/20"
+                                    onClick={() => acceptFriendMutation.mutate(requestUser.id)}
+                                    disabled={acceptFriendMutation.isPending || declineFriendMutation.isPending}
+                                    title="Accept request"
+                                  >
+                                    <Check className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    className="h-6 w-6 text-red-600 hover:text-red-700 hover:bg-red-500/20"
+                                    onClick={() => declineFriendMutation.mutate(requestUser.id)}
+                                    disabled={acceptFriendMutation.isPending || declineFriendMutation.isPending}
+                                    title="Decline request"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {/* Load more button for pending requests */}
+                          {hasMoreFriendRequests && (
+                            <div className="pt-2 pb-2 border-t border-sidebar-border mt-2">
+                              <button
+                                onClick={() => fetchMoreFriendRequests()}
+                                disabled={isLoadingMoreFriendRequests}
+                                className="w-full py-2 text-xs text-muted-foreground hover:text-foreground transition-colors text-center disabled:opacity-50"
+                              >
+                                {isLoadingMoreFriendRequests ? 'Loading more...' : 'Load more'}
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {/* Sent Requests Section (Outgoing) */}
+                    <div>
+                      <button
+                        onClick={() => setShowSentRequests(!showSentRequests)}
+                        className="w-full flex items-center justify-between py-2 text-xs font-medium text-sidebar-foreground hover:text-primary transition-colors cursor-pointer"
+                      >
+                        <span className="uppercase tracking-wider">
+                          Sent ({sentRequests.length})
+                        </span>
+                        <ChevronDown
+                          className={`h-3 w-3 transition-transform ${
+                            showSentRequests ? "" : "-rotate-90"
+                          }`}
+                        />
+                      </button>
+                      {showSentRequests && (
+                        <>
+                          {sentRequests.length === 0 ? (
+                            <div className="text-center py-4 text-xs text-muted-foreground">
+                              No sent requests
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              {sentRequests.map((requestUser: User) => (
+                                <div
+                                  key={requestUser.id}
+                                  className="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-sidebar-accent/50 group transition-colors"
+                                >
+                                  <Avatar size="sm" className="relative">
+                                    <AvatarImage src={requestUser.avatar_url || ""} alt={requestUser.username} />
+                                    <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                                      {requestUser.username.substring(0, 2).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium truncate">{requestUser.username}</div>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    className="h-6 w-6 text-red-600 hover:text-red-700 hover:bg-red-500/20"
+                                    onClick={() => cancelFriendMutation.mutate(requestUser.id)}
+                                    disabled={cancelFriendMutation.isPending}
+                                    title="Cancel request"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {/* Load more button for sent requests */}
+                          {hasMoreSentRequests && (
+                            <div className="pt-2 pb-2 border-t border-sidebar-border mt-2">
+                              <button
+                                onClick={() => fetchMoreSentRequests()}
+                                disabled={isLoadingMoreSentRequests}
+                                className="w-full py-2 text-xs text-muted-foreground hover:text-foreground transition-colors text-center disabled:opacity-50"
+                              >
+                                {isLoadingMoreSentRequests ? 'Loading more...' : 'Load more'}
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               </>
@@ -1468,13 +1560,14 @@ function Sidebar() {
             <div className="text-xs text-muted-foreground">v0.0.1</div>
             <div className="flex items-center gap-1">
               {!isGuest && (
-                <Button 
-                  variant="ghost" 
-                  size="icon-xs" 
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
                   className="h-6 w-6 relative"
                   onClick={() => {
                     setShowFriendRequests(true);
                     setShowSearchUsers(false);
+                    setSelectedChatPartner(null);
                   }}
                   title="Friend requests"
                 >

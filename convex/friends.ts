@@ -361,6 +361,72 @@ export const getRequests = query({
 });
 
 /**
+ * Get sent friend requests with full user data
+ * Returns pending requests where the current user is the sender (userId)
+ * Returns full profile data of the recipients (friendId)
+ */
+export const getSentRequestsWithData = query({
+  args: {
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.id("friends")),
+  },
+  handler: async (ctx, args) => {
+    const profile = await getCurrentProfile(ctx);
+    if (!profile) {
+      return { data: [], hasMore: false, nextCursor: null };
+    }
+    const limit = args.limit ?? 20;
+
+    // Get pending requests where current user is the userId (sender)
+    let requests: Doc<"friends">[] = [];
+
+    if (args.cursor) {
+      const cursorRequest = await ctx.db.get(args.cursor);
+      if (cursorRequest) {
+        requests = await ctx.db
+          .query("friends")
+          .withIndex("by_user", (q) => q.eq("userId", profile._id))
+          .filter((q) => q.eq(q.field("status"), "pending"))
+          .order("desc")
+          .filter((q) => q.lt(q.field("_creationTime"), cursorRequest._creationTime))
+          .take(limit + 1);
+      }
+    } else {
+      requests = await ctx.db
+        .query("friends")
+        .withIndex("by_user", (q) => q.eq("userId", profile._id))
+        .filter((q) => q.eq(q.field("status"), "pending"))
+        .order("desc")
+        .take(limit + 1);
+    }
+
+    const hasMore = requests.length > limit;
+    const data = requests.slice(0, limit);
+
+    const formattedRequests = await Promise.all(
+      data.map(async (request) => {
+        const user = await ctx.db.get(request.friendId);
+        if (!user) return null;
+
+        return {
+          id: user._id,
+          username: user.username,
+          display_name: user.displayName ?? "",
+          avatar_url: user.avatarUrl ?? "",
+          requested_at: new Date(request._creationTime).toISOString(),
+        };
+      })
+    );
+
+    return {
+      data: formattedRequests.filter(Boolean),
+      hasMore,
+      nextCursor: hasMore && data.length > 0 ? data[data.length - 1]._id : null,
+    };
+  },
+});
+
+/**
  * Get pending friend requests sent by me
  * Equivalent to GET /friends/sent-requests
  * Returns a simple list of user IDs that have pending requests from the current user
