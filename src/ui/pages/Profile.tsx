@@ -34,7 +34,8 @@ function Profile() {
     hasNextPage: hasMorePosts, 
     isFetchingNextPage: isLoadingMorePosts 
   } = useUserPosts(profileUser?.username || "");
-  const { data: friends = [], fetchNextPage: fetchMoreFriends, hasNextPage: hasMoreFriends, isFetchingNextPage: isLoadingMoreFriends } = useFriends();
+  const { data: profileUserFriends = [], fetchNextPage: fetchMoreFriends, hasNextPage: hasMoreFriends, isFetchingNextPage: isLoadingMoreFriends } = useFriends(undefined, profileUser?.id);
+  const { data: currentUserFriends = [] } = useFriends();
 
   const requestFriendMutation = useRequestFriend();
   const deleteFriendMutation = useDeleteFriend();
@@ -42,7 +43,7 @@ function Profile() {
   const [showFriends, setShowFriends] = useState(false);
   
   const isOwnProfile = currentUser?.username === profileUser?.username;
-  const isFriend = friends.some((friend: User) => friend.id === profileUser?.id);
+  const isFriend = currentUserFriends.some((friend: User) => friend.id === profileUser?.id);
   const hasSentRequest = profileUser?.id ? hasPendingRequest(profileUser.id) : false;
   
   // Status functionality removed - not available in Convex User type
@@ -136,7 +137,7 @@ function Profile() {
               onClick={() => setShowFriends(!showFriends)}
               className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
             >
-              <span className="font-semibold">{friends.length}</span>
+              <span className="font-semibold">{profileUserFriends.length}</span>
               <span>Friends</span>
             </button>
           </div>
@@ -192,12 +193,12 @@ function Profile() {
               <h3 className="font-semibold text-sm">Friends</h3>
             </div>
           </div>
-          {friends.length === 0 ? (
+          {profileUserFriends.length === 0 ? (
             <EmptyState icon={UserPlus} title="No friends yet" />
           ) : (
             <>
               <div className="divide-y divide-border">
-                {friends.map((friend: User) => (
+                {profileUserFriends.map((friend: User) => (
                   <div
                     key={friend.id}
                     className="p-4 hover:bg-muted/30 transition-colors cursor-pointer"

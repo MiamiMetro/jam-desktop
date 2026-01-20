@@ -77,13 +77,13 @@ function friendsReducer(state: FriendsState, action: FriendsAction): FriendsStat
 /**
  * Get friends list with cursor-based pagination and server-side search
  */
-export const useFriends = (searchQuery?: string) => {
+export const useFriends = (searchQuery?: string, userId?: Id<"profiles"> | string) => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
   const { isAuthSet } = useConvexAuthStore();
   
-  // Only query when fully authenticated AND profile is ready
-  const canQuery = !isGuest && isAuthSet && isProfileReady;
+  // Only query when fully authenticated AND profile is ready (unless fetching another user's friends)
+  const canQuery = userId ? true : (!isGuest && isAuthSet && isProfileReady);
   
   const [state, dispatch] = useReducer(friendsReducer, {
     cursor: null,
@@ -93,22 +93,24 @@ export const useFriends = (searchQuery?: string) => {
   });
   
   const prevSearchRef = useRef(searchQuery);
+  const prevUserIdRef = useRef(userId);
   
-  // Reset when search query changes
+  // Reset when search query or userId changes
   useEffect(() => {
-    if (prevSearchRef.current !== searchQuery) {
+    if (prevSearchRef.current !== searchQuery || prevUserIdRef.current !== userId) {
       prevSearchRef.current = searchQuery;
+      prevUserIdRef.current = userId;
       dispatch({ type: 'RESET', search: searchQuery });
     }
-  }, [searchQuery]);
+  }, [searchQuery, userId]);
   
   // Query with current cursor and search
   const result = useQuery(
     api.friends.list,
     canQuery && state.cursor === null
-      ? { limit: 50, search: state.currentSearch }
+      ? { limit: 50, search: state.currentSearch, userId: userId as Id<"profiles"> | undefined }
       : canQuery && state.cursor
-        ? { limit: 50, cursor: state.cursor, search: state.currentSearch }
+        ? { limit: 50, cursor: state.cursor, search: state.currentSearch, userId: userId as Id<"profiles"> | undefined }
         : "skip"
   );
   

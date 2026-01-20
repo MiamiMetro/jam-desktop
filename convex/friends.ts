@@ -1,7 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentProfile, requireAuth } from "./helpers";
 import { checkRateLimit } from "./rateLimiter";
 
@@ -174,25 +174,37 @@ export const remove = mutation({
 });
 
 /**
- * Get list of all friends (accepted only)
+ * Get friends list for current user or a specific user
  * Equivalent to GET /friends
  * Supports cursor-based pagination and search
  */
 export const list = query({
   args: {
+    userId: v.optional(v.id("profiles")),
     limit: v.optional(v.number()),
     cursor: v.optional(v.id("friends")),
     search: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const profile = await getCurrentProfile(ctx);
-    if (!profile) {
-      return { data: [], hasMore: false, nextCursor: null };
+    // Determine which user's friends to fetch
+    let targetUserId: string;
+    if (args.userId) {
+      // Fetch specified user's friends (public view)
+      targetUserId = args.userId;
+    } else {
+      // Fetch current user's friends
+      const profile = await getCurrentProfile(ctx);
+      if (!profile) {
+        return { data: [], hasMore: false, nextCursor: null };
+      }
+      targetUserId = profile._id;
     }
+    
     const limit = args.limit ?? 50;
 
     // Apply cursor at query level for efficiency
     let cursorTime: number | undefined;
+    let cursorFriendshipId: string | undefined;
     if (args.cursor) {
       const cursorFriendship = await ctx.db.get(args.cursor);
       if (!cursorFriendship) {
@@ -200,37 +212,97 @@ export const list = query({
         return { data: [], hasMore: false, nextCursor: null };
       }
       cursorTime = cursorFriendship._creationTime;
+      cursorFriendshipId = args.cursor;
     }
 
-    let friendships: Doc<"friends">[] = [];
-
     if (args.search) {
-      // For search: iteratively fetch pages to ensure enough matches after filtering
+      // For search: fetch until we have enough matches after filtering
       const pageSize = 100;
-      const maxToFetch = limit * 3 + 1; // Upper bound to prevent unbounded scans
+      const targetCount = limit + 1; // Need one extra to determine hasMore
+      const matchedFriends: Array<{ friendship: Doc<"friends">, profile: Doc<"profiles"> }> = [];
 
-      let cursor: string | null = null;
+      let paginationCursor: string | null = null;
       let done = false;
+      let skippedCursor = false;
 
-      while (!done && friendships.length < maxToFetch) {
+      while (!done && matchedFriends.length < targetCount) {
         // Use compound index for efficient filtering by user + status
-        let query = ctx.db
+        const query = ctx.db
           .query("friends")
           .withIndex("by_user_and_status", (q) =>
-            q.eq("userId", profile._id).eq("status", "accepted")
+            q.eq("userId", targetUserId as Id<"profiles">).eq("status", "accepted")
           )
           .order("desc");
 
-        // Apply cursor filter if provided
-        if (cursorTime !== undefined) {
-          query = query.filter((q) => q.lt(q.field("_creationTime"), cursorTime));
+        const page = await query.paginate({ cursor: paginationCursor, numItems: pageSize });
+        
+        // Filter out results before the cursor point
+        let pageFriendships = page.page;
+        if (cursorTime !== undefined && !skippedCursor) {
+          const filtered: typeof pageFriendships = [];
+          
+          for (const f of pageFriendships) {
+            if (skippedCursor) {
+              // Already passed cursor in this page, include all remaining items
+              filtered.push(f);
+            } else if (f._creationTime < cursorTime) {
+              // Passed the cursor point (older item in desc order)
+              skippedCursor = true;
+              filtered.push(f);
+            } else if (f._creationTime === cursorTime) {
+              if (f._id === cursorFriendshipId) {
+                // This is the cursor item itself - skip it but mark as passed
+                skippedCursor = true;
+              } else {
+                // Same time, different ID - include it
+                filtered.push(f);
+              }
+            }
+            // else: newer than cursor, skip it
+          }
+          
+          pageFriendships = filtered;
         }
-
-        const page = await query.paginate({ cursor, numItems: pageSize });
-        friendships = friendships.concat(page.page);
+        
+        // Fetch profiles for this page and filter by search immediately
+        const searchLower = args.search!.toLowerCase();
+        for (const friendship of pageFriendships) {
+          if (matchedFriends.length >= targetCount) break;
+          
+          const friend = await ctx.db.get(friendship.friendId);
+          if (!friend) continue;
+          
+          // Check if this friend matches the search query
+          const matchesSearch = 
+            friend.username.toLowerCase().includes(searchLower) ||
+            (friend.displayName ?? "").toLowerCase().includes(searchLower);
+            
+          if (matchesSearch) {
+            matchedFriends.push({ friendship, profile: friend });
+          }
+        }
+        
         done = page.isDone;
-        cursor = page.continueCursor;
+        paginationCursor = page.continueCursor;
       }
+      
+      // Build the response from matched friends
+      const hasMore = matchedFriends.length > limit;
+      const resultFriends = matchedFriends.slice(0, limit);
+      
+      return {
+        data: resultFriends.map(({ friendship, profile }) => ({
+          id: profile._id,
+          username: profile.username,
+          display_name: profile.displayName ?? "",
+          avatar_url: profile.avatarUrl ?? "",
+          friends_since: new Date(friendship._creationTime).toISOString(),
+        })),
+        hasMore,
+        nextCursor: hasMore && resultFriends.length > 0
+          ? resultFriends[resultFriends.length - 1].friendship._id
+          : null,
+      };
     } else {
       // Non-search: efficient single-batch query
       const fetchSize = limit + 1;
@@ -239,7 +311,7 @@ export const list = query({
       let query = ctx.db
         .query("friends")
         .withIndex("by_user_and_status", (q) =>
-          q.eq("userId", profile._id).eq("status", "accepted")
+          q.eq("userId", targetUserId as Id<"profiles">).eq("status", "accepted")
         )
         .order("desc");
 
@@ -248,49 +320,45 @@ export const list = query({
         query = query.filter((q) => q.lt(q.field("_creationTime"), cursorTime));
       }
 
-      friendships = await query.take(fetchSize);
-    }
+      const friendships = await query.take(fetchSize);
+      
+      // Fetch friend profiles
+      const friends = await Promise.all(
+        friendships.map(async (friendship) => {
+          const friend = await ctx.db.get(friendship.friendId);
+          if (!friend) return null;
 
-    // Check if there are more results
-    const hasMore = friendships.length > limit;
-    const dataFriendships = friendships.slice(0, limit);
-
-    // Fetch friend profiles
-    const friends = await Promise.all(
-      dataFriendships.map(async (friendship) => {
-        const friend = await ctx.db.get(friendship.friendId);
-        if (!friend) return null;
-
-        return {
-          id: friend._id,
-          username: friend.username,
-          display_name: friend.displayName ?? "",
-          avatar_url: friend.avatarUrl ?? "",
-          friends_since: new Date(friendship._creationTime).toISOString(),
-          _friendshipId: friendship._id, // For cursor
-        };
-      })
-    );
-
-    let validFriends = friends.filter((f): f is NonNullable<typeof f> => f !== null);
-
-    // Apply search filter if provided
-    if (args.search) {
-      const searchLower = args.search.toLowerCase();
-      validFriends = validFriends.filter(
-        (f) =>
-          f.username.toLowerCase().includes(searchLower) ||
-          f.display_name.toLowerCase().includes(searchLower)
+          return {
+            id: friend._id,
+            username: friend.username,
+            display_name: friend.displayName ?? "",
+            avatar_url: friend.avatarUrl ?? "",
+            friends_since: new Date(friendship._creationTime).toISOString(),
+            _friendshipId: friendship._id, // For cursor
+          };
+        })
       );
-    }
 
-    return {
-      data: validFriends.map(({ _friendshipId: _, ...rest }) => rest),
-      hasMore,
-      nextCursor: hasMore && dataFriendships.length > 0
-        ? dataFriendships[dataFriendships.length - 1]._id
-        : null,
-    };
+      const validFriends = friends.filter((f): f is NonNullable<typeof f> => f !== null);
+
+      // Check if there are more results
+      const hasMore = validFriends.length > limit;
+      const dataFriends = validFriends.slice(0, limit);
+
+      return {
+        data: dataFriends.map((friend) => ({
+          id: friend.id,
+          username: friend.username,
+          display_name: friend.display_name,
+          avatar_url: friend.avatar_url,
+          friends_since: friend.friends_since,
+        })),
+        hasMore,
+        nextCursor: hasMore && dataFriends.length > 0
+          ? dataFriends[dataFriends.length - 1]._friendshipId
+          : null,
+      };
+    }
   },
 });
 
