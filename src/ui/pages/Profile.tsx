@@ -245,7 +245,7 @@ function Profile() {
                   onClick={() => navigate(`/post/${post.id}`)}
                 >
                   <div className="flex gap-3">
-                    <Avatar size="sm" className="h-10 w-10 flex-shrink-0">
+                    <Avatar size="sm" className="h-10 w-10 shrink-0">
                       <AvatarImage src={post.author.avatar || ""} alt={post.author.username} />
                       <AvatarFallback className="bg-muted text-muted-foreground text-xs">
                         {post.author.username.substring(0, 2).toUpperCase()}
@@ -263,7 +263,7 @@ function Profile() {
                       )}
                       {post.audioFile && (
                         <div className="mb-2 p-2 bg-muted rounded flex items-center gap-2">
-                          <Music className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <Music className="h-4 w-4 text-muted-foreground shrink-0" />
                           <span className="text-sm font-medium truncate">
                             {post.audioFile.title}
                           </span>

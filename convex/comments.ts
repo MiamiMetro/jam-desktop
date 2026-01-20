@@ -219,38 +219,84 @@ export const getByPost = query({
       return { data: [], hasMore: false, nextCursor: null };
     }
 
-    // Get comments ordered by path
-    let commentsQuery = ctx.db
-      .query("comments")
-      .withIndex("by_post_and_path", (q) => q.eq("postId", args.postId));
-
     let comments: Doc<"comments">[] = [];
+    let hasMore = false;
 
-    if (args.cursor) {
-      // Get comments after the cursor path
-      comments = await commentsQuery
-        .filter((q) => q.gt(q.field("path"), args.cursor!))
-        .take(limit + 1);
-    } else {
-      comments = await commentsQuery.take(limit + 1);
-    }
-
-    // Apply maxDepth filter if specified
     if (args.maxDepth !== undefined) {
-      comments = comments.filter((c) => c.depth <= args.maxDepth!);
-    }
+      // When maxDepth is specified, fetch in batches until we have enough
+      // comments after filtering by depth (prevents returning fewer than limit)
+      const batchSize = 100;
+      let lastPath = args.cursor ?? null;
+      const matchingComments: Doc<"comments">[] = [];
 
-    const hasMore = comments.length > limit;
-    const data = comments.slice(0, limit);
+      // Fetch batches until we have enough matching comments or run out of data
+      while (matchingComments.length <= limit) {
+        let query = ctx.db
+          .query("comments")
+          .withIndex("by_post_and_path", (q) => q.eq("postId", args.postId));
+
+        if (lastPath !== null) {
+          query = query.filter((q) => q.gt(q.field("path"), lastPath!));
+        }
+
+        const batch = await query.take(batchSize);
+
+        if (batch.length === 0) {
+          // No more data
+          hasMore = false;
+          break;
+        }
+
+        // Filter by maxDepth
+        const filtered = batch.filter((c) => c.depth <= args.maxDepth!);
+        matchingComments.push(...filtered);
+
+        // Update lastPath for next iteration
+        lastPath = batch[batch.length - 1].path;
+
+        // Check if we have enough results
+        if (matchingComments.length > limit) {
+          hasMore = true;
+          break;
+        }
+
+        // If batch was smaller than batchSize, we've exhausted the data
+        if (batch.length < batchSize) {
+          hasMore = false;
+          break;
+        }
+      }
+
+      comments = matchingComments.slice(0, limit + 1);
+      hasMore = comments.length > limit;
+      comments = comments.slice(0, limit);
+    } else {
+      // No maxDepth filter: use efficient single-batch pagination
+      const commentsQuery = ctx.db
+        .query("comments")
+        .withIndex("by_post_and_path", (q) => q.eq("postId", args.postId));
+
+      if (args.cursor) {
+        // Get comments after the cursor path
+        comments = await commentsQuery
+          .filter((q) => q.gt(q.field("path"), args.cursor!))
+          .take(limit + 1);
+      } else {
+        comments = await commentsQuery.take(limit + 1);
+      }
+
+      hasMore = comments.length > limit;
+      comments = comments.slice(0, limit);
+    }
 
     const formattedComments = await Promise.all(
-      data.map((comment) => formatComment(ctx, comment, currentProfile?._id))
+      comments.map((comment) => formatComment(ctx, comment, currentProfile?._id))
     );
 
     return {
       data: formattedComments,
       hasMore,
-      nextCursor: hasMore && data.length > 0 ? data[data.length - 1].path : null,
+      nextCursor: hasMore && comments.length > 0 ? comments[comments.length - 1].path : null,
     };
   },
 });

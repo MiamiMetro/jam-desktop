@@ -19,10 +19,6 @@ export const search = query({
     const limit = args.limit ?? 20;
     const currentProfile = await getCurrentProfile(ctx);
 
-    // For search queries, we need to filter in-memory. Instead of fetching a single
-    // large batch (which can be inefficient), we iteratively fetch smaller batches
-    // until we have enough matching results or run out of data.
-
     let profiles: Doc<"profiles">[] = [];
     let hasMore = false;
 
@@ -59,85 +55,109 @@ export const search = query({
       hasMore = profiles.length > limit;
       profiles = profiles.slice(0, limit);
     } else {
-      // Search queries: iteratively fetch smaller batches and filter in-memory
-      const batchSize = 50;
-      const searchLower = args.search.toLowerCase();
+      // Search queries: use search index for efficient server-side filtering
+      const fetchSize = limit + 1;
 
-      let lastCreationTime: number | null = null;
-
-      // Initialize lastCreationTime from the cursor if provided
+      // Build cursor filter options
+      let cursorTime: number | undefined;
       if (args.cursor) {
         const cursorProfile = await ctx.db.get(args.cursor);
         if (cursorProfile) {
-          lastCreationTime = cursorProfile._creationTime;
+          cursorTime = cursorProfile._creationTime;
         } else {
-          // Invalid cursor: no results
-          lastCreationTime = null;
+          // Invalid cursor: return empty
+          profiles = [];
+          hasMore = false;
         }
       }
 
-      const matchingProfiles: Doc<"profiles">[] = [];
-
-      // Fetch batches until we have enough matching results or exhaust the data
-      while (matchingProfiles.length <= limit) {
-        let q = ctx.db.query("profiles").order("desc");
-
-        if (lastCreationTime !== null) {
-          q = q.filter((queryBuilder) =>
-            queryBuilder.lt(queryBuilder.field("_creationTime"), lastCreationTime!)
-          );
-        }
-
-        const batch = await q.take(batchSize);
-
-        if (batch.length === 0) {
-          // No more data
-          hasMore = false;
-          break;
-        }
+      if (!args.cursor || cursorTime !== undefined) {
+        // Use search index to find profiles matching the search term
+        const searchResults = await ctx.db
+          .query("profiles")
+          .withSearchIndex("search_profiles", (q) => {
+            // Search by username
+            let query = q.search("username", args.search!);
+            // Apply cursor filter if provided
+            if (cursorTime !== undefined) {
+              query = query.lt("_creationTime", cursorTime);
+            }
+            return query;
+          })
+          .take(fetchSize);
 
         // Exclude current user if authenticated
-        const filteredBatch = currentProfile
-          ? batch.filter((p) => p._id !== currentProfile._id)
-          : batch;
+        profiles = currentProfile
+          ? searchResults.filter((p) => p._id !== currentProfile._id)
+          : searchResults;
 
-        // Update lastCreationTime for the next iteration based on the last item
-        // that remains after filtering. If all items were filtered out, fall back
-        // to advancing based on the raw batch to avoid re-fetching the same data.
-        if (filteredBatch.length > 0) {
-          lastCreationTime =
-            filteredBatch[filteredBatch.length - 1]._creationTime;
-        } else {
-          lastCreationTime = batch[batch.length - 1]._creationTime;
-        }
-        // Apply search filter
-        for (const p of filteredBatch) {
-          if (
-            p.username.toLowerCase().includes(searchLower) ||
-            (p.displayName?.toLowerCase().includes(searchLower) ?? false)
-          ) {
-            matchingProfiles.push(p);
-            if (matchingProfiles.length > limit) {
-              // We have enough for this page plus one to know if there is more
-              hasMore = true;
+        // Check displayName separately (search index only supports username)
+        // If we didn't get enough results from username search, also search displayName
+        if (profiles.length < limit) {
+          const searchLower = args.search!.toLowerCase();
+
+          // Get additional profiles that match displayName (fallback to old method for displayName)
+          const displayNameMatches: Doc<"profiles">[] = [];
+          const batchSize = 50;
+          let lastCreationTime = cursorTime ?? null;
+
+          // Only fetch if we need more results
+          while (displayNameMatches.length + profiles.length <= limit) {
+            let q = ctx.db.query("profiles").order("desc");
+
+            if (lastCreationTime !== null) {
+              q = q.filter((queryBuilder) =>
+                queryBuilder.lt(queryBuilder.field("_creationTime"), lastCreationTime!)
+              );
+            }
+
+            const batch = await q.take(batchSize);
+
+            if (batch.length === 0) {
+              break;
+            }
+
+            // Exclude current user and profiles already found by username search
+            const filteredBatch = batch.filter((p) =>
+              (!currentProfile || p._id !== currentProfile._id) &&
+              !profiles.some((existing) => existing._id === p._id)
+            );
+
+            // Update lastCreationTime for next iteration
+            if (filteredBatch.length > 0) {
+              lastCreationTime = filteredBatch[filteredBatch.length - 1]._creationTime;
+            } else if (batch.length > 0) {
+              lastCreationTime = batch[batch.length - 1]._creationTime;
+            }
+
+            // Filter by displayName
+            for (const p of filteredBatch) {
+              if (p.displayName?.toLowerCase().includes(searchLower)) {
+                displayNameMatches.push(p);
+                if (displayNameMatches.length + profiles.length > limit) {
+                  break;
+                }
+              }
+            }
+
+            if (displayNameMatches.length + profiles.length > limit) {
+              break;
+            }
+
+            if (batch.length < batchSize) {
               break;
             }
           }
+
+          // Merge username and displayName matches, sort by creation time
+          profiles = [...profiles, ...displayNameMatches].sort(
+            (a, b) => b._creationTime - a._creationTime
+          );
         }
 
-        // If we already know there are more pages, stop fetching
-        if (hasMore) {
-          break;
-        }
-
-        // If the batch was smaller than batchSize, we've exhausted the data
-        if (batch.length < batchSize) {
-          hasMore = false;
-          break;
-        }
+        hasMore = profiles.length > limit;
+        profiles = profiles.slice(0, limit);
       }
-
-      profiles = matchingProfiles.slice(0, limit);
     }
 
     const dataProfiles = profiles;

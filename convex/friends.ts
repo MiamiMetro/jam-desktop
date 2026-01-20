@@ -178,6 +178,17 @@ export const list = query({
     let friendships1: Doc<"friends">[] = [];
     let friendships2: Doc<"friends">[] = [];
 
+    // Apply cursor at query level for efficiency
+    let cursorTime: number | undefined;
+    if (args.cursor) {
+      const cursorFriendship = await ctx.db.get(args.cursor);
+      if (!cursorFriendship) {
+        // Invalid cursor: return empty results
+        return { data: [], hasMore: false, nextCursor: null };
+      }
+      cursorTime = cursorFriendship._creationTime;
+    }
+
     if (args.search) {
       // Iteratively fetch from both directions when searching, since additional
       // filtering may reduce the number of matching results.
@@ -194,12 +205,22 @@ export const list = query({
         let cursor: string | null = null;
         let done = false;
         while (!done && results.length < maxToFetch) {
-          const page = await ctx.db
+          const query = ctx.db
             .query("friends")
             .withIndex(indexName, (q) => q.eq(fieldName, profile._id))
-            .filter((q) => q.eq(q.field("status"), "accepted"))
-            .order("desc")
-            .paginate({ cursor, numItems: pageSize });
+            .filter((q) => {
+              // Combine status and cursor filters
+              if (cursorTime !== undefined) {
+                return q.and(
+                  q.eq(q.field("status"), "accepted"),
+                  q.lt(q.field("_creationTime"), cursorTime)
+                );
+              }
+              return q.eq(q.field("status"), "accepted");
+            })
+            .order("desc");
+
+          const page = await query.paginate({ cursor, numItems: pageSize });
           results = results.concat(page.page);
           done = page.isDone;
           cursor = page.continueCursor;
@@ -214,36 +235,47 @@ export const list = query({
       ]);
     } else {
       // Get friendships where user is userId (limited by nonSearchFetchSize)
-      friendships1 = await ctx.db
+      const query1 = ctx.db
         .query("friends")
         .withIndex("by_user", (q) => q.eq("userId", profile._id))
-        .filter((q) => q.eq(q.field("status"), "accepted"))
-        .order("desc")
-        .take(nonSearchFetchSize);
+        .filter((q) => {
+          // Combine status and cursor filters at query level
+          if (cursorTime !== undefined) {
+            return q.and(
+              q.eq(q.field("status"), "accepted"),
+              q.lt(q.field("_creationTime"), cursorTime)
+            );
+          }
+          return q.eq(q.field("status"), "accepted");
+        })
+        .order("desc");
+
+      friendships1 = await query1.take(nonSearchFetchSize);
 
       // Get friendships where user is friendId (limited by nonSearchFetchSize)
-      friendships2 = await ctx.db
+      const query2 = ctx.db
         .query("friends")
         .withIndex("by_friend", (q) => q.eq("friendId", profile._id))
-        .filter((q) => q.eq(q.field("status"), "accepted"))
-        .order("desc")
-        .take(nonSearchFetchSize);
+        .filter((q) => {
+          // Combine status and cursor filters at query level
+          if (cursorTime !== undefined) {
+            return q.and(
+              q.eq(q.field("status"), "accepted"),
+              q.lt(q.field("_creationTime"), cursorTime)
+            );
+          }
+          return q.eq(q.field("status"), "accepted");
+        })
+        .order("desc");
+
+      friendships2 = await query2.take(nonSearchFetchSize);
     }
+
     // Combine and sort by creation time (descending - newest first)
-    let allFriendships = [...friendships1, ...friendships2].sort(
+    // No need to filter by cursor again - already done at query level!
+    const allFriendships = [...friendships1, ...friendships2].sort(
       (a, b) => b._creationTime - a._creationTime
     );
-
-    // Apply cursor if provided
-    if (args.cursor) {
-      const cursorFriendship = await ctx.db.get(args.cursor);
-      if (cursorFriendship) {
-        // Filter friendships older than cursor
-        allFriendships = allFriendships.filter(
-          (f) => f._creationTime < cursorFriendship._creationTime
-        );
-      }
-    }
 
     // Take page size + 1 to check if there are more results
     const paginatedFriendships = allFriendships.slice(0, limit + 1);
@@ -283,7 +315,7 @@ export const list = query({
     }
 
     return {
-      data: validFriends.map(({ _friendshipId, ...rest }) => rest),
+      data: validFriends.map(({ _friendshipId: _, ...rest }) => rest),
       hasMore,
       nextCursor: hasMore && dataFriendships.length > 0
         ? dataFriendships[dataFriendships.length - 1]._id

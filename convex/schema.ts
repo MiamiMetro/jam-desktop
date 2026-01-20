@@ -14,7 +14,11 @@ export default defineSchema({
     dmPrivacy: v.union(v.literal("friends"), v.literal("everyone")),
   })
     .index("by_auth_identity", ["authIssuer", "authSubject"])
-    .index("by_username", ["username"]),
+    .index("by_username", ["username"])
+    .searchIndex("search_profiles", {
+      searchField: "username",
+      filterFields: ["_creationTime"],
+    }),
 
   // Posts table - top-level posts only (comments moved to separate table)
   posts: defineTable({
@@ -104,9 +108,12 @@ export default defineSchema({
     // Uses message _creationTime (not wall clock) - prevents clock skew
     lastReadMessageAt: v.optional(v.number()),
     joinedAt: v.number(),
+    // Track if conversation is active (false when merged into another conversation)
+    isActive: v.optional(v.boolean()),
   })
     .index("by_conversation", ["conversationId"])
     .index("by_profile", ["profileId"])
+    .index("by_profile_active", ["profileId", "isActive"])
     .index("by_conversation_and_profile", ["conversationId", "profileId"]),
 
   // Messages table - DM messages with index for cursor pagination

@@ -14,6 +14,24 @@ import {
 import { checkRateLimit } from "./rateLimiter";
 
 /**
+ * Mark participants of a merged conversation as inactive
+ * Call this when merging duplicate conversations
+ */
+async function markConversationAsInactive(
+  ctx: any,
+  conversationId: Id<"conversations">
+): Promise<void> {
+  const participants = await ctx.db
+    .query("conversation_participants")
+    .withIndex("by_conversation", (q: any) => q.eq("conversationId", conversationId))
+    .collect();
+
+  for (const participant of participants) {
+    await ctx.db.patch(participant._id, { isActive: false });
+  }
+}
+
+/**
  * Find or create a DM conversation between two users
  * Uses dm_keys for practical uniqueness with deterministic canonical selection
  */
@@ -62,16 +80,18 @@ async function findOrCreateDM(
       conversationId,
     });
 
-    // Create participants
+    // Create participants (isActive defaults to true when undefined for backwards compat)
     await ctx.db.insert("conversation_participants", {
       conversationId,
       profileId: profileA,
       joinedAt: now,
+      isActive: true,
     });
     await ctx.db.insert("conversation_participants", {
       conversationId,
       profileId: profileB,
       joinedAt: now,
+      isActive: true,
     });
   }
 
@@ -196,75 +216,48 @@ export const getConversations = query({
     const limit = args.limit ?? 50;
 
     // Get participant records for current user with cursor-based pagination
-    // Fetch more than needed to account for filtered/merged conversations
-    const FETCH_SIZE_MULTIPLIER = 2;
-    const fetchSize = limit * FETCH_SIZE_MULTIPLIER;
+    // Use isActive filter to avoid fetching merged conversations
+    const fetchSize = limit + 1; // No multiplier needed - we filter at query level!
 
     let participations: Doc<"conversation_participants">[] = [];
 
-    // Start from the provided cursor (if any), then iteratively fetch older
-    // participation records until we either run out or have fetched enough
-    // candidates to satisfy the limit after filtering merged conversations.
-    let nextCreationTime: number | undefined;
+    // Apply cursor filter at query level
+    let cursorTime: number | undefined;
     if (args.cursor) {
       const cursorParticipation = await ctx.db.get(args.cursor);
-      if (cursorParticipation) {
-        nextCreationTime = cursorParticipation._creationTime;
-      } else {
-        // Invalid cursor: treat as no data available from this position.
-        nextCreationTime = undefined;
+      if (!cursorParticipation) {
+        // Invalid cursor: return empty results
+        return { data: [], hasMore: false, nextCursor: null };
       }
+      cursorTime = cursorParticipation._creationTime;
     }
 
-    // Iteratively page through conversation_participants
-    // Stop when:
-    // - we receive fewer than fetchSize rows (no more data), or
-    // - we've accumulated at least fetchSize rows (enough to likely fill `limit` after filtering).
-    let done = false;
-    while (!done) {
-      const queryBuilder = ctx.db
-        .query("conversation_participants")
-        .withIndex("by_profile", (q) => q.eq("profileId", profile._id));
+    // Use the new compound index to filter by profile + isActive efficiently
+    // This avoids over-fetching inactive (merged) conversations!
+    let query = ctx.db
+      .query("conversation_participants")
+      .withIndex("by_profile_active", (q) =>
+        q.eq("profileId", profile._id).eq("isActive", true)
+      )
+      .order("desc");
 
-      if (nextCreationTime !== undefined) {
-        queryBuilder.filter((q) =>
-          q.lt(q.field("_creationTime"), nextCreationTime!)
-        );
-      }
-
-      const batch = await queryBuilder.order("desc").take(fetchSize);
-
-      if (batch.length === 0) {
-        // No more data
-        done = true;
-        break;
-      }
-
-      participations = participations.concat(batch);
-
-      if (batch.length < fetchSize) {
-        // Reached the end of the index; no more data to fetch.
-        done = true;
-      } else {
-        // Prepare for next page: continue from just before the last item in this batch.
-        const last = batch[batch.length - 1];
-        nextCreationTime = last._creationTime;
-      }
-
-      // We've fetched at least one full batch; that should be enough
-      // to satisfy `limit` once merged/orphaned conversations are filtered.
-      if (participations.length >= fetchSize) {
-        done = true;
-      }
+    // Apply cursor filter if provided
+    if (cursorTime !== undefined) {
+      query = query.filter((q) => q.lt(q.field("_creationTime"), cursorTime));
     }
+
+    participations = await query.take(fetchSize);
 
     // For each participation, get conversation and compute hasUnread
     const conversations = await Promise.all(
       participations.map(async (p) => {
         const conv = await ctx.db.get(p.conversationId);
 
-        // Skip merged (orphaned) conversations
-        if (!conv || conv.mergedIntoConversationId != null) return null;
+        // Skip if conversation doesn't exist (shouldn't happen with isActive filter)
+        if (!conv) return null;
+
+        // Double-check: Skip merged conversations (defense in depth)
+        if (conv.mergedIntoConversationId != null) return null;
 
         // O(1) unread check using denormalized lastMessageAt
         const hasUnread =
