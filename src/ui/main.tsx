@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { HashRouter } from "react-router-dom";
 import { ConvexReactClient } from "convex/react";
 import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./index.css";
 import App from "./App.tsx";
 import { authClient } from "./lib/auth-client";
@@ -11,6 +12,14 @@ import { useAuthStore } from "./stores/authStore";
 import { useConvexAuth } from "./hooks/useConvexAuth";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL);
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000, // 1 minute
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 // Component to setup auth and check session on mount
 function AuthSetup() {
@@ -34,11 +43,13 @@ function AuthSetup() {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <HashRouter>
-      <ConvexBetterAuthProvider client={convex} authClient={authClient}>
-        <AuthSetup />
-        <App />
-      </ConvexBetterAuthProvider>
-    </HashRouter>
+    <QueryClientProvider client={queryClient}>
+      <HashRouter>
+        <ConvexBetterAuthProvider client={convex} authClient={authClient}>
+          <AuthSetup />
+          <App />
+        </ConvexBetterAuthProvider>
+      </HashRouter>
+    </QueryClientProvider>
   </StrictMode>
 );

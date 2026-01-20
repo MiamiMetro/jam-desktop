@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useConvex, usePaginatedQuery } from "convex/react";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -152,78 +153,39 @@ export const useUser = (username: string) => {
 
 /**
  * Get all users with search and cursor-based pagination
- * Supports load more button for search results
+ * Uses TanStack Query's useInfiniteQuery for optimal caching and performance
+ * Fixes the setState-in-render anti-pattern by using query key dependencies
  */
 export const useAllUsers = (search?: string, enabled: boolean = true) => {
-  const [cursor, setCursor] = useState<Id<"profiles"> | null | undefined>(null);
-  const [allUsers, setAllUsers] = useState<User[]>([]);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [currentSearch, setCurrentSearch] = useState<string | undefined>(search);
-  
-  // Reset when search query changes during render (before DOM commit)
-  // Safe: only updates state when prop actually changes, avoiding infinite loops
-  if (currentSearch !== search) {
-    setCurrentSearch(search);
-    setCursor(null);
-    setAllUsers([]);
-    setIsInitialLoad(true);
-  }
-  
-  // Query with current cursor and search
-  const result = useQuery(
-    api.users.search,
-    enabled && cursor === null
-      ? { search: currentSearch || undefined, limit: 20 }
-      : enabled && cursor
-        ? { search: currentSearch || undefined, limit: 20, cursor }
-        : "skip"
-  );
-  
-  // Reset users when cursor is null (first page)
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (cursor === null && result?.data && enabled) {
-      setAllUsers(result.data.map(convertUser));
-      setIsInitialLoad(false);
-    }
-  }, [cursor, result?.data, enabled]);
-  /* eslint-enable react-hooks/set-state-in-effect */
-  
-  // Append new users when cursor changes (loading next page)
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (cursor !== null && cursor !== undefined && result?.data && enabled) {
-      setAllUsers(prev => {
-        // Avoid duplicates by checking if user ID already exists
-        const existingIds = new Set(prev.map(u => u.id));
-        const newUsers = result.data
-          .map(convertUser)
-          .filter(user => !existingIds.has(user.id));
-        return [...prev, ...newUsers];
+  const convex = useConvex();
+
+  const query = useInfiniteQuery({
+    queryKey: ['users', 'search', search],
+    queryFn: async ({ pageParam }) => {
+      const result = await convex.query(api.users.search, {
+        search: search || undefined,
+        limit: 20,
+        ...(pageParam ? { cursor: pageParam } : {}),
       });
-    }
-  }, [cursor, result?.data, enabled]);
-  /* eslint-enable react-hooks/set-state-in-effect */
-  
-  const fetchNextPage = () => {
-    if (result?.hasMore && result?.nextCursor) {
-      setCursor(result.nextCursor);
-    }
-  };
-  
-  const reset = () => {
-    setCursor(null);
-    setAllUsers([]);
-    setIsInitialLoad(true);
-  };
-  
+      return result;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    initialPageParam: null as Id<"profiles"> | null,
+    enabled,
+  });
+
+  // Flatten all pages into a single array
+  const allUsers = query.data?.pages.flatMap(page =>
+    page.data.map(convertUser)
+  ) ?? [];
+
   return {
     data: allUsers,
-    isLoading: isInitialLoad && result === undefined && enabled,
-    hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: cursor !== null && cursor !== undefined && result === undefined,
-    fetchNextPage,
-    refetch: reset,
+    isLoading: query.isLoading,
+    hasNextPage: query.hasNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+    fetchNextPage: query.fetchNextPage,
+    refetch: query.refetch,
     error: null,
   };
 };
@@ -363,7 +325,7 @@ export const useMessages = (userId: string, partnerId: string) => {
         // when new messages arrive and shift the first page
         const currentFirstPage = firstPageResult?.data?.map(convertMessage) ?? [];
         
-        setOlderMessages(prev => 
+        setOlderMessages((prev: UIMessage[]) =>
           mergeAndDeduplicateMessages(newOlderMessages, prev, currentFirstPage)
         );
         setNextCursor(olderResult.nextCursor ?? null);
@@ -384,8 +346,8 @@ export const useMessages = (userId: string, partnerId: string) => {
     const firstPageMessages = firstPageResult.data.map(convertMessage);
     
     // Dedupe: remove from olderMessages any that appear in firstPage
-    const firstPageIds = new Set(firstPageMessages.map(m => String(m.id)));
-    const dedupedOlder = olderMessages.filter(m => !firstPageIds.has(String(m.id)));
+    const firstPageIds = new Set(firstPageMessages.map((m: UIMessage) => String(m.id)));
+    const dedupedOlder = olderMessages.filter((m: UIMessage) => !firstPageIds.has(String(m.id)));
     
     // Combine: older messages first, then first page
     return [...dedupedOlder, ...firstPageMessages];

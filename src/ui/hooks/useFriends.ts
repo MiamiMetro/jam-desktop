@@ -1,5 +1,5 @@
-import { useQuery, useMutation } from "convex/react";
-import { useEffect, useReducer, useRef } from "react";
+import { useMutation, useConvex } from "convex/react";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { useAuthStore } from '@/stores/authStore';
@@ -19,7 +19,7 @@ function convertUser(profile: {
   friends_since?: string;
 } | null): User | null {
   if (!profile) return null;
-  
+
   return {
     id: (typeof profile.id === 'string' ? profile.id : profile.id) as Id<"profiles">, // Keep as Id<"profiles"> to match User type
     username: profile.username,
@@ -30,236 +30,90 @@ function convertUser(profile: {
   };
 }
 
-type FriendsState = {
-  cursor: Id<"friends"> | null | undefined;
-  allFriends: User[];
-  isInitialLoad: boolean;
-  currentSearch: string | undefined;
-};
-
-type FriendsAction =
-  | { type: 'RESET'; search?: string }
-  | { type: 'SET_CURSOR'; cursor: Id<"friends"> }
-  | { type: 'SET_INITIAL_DATA'; data: User[] }
-  | { type: 'APPEND_DATA'; data: User[] };
-
-function friendsReducer(state: FriendsState, action: FriendsAction): FriendsState {
-  switch (action.type) {
-    case 'RESET':
-      return {
-        cursor: null,
-        allFriends: [],
-        isInitialLoad: true,
-        currentSearch: action.search,
-      };
-    case 'SET_CURSOR':
-      return { ...state, cursor: action.cursor };
-    case 'SET_INITIAL_DATA':
-      return {
-        ...state,
-        allFriends: action.data,
-        isInitialLoad: false,
-      };
-    case 'APPEND_DATA': {
-      // Avoid duplicates
-      const existingIds = new Set(state.allFriends.map(f => f.id));
-      const newFriends = action.data.filter(f => !existingIds.has(f.id));
-      return {
-        ...state,
-        allFriends: [...state.allFriends, ...newFriends],
-      };
-    }
-    default:
-      return state;
-  }
-}
-
 /**
  * Get friends list with cursor-based pagination and server-side search
+ * Uses TanStack Query's useInfiniteQuery for optimal caching and performance
  */
 export const useFriends = (searchQuery?: string, userId?: Id<"profiles"> | string) => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
   const { isAuthSet } = useConvexAuthStore();
-  
+  const convex = useConvex();
+
   // Only query when fully authenticated AND profile is ready (unless fetching another user's friends)
   const canQuery = userId ? true : (!isGuest && isAuthSet && isProfileReady);
-  
-  const [state, dispatch] = useReducer(friendsReducer, {
-    cursor: null,
-    allFriends: [],
-    isInitialLoad: true,
-    currentSearch: searchQuery,
+
+  const query = useInfiniteQuery({
+    queryKey: ['friends', 'list', searchQuery, userId],
+    queryFn: async ({ pageParam }) => {
+      const result = await convex.query(api.friends.list, {
+        limit: 50,
+        search: searchQuery,
+        userId: userId as Id<"profiles"> | undefined,
+        ...(pageParam ? { cursor: pageParam } : {}),
+      });
+      return result;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    initialPageParam: null as Id<"friends"> | null,
+    enabled: canQuery,
   });
-  
-  const prevSearchRef = useRef(searchQuery);
-  const prevUserIdRef = useRef(userId);
-  
-  // Reset when search query or userId changes
-  useEffect(() => {
-    if (prevSearchRef.current !== searchQuery || prevUserIdRef.current !== userId) {
-      prevSearchRef.current = searchQuery;
-      prevUserIdRef.current = userId;
-      dispatch({ type: 'RESET', search: searchQuery });
-    }
-  }, [searchQuery, userId]);
-  
-  // Query with current cursor and search
-  const result = useQuery(
-    api.friends.list,
-    canQuery && state.cursor === null
-      ? { limit: 50, search: state.currentSearch, userId: userId as Id<"profiles"> | undefined }
-      : canQuery && state.cursor
-        ? { limit: 50, cursor: state.cursor, search: state.currentSearch, userId: userId as Id<"profiles"> | undefined }
-        : "skip"
-  );
-  
-  const prevResultRef = useRef(result);
-  
-  // Handle data updates when result changes
-  useEffect(() => {
-    if (!result?.data || !canQuery) return;
-    if (prevResultRef.current?.data === result.data) return;
-    
-    prevResultRef.current = result;
-    const convertedData = result.data.map(convertUser).filter((f): f is User => f !== null);
-    
-    if (state.cursor === null) {
-      // First page
-      dispatch({ type: 'SET_INITIAL_DATA', data: convertedData });
-    } else if (state.cursor !== undefined) {
-      // Subsequent pages
-      dispatch({ type: 'APPEND_DATA', data: convertedData });
-    }
-  }, [result, canQuery, state.cursor]);
-  
-  const fetchNextPage = () => {
-    if (result?.hasMore && result?.nextCursor) {
-      dispatch({ type: 'SET_CURSOR', cursor: result.nextCursor });
-    }
-  };
-  
-  const reset = () => {
-    dispatch({ type: 'RESET', search: searchQuery });
-  };
-  
+
+  // Flatten all pages into a single array
+  const allFriends = query.data?.pages.flatMap(page =>
+    page.data.map(convertUser).filter((f): f is User => f !== null)
+  ) ?? [];
+
   return {
-    data: state.allFriends,
-    isLoading: state.isInitialLoad && result === undefined && canQuery,
-    hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: state.cursor !== null && state.cursor !== undefined && result === undefined,
-    fetchNextPage,
-    refetch: reset,
+    data: allFriends,
+    isLoading: query.isLoading,
+    hasNextPage: query.hasNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+    fetchNextPage: query.fetchNextPage,
+    refetch: query.refetch,
     error: null,
   };
 };
 
-type RequestsState = {
-  cursor: Id<"friends"> | null | undefined;
-  allRequests: User[];
-  isInitialLoad: boolean;
-};
-
-type RequestsAction =
-  | { type: 'RESET' }
-  | { type: 'SET_CURSOR'; cursor: Id<"friends"> }
-  | { type: 'SET_INITIAL_DATA'; data: User[] }
-  | { type: 'APPEND_DATA'; data: User[] };
-
-function requestsReducer(state: RequestsState, action: RequestsAction): RequestsState {
-  switch (action.type) {
-    case 'RESET':
-      return {
-        cursor: null,
-        allRequests: [],
-        isInitialLoad: true,
-      };
-    case 'SET_CURSOR':
-      return { ...state, cursor: action.cursor };
-    case 'SET_INITIAL_DATA':
-      return {
-        ...state,
-        allRequests: action.data,
-        isInitialLoad: false,
-      };
-    case 'APPEND_DATA': {
-      // Avoid duplicates
-      const existingIds = new Set(state.allRequests.map(r => r.id));
-      const newRequests = action.data.filter(r => !existingIds.has(r.id));
-      return {
-        ...state,
-        allRequests: [...state.allRequests, ...newRequests],
-      };
-    }
-    default:
-      return state;
-  }
-}
-
 /**
  * Get friend requests with cursor-based pagination
- * Realtime subscription for immediate notification
+ * Uses TanStack Query's useInfiniteQuery for optimal caching and performance
  */
 export const useFriendRequests = () => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
   const { isAuthSet } = useConvexAuthStore();
-  
+  const convex = useConvex();
+
   // Only query when fully authenticated AND profile is ready
   const canQuery = !isGuest && isAuthSet && isProfileReady;
-  
-  const [state, dispatch] = useReducer(requestsReducer, {
-    cursor: null,
-    allRequests: [],
-    isInitialLoad: true,
+
+  const query = useInfiniteQuery({
+    queryKey: ['friends', 'requests'],
+    queryFn: async ({ pageParam }) => {
+      const result = await convex.query(api.friends.getRequests, {
+        limit: 20,
+        ...(pageParam ? { cursor: pageParam } : {}),
+      });
+      return result;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    initialPageParam: null as Id<"friends"> | null,
+    enabled: canQuery,
   });
-  
-  // Query with current cursor
-  const result = useQuery(
-    api.friends.getRequests,
-    canQuery && state.cursor === null
-      ? { limit: 20 }
-      : canQuery && state.cursor
-        ? { limit: 20, cursor: state.cursor }
-        : "skip"
-  );
-  
-  const prevResultRef = useRef(result);
-  
-  // Handle data updates when result changes
-  useEffect(() => {
-    if (!result?.data || !canQuery) return;
-    if (prevResultRef.current?.data === result.data) return;
-    
-    prevResultRef.current = result;
-    const convertedData = result.data.map(convertUser).filter((r): r is User => r !== null);
-    
-    if (state.cursor === null) {
-      // First page
-      dispatch({ type: 'SET_INITIAL_DATA', data: convertedData });
-    } else if (state.cursor !== undefined) {
-      // Subsequent pages
-      dispatch({ type: 'APPEND_DATA', data: convertedData });
-    }
-  }, [result, canQuery, state.cursor]);
-  
-  const fetchNextPage = () => {
-    if (result?.hasMore && result?.nextCursor) {
-      dispatch({ type: 'SET_CURSOR', cursor: result.nextCursor });
-    }
-  };
-  
-  const reset = () => {
-    dispatch({ type: 'RESET' });
-  };
-  
+
+  // Flatten all pages into a single array
+  const allRequests = query.data?.pages.flatMap(page =>
+    page.data.map(convertUser).filter((r): r is User => r !== null)
+  ) ?? [];
+
   return {
-    data: state.allRequests,
-    isLoading: state.isInitialLoad && result === undefined && canQuery,
-    hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: state.cursor !== null && state.cursor !== undefined && result === undefined,
-    fetchNextPage,
-    refetch: reset,
+    data: allRequests,
+    isLoading: query.isLoading,
+    hasNextPage: query.hasNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+    fetchNextPage: query.fetchNextPage,
+    refetch: query.refetch,
     error: null,
   };
 };
@@ -346,116 +200,50 @@ export const useCancelFriendRequest = () => {
   };
 };
 
-type SentRequestsState = {
-  cursor: Id<"friends"> | null | undefined;
-  allSentRequests: User[];
-  isInitialLoad: boolean;
-};
-
-type SentRequestsAction =
-  | { type: 'RESET' }
-  | { type: 'SET_CURSOR'; cursor: Id<"friends"> }
-  | { type: 'SET_INITIAL_DATA'; data: User[] }
-  | { type: 'APPEND_DATA'; data: User[] };
-
-function sentRequestsReducer(state: SentRequestsState, action: SentRequestsAction): SentRequestsState {
-  switch (action.type) {
-    case 'RESET':
-      return {
-        cursor: null,
-        allSentRequests: [],
-        isInitialLoad: true,
-      };
-    case 'SET_CURSOR':
-      return { ...state, cursor: action.cursor };
-    case 'SET_INITIAL_DATA':
-      return {
-        ...state,
-        allSentRequests: action.data,
-        isInitialLoad: false,
-      };
-    case 'APPEND_DATA': {
-      // Avoid duplicates
-      const existingIds = new Set(state.allSentRequests.map(r => r.id));
-      const newRequests = action.data.filter(r => !existingIds.has(r.id));
-      return {
-        ...state,
-        allSentRequests: [...state.allSentRequests, ...newRequests],
-      };
-    }
-    default:
-      return state;
-  }
-}
-
 /**
  * Get pending friend requests sent by the current user with full user data
+ * Uses TanStack Query's useInfiniteQuery for optimal caching and performance
  */
 export const useSentFriendRequests = () => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
   const { isAuthSet } = useConvexAuthStore();
+  const convex = useConvex();
 
   // Only query when fully authenticated AND profile is ready
   const canQuery = !isGuest && isAuthSet && isProfileReady;
 
-  const [state, dispatch] = useReducer(sentRequestsReducer, {
-    cursor: null,
-    allSentRequests: [],
-    isInitialLoad: true,
+  const query = useInfiniteQuery({
+    queryKey: ['friends', 'sent-requests'],
+    queryFn: async ({ pageParam }) => {
+      const result = await convex.query(api.friends.getSentRequestsWithData, {
+        limit: 20,
+        ...(pageParam ? { cursor: pageParam } : {}),
+      });
+      return result;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    initialPageParam: null as Id<"friends"> | null,
+    enabled: canQuery,
   });
-  
-  // Query with current cursor
-  const result = useQuery(
-    api.friends.getSentRequestsWithData,
-    canQuery && state.cursor === null
-      ? { limit: 20 }
-      : canQuery && state.cursor
-        ? { limit: 20, cursor: state.cursor }
-        : "skip"
-  );
-  
-  const prevResultRef = useRef(result);
 
-  // Handle data updates when result changes
-  useEffect(() => {
-    if (!result?.data || !canQuery) return;
-    if (prevResultRef.current?.data === result.data) return;
-    
-    prevResultRef.current = result;
-    const convertedData = result.data.map(convertUser).filter((r): r is User => r !== null);
-    
-    if (state.cursor === null) {
-      // First page
-      dispatch({ type: 'SET_INITIAL_DATA', data: convertedData });
-    } else if (state.cursor !== undefined) {
-      // Subsequent pages
-      dispatch({ type: 'APPEND_DATA', data: convertedData });
-    }
-  }, [result, canQuery, state.cursor]);
-
-  const fetchNextPage = () => {
-    if (result?.hasMore && result?.nextCursor) {
-      dispatch({ type: 'SET_CURSOR', cursor: result.nextCursor });
-    }
-  };
-
-  const reset = () => {
-    dispatch({ type: 'RESET' });
-  };
+  // Flatten all pages into a single array
+  const allSentRequests = query.data?.pages.flatMap(page =>
+    page.data.map(convertUser).filter((r): r is User => r !== null)
+  ) ?? [];
 
   // Helper function to check if a request was sent to a specific user
   const hasPendingRequest = (userId: Id<"profiles"> | string) => {
-    return state.allSentRequests.some(req => req.id === userId);
+    return allSentRequests.some(req => req.id === userId);
   };
 
   return {
-    data: state.allSentRequests,
-    isLoading: state.isInitialLoad && result === undefined && canQuery,
-    hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: state.cursor !== null && state.cursor !== undefined && result === undefined,
-    fetchNextPage,
-    refetch: reset,
+    data: allSentRequests,
+    isLoading: query.isLoading,
+    hasNextPage: query.hasNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+    fetchNextPage: query.fetchNextPage,
+    refetch: query.refetch,
     error: null,
     hasPendingRequest,
   };

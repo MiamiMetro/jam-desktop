@@ -1118,7 +1118,7 @@ function Sidebar() {
                               </Button>
                             </div>
                           )}
-                          {messages.map((message, index) => {
+                          {messages.map((message: any, index: number) => {
                             const isOwn = message.senderId === user?.id;
                             const isFirstUnread = shouldShowUnreadDivider(
                               message,

@@ -1,5 +1,5 @@
-import { useQuery, useMutation } from "convex/react";
-import { useState, useEffect } from "react";
+import { useQuery, useMutation, useConvex } from "convex/react";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { useAuthStore } from '@/stores/authStore';
@@ -107,61 +107,36 @@ function convertComment(comment: Comment): FrontendComment {
 
 /**
  * Get posts feed with cursor-based pagination
- * Supports infinite scroll by accumulating posts across pages
+ * Uses TanStack Query's useInfiniteQuery for optimal caching and performance
  */
 export const usePosts = () => {
-  const [cursor, setCursor] = useState<Id<"posts"> | null | undefined>(null);
-  const [allPosts, setAllPosts] = useState<FrontendPost[]>([]);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  
-  // Query with current cursor
-  const result = useQuery(
-    api.posts.getFeed,
-    cursor === null ? { limit: 20 } : cursor ? { limit: 20, cursor } : "skip"
-  );
-  
-  // Reset posts when cursor is null (first page)
-  useEffect(() => {
-    if (cursor === null && result?.data) {
-      setAllPosts(result.data.map(convertPost));
-      setIsInitialLoad(false);
-    }
-  }, [cursor, result?.data]);
-  
-  // Append new posts when cursor changes (loading next page)
-  useEffect(() => {
-    if (cursor !== null && cursor !== undefined && result?.data) {
-      setAllPosts(prev => {
-        // Avoid duplicates by checking if post ID already exists
-        const existingIds = new Set(prev.map(p => p.id));
-        const newPosts = result.data
-          .map(convertPost)
-          .filter(post => !existingIds.has(post.id));
-        return [...prev, ...newPosts];
+  const convex = useConvex();
+
+  const query = useInfiniteQuery({
+    queryKey: ['posts', 'feed'],
+    queryFn: async ({ pageParam }) => {
+      const result = await convex.query(api.posts.getFeed, {
+        limit: 20,
+        ...(pageParam ? { cursor: pageParam } : {}),
       });
-    }
-  }, [cursor, result?.data]);
-  
-  const fetchNextPage = () => {
-    // Only fetch if there's more data and we have a cursor
-    if (result?.hasMore && result?.nextCursor) {
-      setCursor(result.nextCursor);
-    }
-  };
-  
-  const reset = () => {
-    setCursor(null);
-    setAllPosts([]);
-    setIsInitialLoad(true);
-  };
-  
+      return result;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    initialPageParam: null as Id<"posts"> | null,
+  });
+
+  // Flatten all pages into a single array
+  const allPosts = query.data?.pages.flatMap(page =>
+    page.data.map(convertPost)
+  ) ?? [];
+
   return {
     data: allPosts,
-    isLoading: isInitialLoad && result === undefined,
-    hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: cursor !== null && cursor !== undefined && result === undefined,
-    fetchNextPage,
-    refetch: reset,
+    isLoading: query.isLoading,
+    hasNextPage: query.hasNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+    fetchNextPage: query.fetchNextPage,
+    refetch: query.refetch,
   };
 };
 
@@ -213,71 +188,38 @@ export const usePost = (postId: string) => {
 
 /**
  * Get comments for a post with cursor-based pagination
- * Supports infinite scroll
+ * Uses TanStack Query's useInfiniteQuery for optimal caching and performance
  */
 export const useComments = (postId: string) => {
-  const [cursor, setCursor] = useState<string | null | undefined>(null);
-  const [allComments, setAllComments] = useState<FrontendComment[]>([]);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  
-  // Query with current cursor
-  const result = useQuery(
-    api.comments.getByPost,
-    postId && cursor === null 
-      ? { postId: postId as Id<"posts">, limit: 20 } 
-      : postId && cursor 
-        ? { postId: postId as Id<"posts">, limit: 20, cursor } 
-        : "skip"
-  );
-  
-  // Reset comments when cursor is null (first page)
-  useEffect(() => {
-    if (cursor === null && result?.data && postId) {
-      setAllComments(result.data.map(convertComment));
-      setIsInitialLoad(false);
-    }
-  }, [cursor, result?.data, postId]);
-  
-  // Append new comments when cursor changes (loading next page)
-  useEffect(() => {
-    if (cursor !== null && cursor !== undefined && result?.data && postId) {
-      setAllComments(prev => {
-        // Avoid duplicates by checking if comment ID already exists
-        const existingIds = new Set(prev.map(c => c.id));
-        const newComments = result.data
-          .map(convertComment)
-          .filter(comment => !existingIds.has(comment.id));
-        return [...prev, ...newComments];
+  const convex = useConvex();
+
+  const query = useInfiniteQuery({
+    queryKey: ['comments', postId],
+    queryFn: async ({ pageParam }) => {
+      const result = await convex.query(api.comments.getByPost, {
+        postId: postId as Id<"posts">,
+        limit: 20,
+        ...(pageParam ? { cursor: pageParam } : {}),
       });
-    }
-  }, [cursor, result?.data, postId]);
-  
-  // Reset when postId changes
-  useEffect(() => {
-    setCursor(null);
-    setAllComments([]);
-    setIsInitialLoad(true);
-  }, [postId]);
-  
-  const fetchNextPage = () => {
-    if (result?.hasMore && result?.nextCursor) {
-      setCursor(result.nextCursor);
-    }
-  };
-  
-  const reset = () => {
-    setCursor(null);
-    setAllComments([]);
-    setIsInitialLoad(true);
-  };
-  
+      return result;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    initialPageParam: null as string | null,
+    enabled: !!postId,
+  });
+
+  // Flatten all pages into a single array
+  const allComments = query.data?.pages.flatMap(page =>
+    page.data.map(convertComment)
+  ) ?? [];
+
   return {
     data: allComments,
-    isLoading: isInitialLoad && result === undefined && !!postId,
-    hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: cursor !== null && cursor !== undefined && result === undefined,
-    fetchNextPage,
-    refetch: reset,
+    isLoading: query.isLoading,
+    hasNextPage: query.hasNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+    fetchNextPage: query.fetchNextPage,
+    refetch: query.refetch,
   };
 };
 
@@ -393,70 +335,37 @@ export const useToggleCommentLike = () => {
 
 /**
  * Get posts by username with cursor-based pagination
- * Supports infinite scroll
+ * Uses TanStack Query's useInfiniteQuery for optimal caching and performance
  */
 export const useUserPosts = (username: string) => {
-  const [cursor, setCursor] = useState<Id<"posts"> | null | undefined>(null);
-  const [allPosts, setAllPosts] = useState<FrontendPost[]>([]);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  
-  // Reset when username changes
-  useEffect(() => {
-    setCursor(null);
-    setAllPosts([]);
-    setIsInitialLoad(true);
-  }, [username]);
-  
-  // Query with current cursor
-  const result = useQuery(
-    api.posts.getByUsername,
-    username && cursor === null
-      ? { username, limit: 20 }
-      : username && cursor
-        ? { username, limit: 20, cursor }
-        : "skip"
-  );
-  
-  // Reset posts when cursor is null (first page)
-  useEffect(() => {
-    if (cursor === null && result?.data && username) {
-      setAllPosts(result.data.map(convertPost));
-      setIsInitialLoad(false);
-    }
-  }, [cursor, result?.data, username]);
-  
-  // Append new posts when cursor changes (loading next page)
-  useEffect(() => {
-    if (cursor !== null && cursor !== undefined && result?.data && username) {
-      setAllPosts(prev => {
-        // Avoid duplicates by checking if post ID already exists
-        const existingIds = new Set(prev.map(p => p.id));
-        const newPosts = result.data
-          .map(convertPost)
-          .filter(post => !existingIds.has(post.id));
-        return [...prev, ...newPosts];
+  const convex = useConvex();
+
+  const query = useInfiniteQuery({
+    queryKey: ['posts', 'user', username],
+    queryFn: async ({ pageParam }) => {
+      const result = await convex.query(api.posts.getByUsername, {
+        username,
+        limit: 20,
+        ...(pageParam ? { cursor: pageParam } : {}),
       });
-    }
-  }, [cursor, result?.data, username]);
-  
-  const fetchNextPage = () => {
-    if (result?.hasMore && result?.nextCursor) {
-      setCursor(result.nextCursor);
-    }
-  };
-  
-  const reset = () => {
-    setCursor(null);
-    setAllPosts([]);
-    setIsInitialLoad(true);
-  };
-  
+      return result;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    initialPageParam: null as Id<"posts"> | null,
+    enabled: !!username,
+  });
+
+  // Flatten all pages into a single array
+  const allPosts = query.data?.pages.flatMap(page =>
+    page.data.map(convertPost)
+  ) ?? [];
+
   return {
     data: allPosts,
-    isLoading: isInitialLoad && result === undefined && !!username,
-    hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: cursor !== null && cursor !== undefined && result === undefined,
-    fetchNextPage,
-    refetch: reset,
+    isLoading: query.isLoading,
+    hasNextPage: query.hasNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+    fetchNextPage: query.fetchNextPage,
+    refetch: query.refetch,
   };
 };
