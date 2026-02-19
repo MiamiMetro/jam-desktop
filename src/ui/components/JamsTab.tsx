@@ -15,6 +15,7 @@ import {
   Lock,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
+import { useUIStore } from "@/stores/uiStore";
 import { useJams, useMyRoom, useCreateRoom, useUpdateRoom, useActivateRoom, useDeactivateRoom } from "@/hooks/useJams";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
@@ -25,8 +26,10 @@ interface JamsTabProps {
 
 function JamsTab({ onGuestAction }: JamsTabProps) {
   const { isGuest, user } = useAuthStore();
+  const { theme } = useUIStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const searchQuery = searchParams.get("search") || "";
   const { data: rooms = [], isLoading: roomsLoading } = useJams();
   const { data: myRoom, isLoading: myRoomLoading } = useMyRoom(user?.id);
@@ -108,12 +111,12 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
 
   const editInitialData: RoomFormData | undefined = myRoom
     ? {
-        name: myRoom.name,
-        description: myRoom.description || "",
-        genre: myRoom.genre || "",
-        maxParticipants: myRoom.maxParticipants,
-        isPrivate: myRoom.isPrivate,
-      }
+      name: myRoom.name,
+      description: myRoom.description || "",
+      genre: myRoom.genre || "",
+      maxParticipants: myRoom.maxParticipants,
+      isPrivate: myRoom.isPrivate,
+    }
     : undefined;
 
   // Filter rooms based on search query
@@ -151,11 +154,10 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
               <p className="text-sm text-muted-foreground">Loading your room...</p>
             </div>
           ) : myRoom ? (
-            <div className={`p-5 rounded-xl glass-strong relative overflow-hidden ${
-              myRoom.isEnabled
-                ? "ring-1 ring-primary/30"
-                : "ring-1 ring-border"
-            }`}>
+            <div className={`p-5 rounded-xl glass-strong relative overflow-hidden ${myRoom.isEnabled
+              ? "ring-1 ring-primary/30"
+              : "ring-1 ring-border"
+              }`}>
               {/* Active room radial glow */}
               {myRoom.isEnabled && (
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,oklch(0.78_0.16_70/8%),transparent_60%)] pointer-events-none" />
@@ -165,11 +167,10 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
                   <div className="flex items-center gap-2 mb-2">
                     <Hash className="h-4 w-4 text-muted-foreground" />
                     <h3 className="text-base font-heading font-semibold">My Room</h3>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      myRoom.isEnabled
-                        ? "bg-green-500/20 text-green-400"
-                        : "bg-muted-foreground/20 text-muted-foreground"
-                    }`}>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${myRoom.isEnabled
+                      ? "bg-green-500/20 text-green-400"
+                      : "bg-muted-foreground/20 text-muted-foreground"
+                      }`}>
                       {myRoom.isEnabled ? "Active" : "Disabled"}
                     </span>
                     {myRoom.isPrivate && (
@@ -245,7 +246,11 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
           ) : (
             <div className="p-6 rounded-xl glass border border-dashed border-border/50">
               <div className="text-center">
-                <Music className="h-10 w-10 mx-auto mb-3 text-primary/40 animate-float" />
+                <img
+                  src={isDark ? "./logo-sidebar-dark.svg" : "./logo-sidebar-light.svg"}
+                  className="h-10 w-10 mx-auto mb-3 opacity-40 animate-float"
+                  alt="Jam Logo"
+                />
                 <p className="text-sm font-medium mb-1">You don't have a room yet</p>
                 <p className="text-xs text-muted-foreground mb-3">
                   Create your room to start jamming with others

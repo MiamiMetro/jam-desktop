@@ -11,13 +11,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Music, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useAuthModalStore } from "@/stores/authModalStore";
+import { useUIStore } from "@/stores/uiStore";
 
 export default function LoginModal() {
   const location = useLocation();
   const { isOpen, mode, close, openSignup } = useAuthModalStore();
+  const { theme } = useUIStore();
+  const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +68,7 @@ export default function LoginModal() {
           </button>
           <div className="flex items-center gap-2.5 mb-3">
             <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/15">
-              <Music className="h-4.5 w-4.5 text-primary" />
+              <img src={isDark ? "./logo-sidebar-dark.svg" : "./logo-sidebar-light.svg"} alt="Jam Logo" className="w-5 h-5 opacity-90" />
             </div>
             <span className="font-heading font-bold text-lg tracking-tight">Jam</span>
           </div>

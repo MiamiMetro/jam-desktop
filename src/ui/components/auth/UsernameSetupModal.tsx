@@ -13,14 +13,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Music } from "lucide-react";
+
 import { useAuthStore } from "@/stores/authStore";
 import { useAuthModalStore } from "@/stores/authModalStore";
+import { useUIStore } from "@/stores/uiStore";
 import { useProfileStore } from "@/hooks/useEnsureProfile";
 
 export default function UsernameSetupModal() {
   const { isOpen, mode, close } = useAuthModalStore();
   const { setUser } = useAuthStore();
+  const { theme } = useUIStore();
+  const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const createProfile = useMutation(api.profiles.createProfile);
 
   const [username, setUsername] = useState("");
@@ -90,7 +93,7 @@ export default function UsernameSetupModal() {
         <div className="bg-gradient-to-br from-primary/15 via-primary/8 to-transparent px-6 pt-6 pb-4 animate-page-in">
           <div className="flex items-center gap-2.5 mb-3">
             <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/15">
-              <Music className="h-4.5 w-4.5 text-primary" />
+              <img src={isDark ? "./logo-sidebar-dark.svg" : "./logo-sidebar-light.svg"} alt="Jam Logo" className="w-5 h-5 opacity-90" />
             </div>
             <span className="font-heading font-bold text-lg tracking-tight">Jam</span>
           </div>

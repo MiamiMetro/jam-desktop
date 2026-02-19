@@ -77,7 +77,11 @@ export default function NavSidebar() {
           onClick={() => navigate("/jams")}
         >
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/15 group-hover:bg-primary/20 transition-colors">
-            <Music className="h-4 w-4 text-primary" />
+            <img
+              src={isDark ? "./logo-sidebar-dark.svg" : "./logo-sidebar-light.svg"}
+              alt="Jam Logo"
+              className="w-5 h-5 opacity-90 group-hover:opacity-100 transition-opacity"
+            />
           </div>
           <h1 className="text-xl font-heading font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
             Jam
@@ -93,11 +97,10 @@ export default function NavSidebar() {
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer relative ${
-                active
-                  ? "bg-primary/12 text-primary shadow-[inset_0_0_12px_oklch(0.78_0.16_70/8%)]"
-                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground hover:translate-x-0.5"
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer relative ${active
+                ? "bg-primary/12 text-primary shadow-[inset_0_0_12px_oklch(0.78_0.16_70/8%)]"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground hover:translate-x-0.5"
+                }`}
             >
               {active && (
                 <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-primary animate-glow-pulse" />
@@ -114,11 +117,10 @@ export default function NavSidebar() {
         {currentRoom && (
           <button
             onClick={() => navigate(`/jam/${persistedRoomId}`)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer relative ${
-              isRoomActive
-                ? "bg-primary/12 text-primary shadow-[inset_0_0_12px_oklch(0.78_0.16_70/8%)]"
-                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground hover:translate-x-0.5"
-            }`}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer relative ${isRoomActive
+              ? "bg-primary/12 text-primary shadow-[inset_0_0_12px_oklch(0.78_0.16_70/8%)]"
+              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground hover:translate-x-0.5"
+              }`}
           >
             {isRoomActive && (
               <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-primary animate-glow-pulse" />
@@ -148,21 +150,21 @@ export default function NavSidebar() {
         {!isGuest && user ? (
           <div>
             <DropdownMenu>
-                <DropdownMenuTrigger render={
-                  <button
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors duration-200 cursor-pointer"
-                  >
-                    <Avatar size="sm" className="ring-2 ring-primary/20 pointer-events-none flex-shrink-0">
-                      <AvatarImage src={user.avatar_url || ""} alt={user.username || "Profile"} />
-                      <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-                        {user.username?.substring(0, 2).toUpperCase() || "U"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="text-sm font-medium truncate text-foreground">
-                      {user.username || "User"}
-                    </span>
-                  </button>
-                } />
+              <DropdownMenuTrigger render={
+                <button
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors duration-200 cursor-pointer"
+                >
+                  <Avatar size="sm" className="ring-2 ring-primary/20 pointer-events-none flex-shrink-0">
+                    <AvatarImage src={user.avatar_url || ""} alt={user.username || "Profile"} />
+                    <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                      {user.username?.substring(0, 2).toUpperCase() || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium truncate text-foreground">
+                    {user.username || "User"}
+                  </span>
+                </button>
+              } />
               <DropdownMenuContent side="top" align="start" sideOffset={4} className="w-48">
                 <DropdownMenuItem onClick={() => user.username && navigate(`/profile/${user.username}`)}>
                   <UserIcon className="h-4 w-4 mr-2" />
