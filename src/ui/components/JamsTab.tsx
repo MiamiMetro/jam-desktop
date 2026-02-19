@@ -165,12 +165,13 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-6">
       {/* Jams Header */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Jams</h2>
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-2xl font-heading font-bold">Jams</h2>
         </div>
+        <p className="text-sm text-muted-foreground">Live rooms where the music happens</p>
       </div>
 
       {/* My Room Section */}
@@ -181,10 +182,10 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
               <p className="text-sm text-muted-foreground">Loading your room...</p>
             </div>
           ) : myRoom ? (
-            <div className={`p-4 rounded-lg border-2 ${
-              myRoom.isEnabled 
-                ? "border-primary/50 bg-primary/5" 
-                : "border-muted bg-muted/30"
+            <div className={`p-5 rounded-xl glass-strong ${
+              myRoom.isEnabled
+                ? "ring-1 ring-primary/30 glow-primary"
+                : "ring-1 ring-border"
             }`}>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
@@ -272,9 +273,9 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
               </div>
             </div>
           ) : (
-            <div className="p-4 rounded-lg border border-dashed border-border bg-muted/30">
+            <div className="p-6 rounded-xl glass border border-dashed border-border/50">
               <div className="text-center">
-                <Music className="h-8 w-8 mx-auto mb-2 text-muted-foreground opacity-50" />
+                <Music className="h-10 w-10 mx-auto mb-3 text-muted-foreground opacity-50" />
                 <p className="text-sm font-medium mb-1">You don't have a room yet</p>
                 <p className="text-xs text-muted-foreground mb-3">
                   Create your room to start jamming with others
@@ -448,9 +449,9 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
       />
 
       {/* Other Jams Grid */}
-      <div className="mb-2">
-        <h3 className="text-sm font-semibold text-muted-foreground mb-3">
-          Other Jams
+      <div className="mb-3">
+        <h3 className="text-sm font-heading font-semibold text-muted-foreground mb-3">
+          Live Rooms
         </h3>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -473,7 +474,7 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
             <div
               key={room.id}
               onClick={() => handleRoomClick(room.id)}
-              className="p-4 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors group"
+              className="p-4 rounded-xl glass hover:glass-strong cursor-pointer transition-all duration-200 group hover:ring-1 hover:ring-primary/20"
             >
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">

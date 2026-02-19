@@ -1,27 +1,27 @@
 import { useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import MainPage from "@/pages/MainPage";
+import AppLayout from "@/layouts/AppLayout";
 import { useDeepLink } from "@/hooks/useDeepLink";
 
 function App() {
-  // Enable deep linking (jam:// protocol and yourapp.com domain links)
   useDeepLink();
 
-  // Clear jam room ID on app startup (when app reopens, user should not be in a room)
+  // Clear jam room ID on app startup
   useEffect(() => {
     localStorage.removeItem("currentJamRoomId");
   }, []);
 
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/feed" replace />} />
-      <Route path="/feed" element={<MainPage />} />
-      <Route path="/jams" element={<MainPage />} />
-      <Route path="/communities" element={<MainPage />} />
-      <Route path="/community/:id" element={<MainPage />} />
-      <Route path="/profile/:username" element={<MainPage />} />
-      <Route path="/post/:id" element={<MainPage />} />
-      <Route path="/jam/:id" element={<MainPage />} />
+      <Route path="/" element={<Navigate to="/jams" replace />} />
+      <Route path="/feed" element={<AppLayout />} />
+      <Route path="/jams" element={<AppLayout />} />
+      <Route path="/friends" element={<AppLayout />} />
+      <Route path="/communities" element={<AppLayout />} />
+      <Route path="/community/:id" element={<AppLayout />} />
+      <Route path="/profile/:username" element={<AppLayout />} />
+      <Route path="/post/:id" element={<AppLayout />} />
+      <Route path="/jam/:id" element={<AppLayout />} />
     </Routes>
   );
 }

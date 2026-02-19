@@ -3,11 +3,9 @@ import { useSearchParams, useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { 
-  Music, 
-  Users, 
-  Filter,
-  X,
+import {
+  Music,
+  Users,
   ArrowLeft,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
@@ -46,7 +44,6 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
   const { data: communityPosts = [], isLoading: postsLoading } = useCommunityPosts(communityId || "");
   const toggleLikeMutation = useToggleLike();
   const [communitySearchInput, setCommunitySearchInput] = useState(searchQuery);
-  const [showFilters, setShowFilters] = useState(false);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   
   const handleAuthorClick = (username: string) => {
@@ -111,12 +108,12 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
     return (
       <>
         {/* Community Header Banner */}
-        <div className="relative h-40 bg-gradient-to-r from-primary/20 to-primary/10 border-b border-border">
-          {/* Back Button - positioned absolutely */}
+        <div className="relative h-48 bg-gradient-to-br from-primary/25 via-primary/10 to-background border-b border-border overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,oklch(0.78_0.16_70/15%)_0%,transparent_60%)]" />
           <Button
             variant="ghost"
             size="icon"
-            className="absolute top-4 left-4 z-10 bg-background/80 backdrop-blur-sm hover:bg-background"
+            className="absolute top-4 left-4 z-10 glass hover:glass-strong"
             onClick={() => navigate(-1)}
             title="Go back"
           >
@@ -125,10 +122,10 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
         </div>
 
         {/* Community Content */}
-        <div className="relative px-4 pb-4 border-b border-border">
+        <div className="relative px-5 pb-5 border-b border-border">
           {/* Community Avatar */}
           <div className="relative -mt-16 mb-4">
-            <div className="h-24 w-24 rounded-full border-4 border-background overflow-hidden">
+            <div className="h-28 w-28 rounded-full border-4 border-background overflow-hidden ring-2 ring-primary/30 shadow-[0_0_20px_oklch(0.78_0.16_70/20%)]">
               <Avatar className="h-full w-full">
                 <AvatarImage src="" alt={selectedCommunity.name} />
                 <AvatarFallback className="bg-primary text-primary-foreground text-3xl font-bold h-full w-full">
@@ -141,7 +138,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
           {/* Community Info */}
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
-              <h1 className="text-2xl font-bold">{selectedCommunity.name}</h1>
+              <h1 className="text-2xl font-heading font-bold">{selectedCommunity.name}</h1>
             </div>
             <p className="text-muted-foreground mb-3">{selectedCommunity.description}</p>
             <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
@@ -153,11 +150,11 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
                 <span>{selectedCommunity.totalMembers} members</span>
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-wrap mb-3">
+            <div className="flex items-center gap-2 flex-wrap mb-4">
               {selectedCommunity.category.map((cat) => (
                 <span
                   key={cat}
-                  className="text-xs px-2 py-1 rounded bg-muted"
+                  className="text-xs px-2.5 py-1 rounded-full glass text-muted-foreground"
                 >
                   {cat}
                 </span>
@@ -166,6 +163,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
             <Button
               onClick={() => handleJoin(selectedCommunity.id)}
               size="sm"
+              className="glow-primary"
             >
               Join Community
             </Button>
@@ -216,66 +214,44 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
   }
 
   return (
-    <div className="p-4">
+    <div className="p-5">
       <div>
-        <h2 className="text-lg font-semibold mb-4">Communities</h2>
+        <div className="mb-5">
+          <h2 className="text-2xl font-heading font-bold mb-1">Communities</h2>
+          <p className="text-sm text-muted-foreground">Find your people and make music together</p>
+        </div>
 
-        {/* Search and Filter Toggle */}
+        {/* Search */}
         <SearchInput
           placeholder="Search communities..."
           value={communitySearchInput}
           onChange={setCommunitySearchInput}
           onSubmit={handleCommunitySearch}
-          extraButtons={
-            <Button
-              type="button"
-              variant={showFilters ? "default" : "outline"}
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <Filter className="h-4 w-4 mr-2" />
-              Filters
-            </Button>
-          }
         />
 
-        {/* Category Filters - Toggleable */}
-        {showFilters && (
-          <div className="mb-6 p-4 bg-muted/30 rounded-lg">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium">Filter by Category</span>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => setShowFilters(false)}
-                className="h-6 w-6"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {CATEGORIES.map((category) => (
-                <button
-                  key={category}
-                  onClick={() => handleCategoryClick(category)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                    categoryFilter === category
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background text-muted-foreground hover:bg-muted"
-                  }`}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Category Filters - Always visible pill bar */}
+        <div className="mb-5 flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+          {CATEGORIES.map((category) => (
+            <button
+              key={category}
+              onClick={() => handleCategoryClick(category)}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 ${
+                categoryFilter === category
+                  ? "bg-primary text-primary-foreground shadow-[0_0_12px_oklch(0.78_0.16_70/30%)]"
+                  : "glass text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
 
-        {/* Communities List - One per row */}
+        {/* Communities List */}
         {communities.length === 0 ? (
           <EmptyState
             icon={Music}
             title="No communities found"
-            description={searchQuery || categoryFilter 
+            description={searchQuery || categoryFilter
               ? "Try adjusting your filters"
               : "No communities available yet"}
           />
@@ -284,13 +260,12 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
             {communities.map((community) => (
               <Card
                 key={community.id}
-                className="p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+                className="p-4 cursor-pointer glass hover:glass-strong transition-all duration-200 hover:ring-1 hover:ring-primary/20"
                 onClick={() => handleCommunityClick(community.id)}
               >
                 <div className="flex items-center gap-4">
-                  {/* Community Avatar/Icon */}
                   <div className="flex-shrink-0">
-                    <div className="h-12 w-12 rounded-full overflow-hidden">
+                    <div className="h-12 w-12 rounded-full overflow-hidden ring-1 ring-border">
                       <Avatar className="h-full w-full">
                         <AvatarImage src="" alt={community.name} />
                         <AvatarFallback className="bg-primary text-primary-foreground text-lg font-bold h-full w-full">
@@ -299,11 +274,10 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
                       </Avatar>
                     </div>
                   </div>
-                  
-                  {/* Community Info */}
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold text-base">{community.name}</h3>
+                      <h3 className="font-heading font-semibold text-base">{community.name}</h3>
                     </div>
                     <p className="text-sm text-muted-foreground mb-2 line-clamp-1">
                       {community.description}
@@ -319,7 +293,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
                         {community.category.slice(0, 3).map((cat) => (
                           <span
                             key={cat}
-                            className="px-2 py-0.5 rounded bg-muted"
+                            className="px-2 py-0.5 rounded-full text-[10px] glass"
                           >
                             {cat}
                           </span>

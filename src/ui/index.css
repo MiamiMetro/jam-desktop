@@ -1,12 +1,50 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/noto-sans";
+@import "@fontsource-variable/plus-jakarta-sans";
+@import "@fontsource-variable/bricolage-grotesque";
 
 @custom-variant dark (&:is(.dark *));
 
+/* Dark Studio — default theme */
 :root {
-    --background: oklch(1 0 0);
+    --background: oklch(0.13 0.015 260);
+    --foreground: oklch(0.93 0.005 260);
+    --card: oklch(0.17 0.015 260);
+    --card-foreground: oklch(0.93 0.005 260);
+    --popover: oklch(0.17 0.015 260);
+    --popover-foreground: oklch(0.93 0.005 260);
+    --primary: oklch(0.78 0.16 70);
+    --primary-foreground: oklch(0.15 0.02 70);
+    --secondary: oklch(0.22 0.01 260);
+    --secondary-foreground: oklch(0.93 0.005 260);
+    --muted: oklch(0.22 0.01 260);
+    --muted-foreground: oklch(0.65 0.015 260);
+    --accent: oklch(0.78 0.16 70);
+    --accent-foreground: oklch(0.15 0.02 70);
+    --destructive: oklch(0.65 0.2 25);
+    --border: oklch(1 0 0 / 8%);
+    --input: oklch(1 0 0 / 12%);
+    --ring: oklch(0.78 0.16 70 / 40%);
+    --chart-1: oklch(0.837 0.128 66.29);
+    --chart-2: oklch(0.78 0.16 70);
+    --chart-3: oklch(0.646 0.222 41.116);
+    --chart-4: oklch(0.553 0.195 38.402);
+    --chart-5: oklch(0.47 0.157 37.304);
+    --radius: 0.5rem;
+    --sidebar: oklch(0.11 0.015 260);
+    --sidebar-foreground: oklch(0.93 0.005 260);
+    --sidebar-primary: oklch(0.78 0.16 70);
+    --sidebar-primary-foreground: oklch(0.15 0.02 70);
+    --sidebar-accent: oklch(0.78 0.16 70);
+    --sidebar-accent-foreground: oklch(0.15 0.02 70);
+    --sidebar-border: oklch(1 0 0 / 8%);
+    --sidebar-ring: oklch(0.78 0.16 70 / 40%);
+}
+
+/* Light override */
+.light {
+    --background: oklch(0.98 0.002 260);
     --foreground: oklch(0.141 0.005 285.823);
     --card: oklch(1 0 0);
     --card-foreground: oklch(0.141 0.005 285.823);
@@ -29,8 +67,7 @@
     --chart-3: oklch(0.646 0.222 41.116);
     --chart-4: oklch(0.553 0.195 38.402);
     --chart-5: oklch(0.47 0.157 37.304);
-    --radius: 0.45rem;
-    --sidebar: oklch(0.985 0 0);
+    --sidebar: oklch(0.975 0 0);
     --sidebar-foreground: oklch(0.141 0.005 285.823);
     --sidebar-primary: oklch(0.646 0.222 41.116);
     --sidebar-primary-foreground: oklch(0.98 0.016 73.684);
@@ -40,42 +77,39 @@
     --sidebar-ring: oklch(0.705 0.015 286.067);
 }
 
+/* Dark class inherits root (already dark by default) */
 .dark {
-    --background: oklch(0.141 0.005 285.823);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.21 0.006 285.885);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.21 0.006 285.885);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.705 0.213 47.604);
-    --primary-foreground: oklch(0.98 0.016 73.684);
-    --secondary: oklch(0.274 0.006 286.033);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.274 0.006 286.033);
-    --muted-foreground: oklch(0.705 0.015 286.067);
-    --accent: oklch(0.705 0.213 47.604);
-    --accent-foreground: oklch(0.98 0.016 73.684);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.552 0.016 285.938);
-    --chart-1: oklch(0.837 0.128 66.29);
-    --chart-2: oklch(0.705 0.213 47.604);
-    --chart-3: oklch(0.646 0.222 41.116);
-    --chart-4: oklch(0.553 0.195 38.402);
-    --chart-5: oklch(0.47 0.157 37.304);
-    --sidebar: oklch(0.21 0.006 285.885);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.705 0.213 47.604);
-    --sidebar-primary-foreground: oklch(0.98 0.016 73.684);
-    --sidebar-accent: oklch(0.705 0.213 47.604);
-    --sidebar-accent-foreground: oklch(0.98 0.016 73.684);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.552 0.016 285.938);
+    --background: oklch(0.13 0.015 260);
+    --foreground: oklch(0.93 0.005 260);
+    --card: oklch(0.17 0.015 260);
+    --card-foreground: oklch(0.93 0.005 260);
+    --popover: oklch(0.17 0.015 260);
+    --popover-foreground: oklch(0.93 0.005 260);
+    --primary: oklch(0.78 0.16 70);
+    --primary-foreground: oklch(0.15 0.02 70);
+    --secondary: oklch(0.22 0.01 260);
+    --secondary-foreground: oklch(0.93 0.005 260);
+    --muted: oklch(0.22 0.01 260);
+    --muted-foreground: oklch(0.65 0.015 260);
+    --accent: oklch(0.78 0.16 70);
+    --accent-foreground: oklch(0.15 0.02 70);
+    --destructive: oklch(0.65 0.2 25);
+    --border: oklch(1 0 0 / 8%);
+    --input: oklch(1 0 0 / 12%);
+    --ring: oklch(0.78 0.16 70 / 40%);
+    --sidebar: oklch(0.11 0.015 260);
+    --sidebar-foreground: oklch(0.93 0.005 260);
+    --sidebar-primary: oklch(0.78 0.16 70);
+    --sidebar-primary-foreground: oklch(0.15 0.02 70);
+    --sidebar-accent: oklch(0.78 0.16 70);
+    --sidebar-accent-foreground: oklch(0.15 0.02 70);
+    --sidebar-border: oklch(1 0 0 / 8%);
+    --sidebar-ring: oklch(0.78 0.16 70 / 40%);
 }
 
 @theme inline {
-    --font-sans: 'Noto Sans Variable', sans-serif;
+    --font-sans: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', sans-serif;
+    --font-heading: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -119,13 +153,13 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
+  }
   body {
     @apply font-sans bg-background text-foreground;
-    }
+  }
   html {
     @apply font-sans;
-    }
+  }
 }
 
 /* Hide main body/html scrollbar */
@@ -139,10 +173,10 @@ body::-webkit-scrollbar {
   display: none;
 }
 
-/* Custom scrollbar styles - iPhone-like thin and dark for scrollable containers */
+/* Custom scrollbar styles */
 *:not(html):not(body) {
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
+  scrollbar-color: oklch(1 0 0 / 12%) transparent;
 }
 
 *:not(html):not(body)::-webkit-scrollbar {
@@ -155,24 +189,75 @@ body::-webkit-scrollbar {
 }
 
 *:not(html):not(body)::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.3);
+  background-color: oklch(1 0 0 / 12%);
   border-radius: 3px;
   transition: background-color 0.2s ease;
 }
 
 *:not(html):not(body)::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: oklch(1 0 0 / 20%);
 }
 
-/* Dark mode scrollbar for containers */
-.dark *:not(html):not(body) {
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+/* Light mode scrollbar */
+.light *:not(html):not(body) {
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
 }
 
-.dark *:not(html):not(body)::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.2);
+.light *:not(html):not(body)::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
 }
 
-.dark *:not(html):not(body)::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.3);
+.light *:not(html):not(body)::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.35);
+}
+
+/* === Glass Morphism Utilities === */
+.glass {
+  background: oklch(1 0 0 / 4%);
+  backdrop-filter: blur(12px);
+  border: 1px solid oklch(1 0 0 / 6%);
+}
+
+.glass-strong {
+  background: oklch(1 0 0 / 8%);
+  backdrop-filter: blur(20px);
+  border: 1px solid oklch(1 0 0 / 10%);
+}
+
+.surface-elevated {
+  background: oklch(0.17 0.015 260);
+  border: 1px solid oklch(1 0 0 / 6%);
+  box-shadow: 0 2px 8px oklch(0 0 0 / 20%), 0 1px 2px oklch(0 0 0 / 15%);
+}
+
+.glow-primary {
+  box-shadow: 0 0 12px oklch(0.78 0.16 70 / 25%), 0 0 4px oklch(0.78 0.16 70 / 15%);
+}
+
+/* Light mode glass */
+.light .glass {
+  background: oklch(1 0 0 / 60%);
+  backdrop-filter: blur(12px);
+  border: 1px solid oklch(0 0 0 / 6%);
+}
+
+.light .glass-strong {
+  background: oklch(1 0 0 / 75%);
+  backdrop-filter: blur(20px);
+  border: 1px solid oklch(0 0 0 / 8%);
+}
+
+.light .surface-elevated {
+  background: oklch(1 0 0);
+  border: 1px solid oklch(0 0 0 / 6%);
+  box-shadow: 0 2px 8px oklch(0 0 0 / 8%), 0 1px 2px oklch(0 0 0 / 5%);
+}
+
+.light .glow-primary {
+  box-shadow: 0 0 12px oklch(0.646 0.222 41.116 / 20%), 0 0 4px oklch(0.646 0.222 41.116 / 10%);
+}
+
+/* Heading font utility */
+.font-heading {
+  font-family: var(--font-heading);
 }

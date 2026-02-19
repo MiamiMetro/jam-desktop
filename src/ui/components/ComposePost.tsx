@@ -39,7 +39,7 @@ export function ComposePost({
   textareaRows = 4,
   textareaMinHeight = "100px",
   maxLength = MAX_POST_LENGTH,
-  wrapperClassName = "border-b border-border p-4 bg-background",
+  wrapperClassName = "border-b border-border p-5 bg-background",
   inputId = "audio-upload",
   isSubmitting = false,
 }: ComposePostProps) {

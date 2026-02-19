@@ -100,6 +100,12 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
 
   return (
     <>
+      {/* Feed Header */}
+      <div className="px-5 pt-5 pb-3 border-b border-border">
+        <h2 className="text-2xl font-heading font-bold mb-1">Feed</h2>
+        <p className="text-sm text-muted-foreground">See what your friends are sharing</p>
+      </div>
+
       {/* Compose Post Area */}
       <ComposePost
         placeholder="What's on your mind? Share a message or upload audio..."

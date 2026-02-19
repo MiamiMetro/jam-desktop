@@ -153,27 +153,28 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
       {/* Main Room Content */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {/* Room Header */}
-        <div className="bg-gradient-to-r from-primary/20 to-primary/10 border-b border-border p-4 flex-shrink-0">
-          <div className="flex items-center gap-4">
+        <div className="bg-gradient-to-br from-primary/20 via-primary/8 to-background border-b border-border p-4 flex-shrink-0 relative overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,oklch(0.78_0.16_70/12%)_0%,transparent_60%)]" />
+          <div className="flex items-center gap-4 relative z-10">
             <Button
               variant="ghost"
               size="icon"
-              className="flex-shrink-0"
+              className="flex-shrink-0 glass hover:glass-strong"
               onClick={() => navigate(-1)}
               title="Go back"
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            
+
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <Hash className="h-4 w-4 text-muted-foreground" />
-                <h1 className="text-xl font-bold truncate">{room.name}</h1>
+                <Hash className="h-4 w-4 text-primary/60" />
+                <h1 className="text-xl font-heading font-bold truncate">{room.name}</h1>
                 {room.isPrivate && (
-                  <span className="text-xs text-muted-foreground">🔒</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full glass text-muted-foreground">Private</span>
                 )}
                 {isHost && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-medium">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-medium shadow-[0_0_8px_oklch(0.78_0.16_70/20%)]">
                     Your Room
                   </span>
                 )}
@@ -184,7 +185,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
               <div className="flex items-center gap-4 text-xs text-muted-foreground">
                 {room.genre && (
                   <div className="flex items-center gap-1">
-                    <Music className="h-3 w-3" />
+                    <Music className="h-3 w-3 text-primary/60" />
                     <span>{room.genre}</span>
                   </div>
                 )}
@@ -193,7 +194,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                   <span>{room.participants}/{room.maxParticipants} participants</span>
                 </div>
                 <div>
-                  Host: {room.hostName}
+                  Host: <span className="text-foreground/80">{room.hostName}</span>
                 </div>
               </div>
             </div>
@@ -203,7 +204,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                   variant={clientError ? "destructive" : "default"}
                   size="sm"
                   onClick={handleJoinClient}
-                  className="flex items-center gap-2"
+                  className={`flex items-center gap-2 ${!clientError ? "glow-primary" : ""}`}
                   title={clientError ? "Client not available" : "Join with client"}
                 >
                   Jam
@@ -242,8 +243,8 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
           {/* Audio Track Section */}
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <div className="mb-4 flex-shrink-0">
-              <h3 className="text-sm font-semibold mb-3">Live Audio Stream</h3>
-              <div className="p-4 bg-muted rounded-lg">
+              <h3 className="text-sm font-heading font-semibold mb-3">Live Audio Stream</h3>
+              <div className="p-4 glass-strong rounded-lg">
                 {room.streamUrl ? (
                   <div className="flex items-center gap-3">
                     <Button
@@ -316,7 +317,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
             
             {/* Participants Section */}
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <h3 className="text-sm font-semibold mb-3 flex-shrink-0">Participants</h3>
+              <h3 className="text-sm font-heading font-semibold mb-3 flex-shrink-0">Participants</h3>
               <div className="space-y-2 overflow-y-auto flex-1">
                 {participants.map((participant: User) => (
                   <div
@@ -340,9 +341,9 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
           </div>
 
           {/* Chat Sidebar */}
-          <div className="w-80 border-l border-border flex flex-col bg-background min-h-0 overflow-hidden">
+          <div className="w-80 border-l border-border flex flex-col glass min-h-0 overflow-hidden">
             <div className="p-3 border-b border-border flex-shrink-0">
-              <h3 className="text-sm font-semibold">Chat</h3>
+              <h3 className="text-sm font-heading font-semibold">Chat</h3>
               {isGuest && (
                 <p className="text-xs text-muted-foreground mt-1">Listening mode - chat disabled</p>
               )}

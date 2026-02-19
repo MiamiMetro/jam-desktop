@@ -40,14 +40,14 @@ export function PostCard({
   formatDuration: _formatDuration,
 }: PostCardProps) {
   return (
-    <div className="p-4 hover:bg-muted/30 transition-colors">
+    <div className="p-5 hover:bg-muted/20 transition-all duration-200">
       <div className="flex gap-3">
         <button
           onClick={() => onAuthorClick?.(post.author.username)}
           className="flex-shrink-0 cursor-pointer p-0 m-0 border-0 bg-transparent hover:opacity-80 transition-opacity self-start"
           aria-label={`Go to ${post.author.username}'s profile`}
         >
-          <Avatar size="default" className="pointer-events-none">
+          <Avatar size="default" className="pointer-events-none ring-1 ring-border">
             <AvatarImage src={post.author.avatar || ""} alt={post.author.username} />
             <AvatarFallback className="bg-muted text-muted-foreground">
               {post.author.username.substring(0, 2).toUpperCase()}
@@ -58,7 +58,7 @@ export function PostCard({
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <button
               onClick={() => onAuthorClick?.(post.author.username)}
-              className="font-semibold text-sm hover:underline cursor-pointer"
+              className="font-heading font-semibold text-sm hover:underline cursor-pointer"
             >
               {post.author.username}
             </button>

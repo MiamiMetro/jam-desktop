@@ -95,12 +95,15 @@ function Profile() {
   return (
     <>
       {/* Profile Header Banner */}
-      <div className="relative h-40 bg-gradient-to-r from-primary/20 to-primary/10 border-b border-border">
+      <div className="relative h-48 bg-gradient-to-br from-primary/25 via-primary/10 to-background border-b border-border overflow-hidden">
+        {/* Atmospheric glow */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,oklch(0.78_0.16_70/15%)_0%,transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,oklch(0.78_0.16_70/8%)_0%,transparent_50%)]" />
         {/* Back Button - positioned absolutely */}
         <Button
           variant="ghost"
           size="icon"
-          className="absolute top-4 left-4 z-10 bg-background/80 backdrop-blur-sm hover:bg-background"
+          className="absolute top-4 left-4 z-10 glass hover:glass-strong"
           onClick={() => navigate(-1)}
           title="Go back"
         >
@@ -109,10 +112,10 @@ function Profile() {
       </div>
 
       {/* Profile Content */}
-      <div className="relative px-4 pb-4 border-b border-border">
+      <div className="relative px-5 pb-5 border-b border-border">
         {/* Profile Avatar */}
         <div className="relative -mt-16 mb-4">
-          <div className="h-24 w-24 rounded-full border-4 border-background overflow-hidden">
+          <div className="h-28 w-28 rounded-full border-4 border-background overflow-hidden ring-2 ring-primary/30 shadow-[0_0_20px_oklch(0.78_0.16_70/20%)]">
             <Avatar className="h-full w-full">
               <AvatarImage src={profileUser.avatar_url || ""} alt={profileUser.username} />
               <AvatarFallback className="bg-primary text-primary-foreground text-3xl font-bold h-full w-full">
@@ -125,19 +128,18 @@ function Profile() {
         {/* Profile Info */}
         <div className="mb-4">
           <div className="flex items-center gap-2 mb-2">
-            <h1 className="text-2xl font-bold">{profileUser.username}</h1>
+            <h1 className="text-2xl font-heading font-bold">{profileUser.username}</h1>
           </div>
-          {/* Status message not available in Convex User type */}
-          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
-            <div className="flex items-center gap-1">
-              <span className="font-semibold">{userPosts.length}</span>
+          <div className="flex items-center gap-6 text-sm text-muted-foreground mb-4">
+            <div className="flex items-center gap-1.5">
+              <span className="font-semibold text-foreground">{userPosts.length}</span>
               <span>Posts</span>
             </div>
             <button
               onClick={() => setShowFriends(!showFriends)}
-              className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer"
             >
-              <span className="font-semibold">{profileUserFriends.length}</span>
+              <span className="font-semibold text-foreground">{profileUserFriends.length}</span>
               <span>Friends</span>
             </button>
           </div>
@@ -165,7 +167,7 @@ function Profile() {
                 <Button
                   onClick={handleAddFriend}
                   size="sm"
-                  variant="outline"
+                  className="glow-primary"
                 >
                   <UserPlus className="h-4 w-4 mr-2" />
                   Add Friend
@@ -179,7 +181,7 @@ function Profile() {
       {/* Friends List or Recent Activities */}
       {showFriends ? (
         <div>
-          <div className="px-4 py-3 flex items-center gap-3 border-b border-border bg-muted/30">
+          <div className="px-5 py-3 flex items-center gap-3 border-b border-border glass">
             <Button
               variant="ghost"
               size="sm"
@@ -190,7 +192,7 @@ function Profile() {
             </Button>
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-muted-foreground" />
-              <h3 className="font-semibold text-sm">Friends</h3>
+              <h3 className="font-heading font-semibold text-sm">Friends</h3>
             </div>
           </div>
           {profileUserFriends.length === 0 ? (
@@ -233,8 +235,8 @@ function Profile() {
           )}
         </div>
       ) : (
-        <div className="p-4">
-          <h3 className="text-lg font-semibold mb-4">Recent Activities</h3>
+        <div className="p-5">
+          <h3 className="text-lg font-heading font-semibold mb-4">Recent Activities</h3>
           {userPosts.length === 0 ? (
             <EmptyState icon={Music} title="No recent activities" />
           ) : (
