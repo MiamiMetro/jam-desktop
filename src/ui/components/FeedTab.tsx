@@ -101,9 +101,11 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
   return (
     <>
       {/* Feed Header */}
-      <div className="px-5 pt-5 pb-3 border-b border-border">
-        <h2 className="text-2xl font-heading font-bold mb-1">Feed</h2>
-        <p className="text-sm text-muted-foreground">See what your friends are sharing</p>
+      <div className="px-5 pt-6 pb-4 glass-strong border-b border-border sticky top-0 z-10 bg-gradient-to-br from-primary/8 via-primary/3 to-transparent">
+        <div className="animate-page-in">
+          <h2 className="text-2xl font-heading font-bold mb-1">Feed</h2>
+          <p className="text-sm text-muted-foreground">See what your friends are sharing</p>
+        </div>
       </div>
 
       {/* Compose Post Area */}
@@ -147,7 +149,7 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
                     width: '100%',
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
-                  className="border-b border-border"
+                  className="border-b border-border hover:bg-foreground/[0.03] transition-colors"
                 >
                   <PostCard
                     post={post}

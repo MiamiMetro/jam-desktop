@@ -1,22 +1,10 @@
-import { useState } from "react";
+// JamsTab.tsx — Hero landing page for live jam rooms
+import { useState, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { SearchInput } from "@/components/SearchInput";
+import { RoomFormDialog, type RoomFormData } from "@/components/RoomFormDialog";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { 
   Music,
   Users,
   Hash,
@@ -25,7 +13,6 @@ import {
   Power,
   PowerOff,
   Lock,
-  Unlock,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useJams, useMyRoom, useCreateRoom, useUpdateRoom, useActivateRoom, useDeactivateRoom } from "@/hooks/useJams";
@@ -47,63 +34,54 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
   const updateRoomMutation = useUpdateRoom();
   const activateRoomMutation = useActivateRoom();
   const deactivateRoomMutation = useDeactivateRoom();
-  
+
   const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
   const [isEditRoomOpen, setIsEditRoomOpen] = useState(false);
-  const [jamSearchInput, setJamSearchInput] = useState(searchQuery);
-  const [roomForm, setRoomForm] = useState({
-    name: "",
-    description: "",
-    genre: "",
-    maxParticipants: 8,
-    isPrivate: false,
-  });
 
-  const handleCreateRoom = () => {
+  const handleSearchChange = useCallback((query: string) => {
+    const params: Record<string, string> = {};
+    if (query) params.search = query;
+    setSearchParams(params, { replace: true });
+  }, [setSearchParams]);
+
+  const handleCreateRoom = (data: RoomFormData) => {
     if (isGuest || !user) {
       onGuestAction?.();
       return;
     }
-    if (!roomForm.name.trim()) return;
-    
+    if (!data.name.trim()) return;
+
     createRoomMutation.mutate({
       userId: user.id,
       hostName: user.username,
       hostAvatar: user.avatar_url,
       roomData: {
-        name: roomForm.name.trim(),
-        description: roomForm.description.trim() || undefined,
-        genre: roomForm.genre.trim() || undefined,
-        maxParticipants: roomForm.maxParticipants,
-        isPrivate: roomForm.isPrivate,
+        name: data.name.trim(),
+        description: data.description.trim() || undefined,
+        genre: data.genre.trim() || undefined,
+        maxParticipants: data.maxParticipants,
+        isPrivate: data.isPrivate,
       },
     }, {
       onSuccess: () => {
         setIsCreateRoomOpen(false);
-        setRoomForm({
-          name: "",
-          description: "",
-          genre: "",
-          maxParticipants: 8,
-          isPrivate: false,
-        });
       },
     });
   };
 
-  const handleUpdateRoom = () => {
+  const handleUpdateRoom = (data: RoomFormData) => {
     if (isGuest || !user || !myRoom) return;
-    if (!roomForm.name.trim()) return;
-    
+    if (!data.name.trim()) return;
+
     updateRoomMutation.mutate({
       roomId: myRoom.id,
       userId: user.id,
       updates: {
-        name: roomForm.name.trim(),
-        description: roomForm.description.trim() || undefined,
-        genre: roomForm.genre.trim() || undefined,
-        maxParticipants: roomForm.maxParticipants,
-        isPrivate: roomForm.isPrivate,
+        name: data.name.trim(),
+        description: data.description.trim() || undefined,
+        genre: data.genre.trim() || undefined,
+        maxParticipants: data.maxParticipants,
+        isPrivate: data.isPrivate,
       },
     }, {
       onSuccess: () => {
@@ -114,7 +92,7 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
 
   const handleToggleRoomStatus = () => {
     if (isGuest || !user || !myRoom) return;
-    
+
     if (myRoom.isEnabled) {
       deactivateRoomMutation.mutate({
         roomId: myRoom.id,
@@ -128,24 +106,15 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
     }
   };
 
-  const openEditDialog = () => {
-    if (!myRoom) return;
-    setRoomForm({
-      name: myRoom.name,
-      description: myRoom.description || "",
-      genre: myRoom.genre || "",
-      maxParticipants: myRoom.maxParticipants,
-      isPrivate: myRoom.isPrivate,
-    });
-    setIsEditRoomOpen(true);
-  };
-
-  const handleJamSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const params: Record<string, string> = {};
-    if (jamSearchInput) params.search = jamSearchInput;
-    setSearchParams(params);
-  };
+  const editInitialData: RoomFormData | undefined = myRoom
+    ? {
+        name: myRoom.name,
+        description: myRoom.description || "",
+        genre: myRoom.genre || "",
+        maxParticipants: myRoom.maxParticipants,
+        isPrivate: myRoom.isPrivate,
+      }
+    : undefined;
 
   // Filter rooms based on search query
   const filteredRooms = rooms.filter((room) => {
@@ -160,50 +129,51 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
   });
 
   const handleRoomClick = (roomId: string) => {
-    // Guests can enter rooms too (listening mode)
     navigate(`/jam/${roomId}`);
   };
 
   return (
     <div className="p-6">
-      {/* Jams Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-2xl font-heading font-bold">Jams</h2>
+      {/* Hero Header */}
+      <div className="mb-6 -mx-6 -mt-6 px-6 pt-6 pb-5 bg-gradient-to-br from-primary/12 via-primary/5 to-transparent relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_80%_at_80%_-20%,oklch(0.78_0.16_70/8%),transparent)] pointer-events-none" />
+        <div className="relative animate-page-in">
+          <h2 className="text-2xl font-heading font-bold mb-1">Jams</h2>
+          <p className="text-sm text-muted-foreground">Live rooms where the music happens</p>
         </div>
-        <p className="text-sm text-muted-foreground">Live rooms where the music happens</p>
       </div>
 
       {/* My Room Section */}
       {!isGuest && user && (
         <div className="mb-6">
           {myRoomLoading ? (
-            <div className="p-4 rounded-lg border border-border bg-muted/30">
+            <div className="p-4 rounded-lg glass">
               <p className="text-sm text-muted-foreground">Loading your room...</p>
             </div>
           ) : myRoom ? (
-            <div className={`p-5 rounded-xl glass-strong ${
+            <div className={`p-5 rounded-xl glass-strong relative overflow-hidden ${
               myRoom.isEnabled
-                ? "ring-1 ring-primary/30 glow-primary"
+                ? "ring-1 ring-primary/30"
                 : "ring-1 ring-border"
             }`}>
-              <div className="flex items-start justify-between gap-4">
+              {/* Active room radial glow */}
+              {myRoom.isEnabled && (
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,oklch(0.78_0.16_70/8%),transparent_60%)] pointer-events-none" />
+              )}
+              <div className="flex items-start justify-between gap-4 relative">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
                     <Hash className="h-4 w-4 text-muted-foreground" />
-                    <h3 className="text-base font-semibold">My Room</h3>
+                    <h3 className="text-base font-heading font-semibold">My Room</h3>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${
                       myRoom.isEnabled
-                        ? "bg-green-500/20 text-green-600 dark:text-green-400"
+                        ? "bg-green-500/20 text-green-400"
                         : "bg-muted-foreground/20 text-muted-foreground"
                     }`}>
                       {myRoom.isEnabled ? "Active" : "Disabled"}
                     </span>
                     {myRoom.isPrivate && (
                       <Lock className="h-3 w-3 text-muted-foreground" />
-                    )}
-                    {!myRoom.isPrivate && (
-                      <Unlock className="h-3 w-3 text-muted-foreground" />
                     )}
                   </div>
                   <div className="mb-3">
@@ -214,12 +184,11 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
                       </p>
                     )}
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3">
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3">
                     {myRoom.genre && (
-                      <div className="flex items-center gap-1">
-                        <Music className="h-3 w-3" />
-                        <span>{myRoom.genre}</span>
-                      </div>
+                      <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium">
+                        {myRoom.genre}
+                      </span>
                     )}
                     <div className="flex items-center gap-1">
                       <Users className="h-3 w-3" />
@@ -239,13 +208,14 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
                       size="sm"
                       onClick={() => myRoom.isEnabled && navigate(`/jam/${myRoom.id}`)}
                       disabled={!myRoom.isEnabled}
+                      className={myRoom.isEnabled ? "glow-primary" : ""}
                     >
                       {myRoom.isEnabled ? "Enter Room" : "Room Disabled"}
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={openEditDialog}
+                      onClick={() => setIsEditRoomOpen(true)}
                     >
                       <Settings className="h-3 w-3 mr-1" />
                       Settings
@@ -275,177 +245,43 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
           ) : (
             <div className="p-6 rounded-xl glass border border-dashed border-border/50">
               <div className="text-center">
-                <Music className="h-10 w-10 mx-auto mb-3 text-muted-foreground opacity-50" />
+                <Music className="h-10 w-10 mx-auto mb-3 text-primary/40 animate-float" />
                 <p className="text-sm font-medium mb-1">You don't have a room yet</p>
                 <p className="text-xs text-muted-foreground mb-3">
                   Create your room to start jamming with others
                 </p>
-                <AlertDialog open={isCreateRoomOpen} onOpenChange={setIsCreateRoomOpen}>
-                  <AlertDialogTrigger render={
-                    <Button variant="default" size="sm">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create My Room
-                    </Button>
-                  } />
-                  <AlertDialogContent className="max-w-md">
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Create Your Room</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Create your personal jam room. You can only have one room, but you can manage its settings anytime.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="room-name">Room Name</Label>
-                        <Input
-                          id="room-name"
-                          placeholder="e.g., Chill Vibes"
-                          value={roomForm.name}
-                          onChange={(e) => setRoomForm({ ...roomForm, name: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="room-description">Description (Optional)</Label>
-                        <Textarea
-                          id="room-description"
-                          placeholder="What's this room about?"
-                          value={roomForm.description}
-                          onChange={(e) => setRoomForm({ ...roomForm, description: e.target.value })}
-                          rows={3}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="room-genre">Genre (Optional)</Label>
-                        <Input
-                          id="room-genre"
-                          placeholder="e.g., Lo-Fi, Rock, Electronic"
-                          value={roomForm.genre}
-                          onChange={(e) => setRoomForm({ ...roomForm, genre: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="room-max">Max Participants</Label>
-                        <Input
-                          id="room-max"
-                          type="number"
-                          min="2"
-                          max="20"
-                          value={roomForm.maxParticipants}
-                          onChange={(e) => setRoomForm({ ...roomForm, maxParticipants: parseInt(e.target.value) || 8 })}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id="room-private"
-                          checked={roomForm.isPrivate}
-                          onChange={(e) => setRoomForm({ ...roomForm, isPrivate: e.target.checked })}
-                          className="rounded border-input"
-                        />
-                        <Label htmlFor="room-private" className="cursor-pointer">
-                          Private Room (only people you invite can join)
-                        </Label>
-                      </div>
-                    </div>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction 
-                        onClick={handleCreateRoom} 
-                        disabled={!roomForm.name.trim() || createRoomMutation.isPending}
-                      >
-                        {createRoomMutation.isPending ? "Creating..." : "Create Room"}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <Button variant="default" size="sm" onClick={() => setIsCreateRoomOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create My Room
+                </Button>
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Edit Room Dialog */}
-      {myRoom && (
-        <AlertDialog open={isEditRoomOpen} onOpenChange={setIsEditRoomOpen}>
-          <AlertDialogContent className="max-w-md">
-            <AlertDialogHeader>
-              <AlertDialogTitle>Edit Room Settings</AlertDialogTitle>
-              <AlertDialogDescription>
-                Update your room settings. Changes will apply immediately.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-room-name">Room Name</Label>
-                <Input
-                  id="edit-room-name"
-                  placeholder="e.g., Chill Vibes"
-                  value={roomForm.name}
-                  onChange={(e) => setRoomForm({ ...roomForm, name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-room-description">Description (Optional)</Label>
-                <Textarea
-                  id="edit-room-description"
-                  placeholder="What's this room about?"
-                  value={roomForm.description}
-                  onChange={(e) => setRoomForm({ ...roomForm, description: e.target.value })}
-                  rows={3}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-room-genre">Genre (Optional)</Label>
-                <Input
-                  id="edit-room-genre"
-                  placeholder="e.g., Lo-Fi, Rock, Electronic"
-                  value={roomForm.genre}
-                  onChange={(e) => setRoomForm({ ...roomForm, genre: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-room-max">Max Participants</Label>
-                <Input
-                  id="edit-room-max"
-                  type="number"
-                  min="2"
-                  max="20"
-                  value={roomForm.maxParticipants}
-                  onChange={(e) => setRoomForm({ ...roomForm, maxParticipants: parseInt(e.target.value) || 8 })}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="edit-room-private"
-                  checked={roomForm.isPrivate}
-                  onChange={(e) => setRoomForm({ ...roomForm, isPrivate: e.target.checked })}
-                  className="rounded border-input"
-                />
-                <Label htmlFor="edit-room-private" className="cursor-pointer">
-                  Private Room (only people you invite can join)
-                </Label>
-              </div>
-            </div>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction 
-                onClick={handleUpdateRoom} 
-                disabled={!roomForm.name.trim() || updateRoomMutation.isPending}
-              >
-                {updateRoomMutation.isPending ? "Saving..." : "Save Changes"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
+      {/* Room Form Dialogs */}
+      <RoomFormDialog
+        open={isCreateRoomOpen}
+        onOpenChange={setIsCreateRoomOpen}
+        onSubmit={handleCreateRoom}
+        isPending={createRoomMutation.isPending}
+        mode="create"
+      />
+      <RoomFormDialog
+        open={isEditRoomOpen}
+        onOpenChange={setIsEditRoomOpen}
+        onSubmit={handleUpdateRoom}
+        isPending={updateRoomMutation.isPending}
+        mode="edit"
+        initialData={editInitialData}
+      />
 
       {/* Search */}
       <SearchInput
         placeholder="Search jams..."
-        value={jamSearchInput}
-        onChange={setJamSearchInput}
-        onSubmit={handleJamSearch}
+        value={searchQuery}
+        onSearch={handleSearchChange}
       />
 
       {/* Other Jams Grid */}
@@ -454,7 +290,7 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
           Live Rooms
         </h3>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-stagger">
         {roomsLoading ? (
           <div className="col-span-full">
             <LoadingState message="Loading jams..." />
@@ -464,7 +300,7 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
             <EmptyState
               icon={Music}
               title={searchQuery ? "No jams found" : "No active jams"}
-              description={searchQuery 
+              description={searchQuery
                 ? "Try adjusting your search"
                 : "Create your room to start jamming!"}
             />
@@ -474,8 +310,12 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
             <div
               key={room.id}
               onClick={() => handleRoomClick(room.id)}
-              className="p-4 rounded-xl glass hover:glass-strong cursor-pointer transition-all duration-200 group hover:ring-1 hover:ring-primary/20"
+              className="p-4 rounded-xl glass hover:glass-strong cursor-pointer transition-all duration-200 group hover:ring-1 hover:ring-primary/20 hover:-translate-y-0.5 relative overflow-hidden"
             >
+              {/* Active pulse indicator */}
+              {room.isEnabled && (
+                <div className="absolute top-3 right-3 h-2 w-2 rounded-full bg-green-400 animate-pulse" />
+              )}
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
@@ -486,9 +326,6 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
                     {room.isPrivate && (
                       <Lock className="h-3 w-3 text-muted-foreground" />
                     )}
-                    {!room.isPrivate && (
-                      <Unlock className="h-3 w-3 text-muted-foreground" />
-                    )}
                   </div>
                   {room.description && (
                     <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
@@ -497,10 +334,9 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
                   )}
                   <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
                     {room.genre && (
-                      <div className="flex items-center gap-1">
-                        <Music className="h-3 w-3" />
-                        <span>{room.genre}</span>
-                      </div>
+                      <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium">
+                        {room.genre}
+                      </span>
                     )}
                     <div className="flex items-center gap-1">
                       <Users className="h-3 w-3" />

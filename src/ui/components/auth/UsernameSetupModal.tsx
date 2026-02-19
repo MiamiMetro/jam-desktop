@@ -1,4 +1,4 @@
-// UsernameSetupModal.tsx — Non-dismissible username setup after signup
+// UsernameSetupModal.tsx — Branded username setup after signup
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -9,12 +9,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogAction,
-  AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Music } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useAuthModalStore } from "@/stores/authModalStore";
 import { useProfileStore } from "@/hooks/useEnsureProfile";
@@ -86,16 +85,27 @@ export default function UsernameSetupModal() {
 
   return (
     <AlertDialog open={open}>
-      <AlertDialogContent className="max-w-md">
-        <AlertDialogHeader>
-          <AlertDialogTitle>Complete Your Profile</AlertDialogTitle>
-          <AlertDialogDescription>
-            Choose a unique username to complete your profile setup.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <div className="space-y-4 py-4">
+      <AlertDialogContent className="max-w-md p-0 overflow-hidden">
+        {/* Branded header */}
+        <div className="bg-gradient-to-br from-primary/15 via-primary/8 to-transparent px-6 pt-6 pb-4 animate-page-in">
+          <div className="flex items-center gap-2.5 mb-3">
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/15">
+              <Music className="h-4.5 w-4.5 text-primary" />
+            </div>
+            <span className="font-heading font-bold text-lg tracking-tight">Jam</span>
+          </div>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-base font-heading font-semibold">Almost there!</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs">
+              Pick a name for the stage
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+        </div>
+
+        {/* Form */}
+        <div className="space-y-4 px-6 pb-2">
           <div className="space-y-2">
-            <Label htmlFor="setup-username">Username</Label>
+            <Label htmlFor="setup-username" className="text-xs">Username</Label>
             <Input
               id="setup-username"
               type="text"
@@ -106,13 +116,14 @@ export default function UsernameSetupModal() {
               disabled={isSubmitting}
               minLength={3}
               maxLength={15}
+              className="h-10 glass border-border/50 focus:ring-primary/30"
             />
             <p className="text-xs text-muted-foreground">
               3-15 characters · Letters, numbers, underscores · Must start with letter or number
             </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="setup-display-name">Display Name (Optional)</Label>
+            <Label htmlFor="setup-display-name" className="text-xs">Display Name (Optional)</Label>
             <Input
               id="setup-display-name"
               type="text"
@@ -121,6 +132,7 @@ export default function UsernameSetupModal() {
               onChange={(e) => { setDisplayName(e.target.value); setError(null); }}
               disabled={isSubmitting}
               maxLength={50}
+              className="h-10 glass border-border/50 focus:ring-primary/30"
             />
             <p className="text-xs text-muted-foreground">
               Your display name shown to others
@@ -131,22 +143,26 @@ export default function UsernameSetupModal() {
               {error}
             </div>
           )}
-        </div>
-        <AlertDialogFooter>
-          <AlertDialogCancel
-            onClick={handleCancel}
-            disabled={isSubmitting}
-            className="text-destructive hover:text-destructive"
-          >
-            Cancel & Delete Account
-          </AlertDialogCancel>
-          <AlertDialogAction
+          <Button
             onClick={handleSubmit}
             disabled={!username.trim() || isSubmitting}
+            className="w-full h-10 glow-primary font-heading font-semibold"
           >
             {isSubmitting ? "Creating..." : "Create Profile"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
+          </Button>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 pb-5 pt-2 border-t border-primary/10">
+          <button
+            type="button"
+            onClick={handleCancel}
+            disabled={isSubmitting}
+            className="text-xs text-muted-foreground hover:text-destructive transition-colors w-full text-center cursor-pointer disabled:opacity-50"
+          >
+            Cancel & Delete Account
+          </button>
+        </div>
       </AlertDialogContent>
     </AlertDialog>
   );

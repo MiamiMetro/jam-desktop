@@ -1,8 +1,9 @@
+// Post.tsx — Post detail page with glass surfaces and polished interactions
 import { useParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { 
+import {
   ArrowLeft,
   Music,
   Play,
@@ -36,14 +37,14 @@ function Post() {
   const toggleLikeMutation = useToggleLike();
   const toggleCommentLikeMutation = useToggleCommentLike();
   const { data: communities = [] } = useCommunities();
-  
+
   // Audio player for post audio
   const postAudioUrl = post?.audioFile?.url;
   const postAudioPlayer = useAudioPlayer(postAudioUrl);
-  
+
   // Track which comment audio is playing
   const [playingCommentId, setPlayingCommentId] = useState<string | null>(null);
-  
+
   const handleAuthorClick = (username: string) => {
       navigate(`/profile/${username}`);
   };
@@ -72,7 +73,7 @@ function Post() {
 
   const handleSubmitComment = (content: string, audioFile: File | null) => {
     if (!id || (!content.trim() && !audioFile) || isGuest) return;
-    
+
     createCommentMutation.mutate(
       { postId: id, content: content.trim() || "", audioFile: audioFile || undefined },
       {
@@ -109,14 +110,14 @@ function Post() {
   const communityName = getCommunityName(post.community);
 
   return (
-    <div className="p-4">
+    <div className="p-4 animate-page-in">
       {/* Back Button */}
       <div className="mb-4">
         <Button
           variant="ghost"
           size="sm"
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2"
+          className="glass rounded-lg flex items-center gap-2 hover:bg-foreground/[0.06]"
         >
           <ArrowLeft className="h-4 w-4" />
           Back
@@ -125,7 +126,7 @@ function Post() {
 
       {/* Post Content */}
       <div className="max-w-3xl mx-auto">
-        <div className="bg-background border border-border rounded-lg p-6">
+        <div className="glass-strong rounded-xl p-6">
           <div className="flex gap-3">
             <button
               onClick={() => handleAuthorClick(post.author.username)}
@@ -142,37 +143,37 @@ function Post() {
               <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <button
                   onClick={() => handleAuthorClick(post.author.username)}
-                  className="font-semibold text-base hover:underline cursor-pointer"
+                  className="font-heading font-semibold text-base hover:underline cursor-pointer"
                 >
                   {post.author.username}
                 </button>
                 {post.isGlobal ? (
-                  <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
                     Discover
                   </span>
                 ) : communityName ? (
                   <button
                     onClick={() => post.community && handleCommunityClick(post.community)}
-                    className="text-xs px-2 py-0.5 rounded bg-muted hover:bg-muted/80 transition-colors flex items-center gap-1"
+                    className="text-xs px-2 py-0.5 rounded-full glass hover:bg-foreground/[0.06] transition-colors flex items-center gap-1"
                   >
                     <HashIcon className="h-3 w-3" />
                     From {communityName}
                   </button>
                 ) : null}
                 <span className="text-sm text-muted-foreground">
-                  • {formatTimeAgo(post.timestamp)}
+                  {formatTimeAgo(post.timestamp)}
                 </span>
               </div>
               {post.content && (
                 <p className="text-base mb-4 whitespace-pre-wrap">{post.content}</p>
               )}
               {post.audioFile && (
-                <div className="mb-4 p-4 bg-muted rounded-lg">
+                <div className="mb-4 p-4 glass rounded-xl">
                   <div className="flex items-center gap-3">
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-12 w-12 rounded-full"
+                      className="h-12 w-12 rounded-full glass hover:bg-foreground/[0.06]"
                       onClick={() => {
                         if (isGuest) return;
                         postAudioPlayer.togglePlayPause();
@@ -191,8 +192,8 @@ function Post() {
                           {post.audioFile.title}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-2 bg-muted-foreground/20 rounded-full overflow-hidden cursor-pointer"
+                      <div className="flex items-center gap-2 group/progress">
+                        <div className="flex-1 h-1.5 group-hover/progress:h-2.5 bg-foreground/[0.08] rounded-full overflow-hidden cursor-pointer transition-all duration-200"
                           onClick={(e) => {
                             if (isGuest) return;
                             const rect = e.currentTarget.getBoundingClientRect();
@@ -201,12 +202,12 @@ function Post() {
                             postAudioPlayer.seek(percentage);
                           }}
                         >
-                          <div 
-                            className="h-full bg-primary transition-all"
+                          <div
+                            className="h-full bg-primary rounded-full transition-all"
                             style={{ width: `${postAudioPlayer.progress}%` }}
                           />
                         </div>
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-sm text-muted-foreground tabular-nums">
                           {formatDuration(post.audioFile.duration)}
                         </span>
                       </div>
@@ -214,19 +215,19 @@ function Post() {
                   </div>
                 </div>
               )}
-              <div className="flex items-center gap-6 pt-4 border-t border-border">
+              <div className="flex items-center gap-6 pt-4 border-t border-border/50">
                 <button
                   onClick={handleLikePost}
-                  className={`flex items-center gap-2 text-base transition-colors cursor-pointer ${
+                  className={`flex items-center gap-2 text-base transition-all cursor-pointer active:scale-90 ${
                     post.isLiked
                       ? "text-red-500 hover:text-red-600"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <Heart className={`h-5 w-5 ${post.isLiked ? "fill-current" : ""}`} />
+                  <Heart className={`h-5 w-5 transition-transform ${post.isLiked ? "fill-current" : ""}`} />
                   <span>{post.likes}</span>
                 </button>
-                <button 
+                <button
                   className="flex items-center gap-2 text-base text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                 >
                   <MessageCircle className="h-5 w-5" />
@@ -242,9 +243,12 @@ function Post() {
         </div>
 
         {/* Comments Section */}
-        <div className="mt-6 bg-background border border-border rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-4">Comments ({comments.length})</h3>
-          
+        <div className="mt-6 glass-strong rounded-xl p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="w-1 h-5 rounded-full bg-primary" />
+            <h3 className="text-lg font-heading font-semibold">Comments ({comments.length})</h3>
+          </div>
+
           {/* Comment Form */}
           {!isGuest && (
             <div className="mb-6 pb-6">
@@ -255,7 +259,7 @@ function Post() {
                 textareaRows={3}
                 textareaMinHeight="80px"
                 maxLength={1000}
-                wrapperClassName="border-b border-border pb-4"
+                wrapperClassName="glass rounded-xl p-4"
                 inputId="comment-audio-upload"
                 isSubmitting={createCommentMutation.isPending}
               />
@@ -276,7 +280,7 @@ function Post() {
               <div className="space-y-4">
                 {comments.map((comment) => {
                 return (
-                  <div key={comment.id} className="flex gap-3">
+                  <div key={comment.id} className="flex gap-3 p-3 rounded-lg hover:bg-foreground/[0.03] transition-colors">
                     <button
                       type="button"
                       onClick={() => navigate(`/profile/${comment.author.username}`)}
@@ -294,12 +298,12 @@ function Post() {
                       <div className="flex items-center gap-2 mb-1">
                         <button
                           onClick={() => navigate(`/profile/${comment.author.username}`)}
-                          className="font-semibold text-sm hover:underline cursor-pointer"
+                          className="font-heading font-semibold text-sm hover:underline cursor-pointer"
                         >
                           {comment.author.username}
                         </button>
                         <span className="text-xs text-muted-foreground">
-                          • {formatTimeAgo(comment.timestamp)}
+                          {formatTimeAgo(comment.timestamp)}
                         </span>
                       </div>
                       {comment.content && (
@@ -312,7 +316,6 @@ function Post() {
                           onActivate={() => setPlayingCommentId(comment.id)}
                         />
                       )}
-                      {/* Like button for comment - comments are now posts so they can be liked */}
                       <div className="flex items-center gap-4 mt-2">
                         <button
                           type="button"
@@ -320,7 +323,7 @@ function Post() {
                             e.stopPropagation();
                             handleLikeComment(comment.id);
                           }}
-                          className={`flex items-center gap-1 text-xs transition-colors cursor-pointer ${
+                          className={`flex items-center gap-1 text-xs transition-all cursor-pointer active:scale-90 ${
                             comment.isLiked
                               ? "text-red-500 hover:text-red-600"
                               : "text-muted-foreground hover:text-foreground"
@@ -349,4 +352,3 @@ function Post() {
 }
 
 export default Post;
-

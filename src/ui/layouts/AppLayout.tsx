@@ -33,9 +33,9 @@ export default function AppLayout() {
   }, [theme]);
 
   return (
-    <div className="flex h-screen bg-background text-foreground">
+    <div className="flex h-screen bg-background text-foreground app-bg">
       <NavSidebar />
-      <div className="flex-1 flex flex-col bg-background overflow-hidden">
+      <div className="flex-1 flex flex-col bg-background overflow-hidden relative z-10">
         <MainContent />
       </div>
       <AuthModalRoot />

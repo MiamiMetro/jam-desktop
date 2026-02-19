@@ -1,4 +1,4 @@
-// NavSidebar.tsx — Spotify-style left navigation sidebar with Dark Studio aesthetic
+// NavSidebar.tsx — Warm Studio left navigation sidebar
 import { useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -72,15 +72,20 @@ export default function NavSidebar() {
     (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   return (
-    <div className="w-[220px] min-w-[220px] bg-sidebar border-r border-sidebar-border flex flex-col h-full select-none">
+    <div className="w-[220px] min-w-[220px] surface-elevated flex flex-col h-full select-none relative z-10">
       {/* Brand */}
       <div className="px-5 pt-5 pb-4">
-        <h1
-          className="text-xl font-heading font-bold tracking-tight text-sidebar-foreground cursor-pointer hover:text-primary transition-colors"
+        <div
+          className="flex items-center gap-2.5 cursor-pointer group"
           onClick={() => navigate("/jams")}
         >
-          Jam
-        </h1>
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/15 group-hover:bg-primary/20 transition-colors">
+            <Music className="h-4 w-4 text-primary" />
+          </div>
+          <h1 className="text-xl font-heading font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+            Jam
+          </h1>
+        </div>
       </div>
 
       {/* Navigation */}
@@ -93,12 +98,12 @@ export default function NavSidebar() {
               onClick={() => navigate(item.path)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer relative ${
                 active
-                  ? "bg-primary/12 text-primary"
-                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  ? "bg-primary/12 text-primary shadow-[inset_0_0_12px_oklch(0.78_0.16_70/8%)]"
+                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground hover:translate-x-0.5"
               }`}
             >
               {active && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-primary shadow-[0_0_8px_oklch(0.78_0.16_70/40%)]" />
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-primary animate-glow-pulse" />
               )}
               <span className={`transition-colors duration-200 ${active ? "text-primary" : ""}`}>
                 {item.icon}
@@ -114,12 +119,12 @@ export default function NavSidebar() {
             onClick={() => navigate(`/jam/${persistedRoomId}`)}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer relative ${
               isRoomActive
-                ? "bg-primary/12 text-primary"
-                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                ? "bg-primary/12 text-primary shadow-[inset_0_0_12px_oklch(0.78_0.16_70/8%)]"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground hover:translate-x-0.5"
             }`}
           >
             {isRoomActive && (
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-primary shadow-[0_0_8px_oklch(0.78_0.16_70/40%)]" />
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-primary animate-glow-pulse" />
             )}
             <Music className="h-5 w-5" />
             <span className="truncate flex-1 text-left">{currentRoom.name}</span>
@@ -132,12 +137,12 @@ export default function NavSidebar() {
       </nav>
 
       {/* Bottom section */}
-      <div className="px-3 pb-3 flex-shrink-0">
-        {/* Theme toggle — always visible */}
-        <div className="flex justify-end px-1 pb-1">
+      <div className="px-3 pb-3 flex-shrink-0 space-y-2">
+        {/* Theme toggle */}
+        <div className="flex justify-end px-1">
           <button
             onClick={toggleTheme}
-            className="p-2 rounded-lg text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-all duration-200 cursor-pointer"
+            className="p-2 rounded-lg glass text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer"
           >
             {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
@@ -155,7 +160,7 @@ export default function NavSidebar() {
                       {user.username?.substring(0, 2).toUpperCase() || "U"}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="text-sm font-medium truncate text-sidebar-foreground">
+                  <span className="text-sm font-medium truncate text-foreground">
                     {user.username || "User"}
                   </span>
                 </button>
@@ -175,7 +180,7 @@ export default function NavSidebar() {
         ) : (
           <Button
             variant="default"
-            className="w-full glow-primary"
+            className="w-full animate-glow-pulse"
             onClick={openLogin}
           >
             <LogIn className="h-4 w-4 mr-2" />

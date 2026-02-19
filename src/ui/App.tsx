@@ -3,6 +3,12 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import AppLayout from "@/layouts/AppLayout";
 import { useDeepLink } from "@/hooks/useDeepLink";
 
+// Redirect from "/" — check if there's a saved return path from auth flow
+function RootRedirect() {
+  const returnPath = sessionStorage.getItem("auth_return_path");
+  return <Navigate to={returnPath || "/jams"} replace />;
+}
+
 function App() {
   useDeepLink();
 
@@ -13,7 +19,7 @@ function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/jams" replace />} />
+      <Route path="/" element={<RootRedirect />} />
       <Route path="/feed" element={<AppLayout />} />
       <Route path="/jams" element={<AppLayout />} />
       <Route path="/friends" element={<AppLayout />} />

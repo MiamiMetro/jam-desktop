@@ -1,4 +1,4 @@
-// DMConversation.tsx — Full DM conversation with messages, scroll logic, read receipts
+// DMConversation.tsx — Full DM conversation with fixed bottom input, proper scroll containment
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -255,40 +255,38 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
   };
 
   return (
-    <>
-      <div className="px-3 py-2 border-b border-sidebar-border">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon-xs" className="h-6 w-6" onClick={onBack}>
-            <ArrowLeft className="h-3 w-3" />
-          </Button>
-          {chatPartner && (
-            <>
-              <button
-                onClick={() => navigate(`/profile/${chatPartner.username}`)}
-                className="p-0 m-0 border-0 bg-transparent cursor-pointer hover:opacity-80 transition-opacity shrink-0"
-              >
-                <Avatar size="sm" className="relative pointer-events-none">
-                  <AvatarImage src={chatPartner.avatar_url || ""} alt={chatPartner.username} />
-                  <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-                    {chatPartner.username.substring(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-              </button>
-              <div className="flex-1 min-w-0">
-                <button
-                  onClick={() => navigate(`/profile/${chatPartner.username}`)}
-                  className="text-sm font-medium truncate hover:underline cursor-pointer block w-full text-left"
-                >
-                  {chatPartner.username}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+    <div className="flex flex-col h-full min-h-0">
+      {/* ─── Conversation Header ─── */}
+      <div className="px-4 py-3 border-b border-border flex items-center gap-3 flex-shrink-0 glass-strong">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 rounded-full flex-shrink-0"
+          onClick={onBack}
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        {chatPartner && (
+          <button
+            onClick={() => navigate(`/profile/${chatPartner.username}`)}
+            className="flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity cursor-pointer"
+          >
+            <Avatar size="default" className="h-9 w-9 flex-shrink-0">
+              <AvatarImage src={chatPartner.avatar_url || ""} alt={chatPartner.username} />
+              <AvatarFallback className="bg-muted text-muted-foreground text-sm">
+                {chatPartner.username.substring(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold truncate">{chatPartner.username}</div>
+            </div>
+          </button>
+        )}
       </div>
 
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto relative">
-        <div className="px-3 py-2 space-y-2">
+      {/* ─── Messages Area ─── */}
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto min-h-0 relative">
+        <div className="px-4 py-3 space-y-1">
           {hasOlderMessages && (
             <div className="py-2 text-center">
               <Button
@@ -310,31 +308,33 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
             return (
               <div key={message.id}>
                 {isFirstUnread && (
-                  <div className="flex items-center gap-2 py-2">
+                  <div className="flex items-center gap-2 py-3">
                     <div className="flex-1 h-px bg-primary/30" />
                     <span className="text-[10px] text-primary font-medium px-2">New Messages</span>
                     <div className="flex-1 h-px bg-primary/30" />
                   </div>
                 )}
-                <div className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-lg px-2 py-1 text-xs wrap-break-word ${
-                    isOwn ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+                <div className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-1`}>
+                  <div className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-sm ${
+                    isOwn
+                      ? "bg-primary text-primary-foreground rounded-br-md shadow-sm"
+                      : "bg-muted text-foreground rounded-bl-md"
                   }`}>
                     <AutoLinkedText
                       text={message.content || ''}
-                      className="wrap-break-word whitespace-pre-wrap"
-                      linkClassName={isOwn ? "underline text-primary-foreground hover:opacity-80" : "underline text-blue-500 hover:text-blue-600"}
+                      className="wrap-break-word whitespace-pre-wrap leading-relaxed"
+                      linkClassName={isOwn ? "underline text-primary-foreground hover:opacity-80" : "underline text-primary hover:opacity-80"}
                     />
                     <div className={`text-[10px] mt-1 flex items-center gap-1 ${
-                      isOwn ? "text-primary-foreground/70 justify-end" : "text-muted-foreground"
+                      isOwn ? "text-primary-foreground/60 justify-end" : "text-muted-foreground"
                     }`}>
                       <span>{message.timestamp ? formatTime(message.timestamp) : 'now'}</span>
                       {isOwn && (
                         <span
                           className={`inline-block w-1.5 h-1.5 rounded-full ${
                             message._creationTime && otherParticipantLastRead && message._creationTime <= otherParticipantLastRead
-                              ? "bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.6)]"
-                              : "bg-primary-foreground/40"
+                              ? "bg-emerald-400"
+                              : "bg-primary-foreground/30"
                           }`}
                           title={
                             message._creationTime && otherParticipantLastRead && message._creationTime <= otherParticipantLastRead
@@ -351,11 +351,12 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Scroll to bottom button */}
         {isScrolledUp && (
-          <div className="sticky bottom-2 flex justify-end pr-4 pointer-events-none">
+          <div className="sticky bottom-3 flex justify-end pr-4 pointer-events-none">
             <Button
               variant="secondary" size="icon"
-              className="h-8 w-8 rounded-full shadow-md relative pointer-events-auto"
+              className="h-9 w-9 rounded-full shadow-lg relative pointer-events-auto border border-border"
               onClick={() => {
                 messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
                 shouldAutoScrollRef.current = true;
@@ -365,7 +366,7 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
             >
               <ChevronDown className="h-4 w-4" />
               {newMessagesWhileScrolledUp > 0 && (
-                <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] rounded-full h-4 min-w-4 px-1 flex items-center justify-center">
+                <span className="absolute -top-1.5 -right-1.5 bg-primary text-primary-foreground text-[10px] rounded-full h-4 min-w-4 px-1 flex items-center justify-center">
                   {newMessagesWhileScrolledUp > 99 ? "99+" : newMessagesWhileScrolledUp}
                 </span>
               )}
@@ -374,34 +375,41 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
         )}
       </div>
 
+      {/* ─── Error Banner ─── */}
       {sendError && (
-        <div className="px-3 py-2 border-t border-orange-500/30 bg-orange-500/10">
-          <div className="flex items-center gap-2 text-xs text-orange-400">
-            <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+        <div className="px-4 py-2 bg-destructive/10 border-t border-destructive/20 flex-shrink-0">
+          <p className="text-xs text-destructive flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse flex-shrink-0" />
             {sendError}
-          </div>
+          </p>
         </div>
       )}
 
-      <div className="px-3 py-2 border-t border-sidebar-border">
-        <div className="flex gap-2">
+      {/* ─── Message Input — pinned to bottom ─── */}
+      <div className="px-4 py-3 border-t border-border flex-shrink-0 bg-background">
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}
+          className="flex items-center gap-2"
+        >
           <Input
-            type="text" placeholder="Type a message..."
+            type="text"
+            placeholder="Start a new message"
             value={messageInput}
             onChange={(e) => setMessageInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-            className="h-7 text-xs flex-1"
-            maxLength={MAX_MESSAGE_LENGTH} autoFocus
+            className="flex-1 h-10 text-sm bg-muted/50 border-transparent focus:bg-background focus:border-border rounded-full px-4"
+            maxLength={MAX_MESSAGE_LENGTH}
+            autoFocus
           />
           <Button
-            variant="default" size="icon-xs" className="h-7 w-7"
-            onClick={handleSendMessage}
+            type="submit"
+            size="icon"
+            className="h-9 w-9 rounded-full flex-shrink-0"
             disabled={!messageInput.trim() || sendMessageMutation.isPending}
           >
-            <Send className="h-3 w-3" />
+            <Send className="h-4 w-4" />
           </Button>
-        </div>
+        </form>
       </div>
-    </>
+    </div>
   );
 }

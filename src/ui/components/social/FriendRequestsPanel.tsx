@@ -37,12 +37,12 @@ export default function FriendRequestsPanel({ onBack }: FriendRequestsPanelProps
 
   return (
     <>
-      <div className="px-3 py-2 border-b border-sidebar-border">
+      <div className="px-3 py-2 border-b border-border">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon-xs" className="h-6 w-6" onClick={onBack} title="Back to friends">
             <ArrowLeft className="h-3 w-3" />
           </Button>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-sidebar-foreground">Friend Requests</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Friend Requests</h3>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto">
@@ -51,7 +51,7 @@ export default function FriendRequestsPanel({ onBack }: FriendRequestsPanelProps
           <div>
             <button
               onClick={() => setShowPending(!showPending)}
-              className="w-full flex items-center justify-between py-2 text-xs font-medium text-sidebar-foreground hover:text-primary transition-colors cursor-pointer"
+              className="w-full flex items-center justify-between py-2 text-xs font-medium text-muted-foreground hover:text-primary transition-colors cursor-pointer"
             >
               <span className="uppercase tracking-wider">Pending ({friendRequests.length})</span>
               <ChevronDown className={`h-3 w-3 transition-transform ${showPending ? "" : "-rotate-90"}`} />
@@ -63,7 +63,7 @@ export default function FriendRequestsPanel({ onBack }: FriendRequestsPanelProps
                 ) : (
                   <div className="space-y-1">
                     {friendRequests.map((req: User) => (
-                      <div key={req.id} className="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-sidebar-accent/50 transition-colors">
+                      <div key={req.id} className="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-accent transition-colors">
                         <Avatar size="sm">
                           <AvatarImage src={req.avatar_url || ""} alt={req.username} />
                           <AvatarFallback className="bg-muted text-muted-foreground text-xs">
@@ -96,7 +96,7 @@ export default function FriendRequestsPanel({ onBack }: FriendRequestsPanelProps
                   </div>
                 )}
                 {hasMoreRequests && (
-                  <div className="pt-2 pb-2 border-t border-sidebar-border mt-2">
+                  <div className="pt-2 pb-2 border-t border-border mt-2">
                     <button
                       onClick={() => fetchMoreRequests()}
                       disabled={isLoadingMoreRequests}
@@ -114,7 +114,7 @@ export default function FriendRequestsPanel({ onBack }: FriendRequestsPanelProps
           <div>
             <button
               onClick={() => setShowSent(!showSent)}
-              className="w-full flex items-center justify-between py-2 text-xs font-medium text-sidebar-foreground hover:text-primary transition-colors cursor-pointer"
+              className="w-full flex items-center justify-between py-2 text-xs font-medium text-muted-foreground hover:text-primary transition-colors cursor-pointer"
             >
               <span className="uppercase tracking-wider">Sent ({sentRequests.length})</span>
               <ChevronDown className={`h-3 w-3 transition-transform ${showSent ? "" : "-rotate-90"}`} />
@@ -126,7 +126,7 @@ export default function FriendRequestsPanel({ onBack }: FriendRequestsPanelProps
                 ) : (
                   <div className="space-y-1">
                     {sentRequests.map((req: User) => (
-                      <div key={req.id} className="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-sidebar-accent/50 transition-colors">
+                      <div key={req.id} className="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-accent transition-colors">
                         <Avatar size="sm">
                           <AvatarImage src={req.avatar_url || ""} alt={req.username} />
                           <AvatarFallback className="bg-muted text-muted-foreground text-xs">
@@ -150,7 +150,7 @@ export default function FriendRequestsPanel({ onBack }: FriendRequestsPanelProps
                   </div>
                 )}
                 {hasMoreSent && (
-                  <div className="pt-2 pb-2 border-t border-sidebar-border mt-2">
+                  <div className="pt-2 pb-2 border-t border-border mt-2">
                     <button
                       onClick={() => fetchMoreSent()}
                       disabled={isLoadingMoreSent}

@@ -39,7 +39,7 @@ export function ComposePost({
   textareaRows = 4,
   textareaMinHeight = "100px",
   maxLength = MAX_POST_LENGTH,
-  wrapperClassName = "border-b border-border p-5 bg-background",
+  wrapperClassName = "glass border-b border-border p-5",
   inputId = "audio-upload",
   isSubmitting = false,
 }: ComposePostProps) {
@@ -145,7 +145,7 @@ export function ComposePost({
           />
           {/* Recorded Audio Preview */}
           {recordedAudio && (
-            <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+            <div className="flex items-center gap-3 p-3 glass rounded-xl">
               <Button
                 variant="ghost"
                 size="icon"
@@ -196,7 +196,7 @@ export function ComposePost({
 
           {/* Uploaded Audio Preview */}
           {newPost.audioFile && !recordedAudio && (
-            <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+            <div className="flex items-center gap-2 p-3 glass rounded-xl">
               <Music className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm flex-1 truncate">{newPost.audioFile.name}</span>
               <Button
@@ -264,6 +264,7 @@ export function ComposePost({
               onClick={handleCreatePost}
               disabled={(!newPost.content.trim() && !newPost.audioFile && !recordedAudio) || isRecording || isSubmitting}
               size="sm"
+              className={(newPost.content.trim() || newPost.audioFile || recordedAudio) && !isRecording && !isSubmitting ? "glow-primary" : ""}
             >
               {isSubmitting ? "Posting..." : submitButtonText}
             </Button>

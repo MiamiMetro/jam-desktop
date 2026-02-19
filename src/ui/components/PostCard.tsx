@@ -69,7 +69,7 @@ export function PostCard({
             ) : communityName ? (
               <button
                 onClick={() => post.community && onCommunityClick?.(post.community)}
-                className="text-xs px-2 py-0.5 rounded bg-muted hover:bg-muted/80 transition-colors flex items-center gap-1 cursor-pointer"
+                className="text-xs px-2 py-0.5 rounded bg-primary/8 text-primary/80 hover:bg-primary/12 transition-colors flex items-center gap-1 cursor-pointer"
               >
                 <HashIcon className="h-3 w-3" />
                 From {communityName}
@@ -103,7 +103,7 @@ export function PostCard({
                   onLike(post.id);
                 }
               }}
-              className={`flex items-center gap-2 text-sm transition-colors cursor-pointer ${
+              className={`flex items-center gap-2 text-sm transition-all cursor-pointer active:scale-90 ${
                 post.isLiked
                   ? "text-red-500 hover:text-red-600"
                   : "text-muted-foreground hover:text-foreground"

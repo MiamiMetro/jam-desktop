@@ -42,39 +42,39 @@
     --sidebar-ring: oklch(0.78 0.16 70 / 40%);
 }
 
-/* Light override */
+/* Light override — Warm Studio */
 .light {
-    --background: oklch(0.98 0.002 260);
-    --foreground: oklch(0.141 0.005 285.823);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.141 0.005 285.823);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.141 0.005 285.823);
+    --background: oklch(0.965 0.008 75);
+    --foreground: oklch(0.18 0.02 55);
+    --card: oklch(0.99 0.005 75);
+    --card-foreground: oklch(0.18 0.02 55);
+    --popover: oklch(0.99 0.005 75);
+    --popover-foreground: oklch(0.18 0.02 55);
     --primary: oklch(0.646 0.222 41.116);
     --primary-foreground: oklch(0.98 0.016 73.684);
-    --secondary: oklch(0.967 0.001 286.375);
-    --secondary-foreground: oklch(0.21 0.006 285.885);
-    --muted: oklch(0.967 0.001 286.375);
-    --muted-foreground: oklch(0.552 0.016 285.938);
-    --accent: oklch(0.646 0.222 41.116);
-    --accent-foreground: oklch(0.98 0.016 73.684);
+    --secondary: oklch(0.95 0.01 70);
+    --secondary-foreground: oklch(0.25 0.015 55);
+    --muted: oklch(0.935 0.012 75);
+    --muted-foreground: oklch(0.48 0.02 55);
+    --accent: oklch(0.935 0.012 75);
+    --accent-foreground: oklch(0.18 0.02 55);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.92 0.004 286.32);
-    --input: oklch(0.92 0.004 286.32);
-    --ring: oklch(0.705 0.015 286.067);
+    --border: oklch(0.85 0.02 65);
+    --input: oklch(0.87 0.018 65);
+    --ring: oklch(0.646 0.222 41.116 / 40%);
     --chart-1: oklch(0.837 0.128 66.29);
     --chart-2: oklch(0.705 0.213 47.604);
     --chart-3: oklch(0.646 0.222 41.116);
     --chart-4: oklch(0.553 0.195 38.402);
     --chart-5: oklch(0.47 0.157 37.304);
-    --sidebar: oklch(0.975 0 0);
-    --sidebar-foreground: oklch(0.141 0.005 285.823);
+    --sidebar: oklch(0.94 0.015 70);
+    --sidebar-foreground: oklch(0.18 0.02 55);
     --sidebar-primary: oklch(0.646 0.222 41.116);
     --sidebar-primary-foreground: oklch(0.98 0.016 73.684);
-    --sidebar-accent: oklch(0.646 0.222 41.116);
-    --sidebar-accent-foreground: oklch(0.98 0.016 73.684);
-    --sidebar-border: oklch(0.92 0.004 286.32);
-    --sidebar-ring: oklch(0.705 0.015 286.067);
+    --sidebar-accent: oklch(0.91 0.02 65);
+    --sidebar-accent-foreground: oklch(0.18 0.02 55);
+    --sidebar-border: oklch(0.85 0.02 65);
+    --sidebar-ring: oklch(0.646 0.222 41.116 / 40%);
 }
 
 /* Dark class inherits root (already dark by default) */
@@ -198,17 +198,17 @@ body::-webkit-scrollbar {
   background-color: oklch(1 0 0 / 20%);
 }
 
-/* Light mode scrollbar */
+/* Light mode scrollbar — warm */
 .light *:not(html):not(body) {
-  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+  scrollbar-color: oklch(0.5 0.04 55 / 20%) transparent;
 }
 
 .light *:not(html):not(body)::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.2);
+  background-color: oklch(0.5 0.04 55 / 20%);
 }
 
 .light *:not(html):not(body)::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(0, 0, 0, 0.35);
+  background-color: oklch(0.5 0.04 55 / 35%);
 }
 
 /* === Glass Morphism Utilities === */
@@ -234,30 +234,140 @@ body::-webkit-scrollbar {
   box-shadow: 0 0 12px oklch(0.78 0.16 70 / 25%), 0 0 4px oklch(0.78 0.16 70 / 15%);
 }
 
-/* Light mode glass */
+/* Light mode glass — warm tinted */
 .light .glass {
-  background: oklch(1 0 0 / 60%);
-  backdrop-filter: blur(12px);
-  border: 1px solid oklch(0 0 0 / 6%);
+  background: oklch(0.98 0.006 70 / 70%);
+  backdrop-filter: blur(12px) saturate(1.3);
+  border: 1px solid oklch(0.3 0.04 55 / 10%);
+  box-shadow: 0 1px 3px oklch(0.3 0.04 55 / 6%);
 }
 
 .light .glass-strong {
-  background: oklch(1 0 0 / 75%);
-  backdrop-filter: blur(20px);
-  border: 1px solid oklch(0 0 0 / 8%);
+  background: oklch(0.98 0.006 70 / 85%);
+  backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid oklch(0.3 0.04 55 / 12%);
+  box-shadow: 0 2px 8px oklch(0.3 0.04 55 / 8%), 0 1px 2px oklch(0.3 0.04 55 / 5%);
 }
 
 .light .surface-elevated {
-  background: oklch(1 0 0);
-  border: 1px solid oklch(0 0 0 / 6%);
-  box-shadow: 0 2px 8px oklch(0 0 0 / 8%), 0 1px 2px oklch(0 0 0 / 5%);
+  background: oklch(0.99 0.005 75);
+  border: 1px solid oklch(0.3 0.04 55 / 8%);
+  box-shadow: 0 2px 12px oklch(0.3 0.04 55 / 10%), 0 1px 3px oklch(0.3 0.04 55 / 6%);
 }
 
 .light .glow-primary {
-  box-shadow: 0 0 12px oklch(0.646 0.222 41.116 / 20%), 0 0 4px oklch(0.646 0.222 41.116 / 10%);
+  box-shadow: 0 0 16px oklch(0.646 0.222 41.116 / 25%), 0 0 6px oklch(0.646 0.222 41.116 / 15%);
 }
 
 /* Heading font utility */
 .font-heading {
   font-family: var(--font-heading);
+}
+
+/* === Warm Studio Animations === */
+
+/* Page entrance — fade + slide up */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-page-in {
+  animation: page-in 0.4s ease-out both;
+}
+
+/* Staggered children entrance */
+.animate-stagger > * {
+  opacity: 0;
+  animation: page-in 0.35s ease-out both;
+}
+.animate-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.animate-stagger > *:nth-child(2) { animation-delay: 50ms; }
+.animate-stagger > *:nth-child(3) { animation-delay: 100ms; }
+.animate-stagger > *:nth-child(4) { animation-delay: 150ms; }
+.animate-stagger > *:nth-child(5) { animation-delay: 200ms; }
+.animate-stagger > *:nth-child(6) { animation-delay: 250ms; }
+.animate-stagger > *:nth-child(7) { animation-delay: 300ms; }
+.animate-stagger > *:nth-child(8) { animation-delay: 350ms; }
+.animate-stagger > *:nth-child(n+9) { animation-delay: 400ms; }
+
+/* Floating idle — for empty-state icons */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Breathing glow pulse — for CTAs and active indicators */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px oklch(0.78 0.16 70 / 20%), 0 0 3px oklch(0.78 0.16 70 / 10%); }
+  50% { box-shadow: 0 0 18px oklch(0.78 0.16 70 / 35%), 0 0 6px oklch(0.78 0.16 70 / 20%); }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+.light .animate-glow-pulse {
+  animation-name: glow-pulse-light;
+}
+
+@keyframes glow-pulse-light {
+  0%, 100% { box-shadow: 0 0 8px oklch(0.646 0.222 41.116 / 18%), 0 0 3px oklch(0.646 0.222 41.116 / 8%); }
+  50% { box-shadow: 0 0 18px oklch(0.646 0.222 41.116 / 30%), 0 0 6px oklch(0.646 0.222 41.116 / 15%); }
+}
+
+/* Mini equalizer bars — playing state indicator */
+@keyframes eq-bar-1 {
+  0%, 100% { height: 30%; }
+  50% { height: 100%; }
+}
+@keyframes eq-bar-2 {
+  0%, 100% { height: 60%; }
+  50% { height: 20%; }
+}
+@keyframes eq-bar-3 {
+  0%, 100% { height: 40%; }
+  50% { height: 90%; }
+}
+@keyframes eq-bar-4 {
+  0%, 100% { height: 80%; }
+  50% { height: 30%; }
+}
+
+.eq-bar { display: inline-block; width: 3px; border-radius: 9999px; background: currentColor; }
+.eq-bar-1 { animation: eq-bar-1 0.8s ease-in-out infinite; }
+.eq-bar-2 { animation: eq-bar-2 0.6s ease-in-out infinite; }
+.eq-bar-3 { animation: eq-bar-3 0.9s ease-in-out infinite; }
+.eq-bar-4 { animation: eq-bar-4 0.7s ease-in-out infinite; }
+
+/* Ambient background — atmospheric depth */
+.app-bg {
+  position: relative;
+}
+
+.app-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 20% 20%, oklch(0.78 0.16 70 / 4%) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 60% at 80% 80%, oklch(0.78 0.16 70 / 3%) 0%, transparent 70%);
+}
+
+.light .app-bg::before {
+  background:
+    radial-gradient(ellipse 60% 50% at 20% 20%, oklch(0.646 0.222 41.116 / 5%) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 60% at 80% 80%, oklch(0.646 0.222 41.116 / 3%) 0%, transparent 70%);
 }

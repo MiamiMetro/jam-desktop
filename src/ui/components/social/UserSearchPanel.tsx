@@ -33,9 +33,9 @@ export default function UserSearchPanel({ onClose }: UserSearchPanelProps) {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <div className="px-3 py-2 border-b border-sidebar-border">
+      <div className="px-3 py-2 border-b border-border">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-sidebar-foreground">Search Users</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Search Users</h3>
           <Button variant="ghost" size="icon-xs" className="h-6 w-6" onClick={onClose}>
             <X className="h-3 w-3" />
           </Button>
@@ -63,7 +63,7 @@ export default function UserSearchPanel({ onClose }: UserSearchPanelProps) {
                   {filteredUsers.map((searchUser: User) => (
                     <div
                       key={searchUser.id}
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-sidebar-accent/50 cursor-pointer group transition-colors"
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent cursor-pointer group transition-colors"
                       onClick={() => navigate(`/profile/${searchUser.username}`)}
                     >
                       <Avatar size="sm" className="relative">
@@ -81,7 +81,7 @@ export default function UserSearchPanel({ onClose }: UserSearchPanelProps) {
                     <div className="text-center py-4 text-xs text-muted-foreground">No users found</div>
                   )}
                   {hasMoreUsers && filteredUsers.length > 0 && (
-                    <div className="pt-2 pb-2 border-t border-sidebar-border">
+                    <div className="pt-2 pb-2 border-t border-border">
                       <button
                         onClick={() => fetchMoreUsers()}
                         disabled={isLoadingMoreUsers}

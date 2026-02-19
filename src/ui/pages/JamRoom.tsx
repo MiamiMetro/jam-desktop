@@ -1,9 +1,10 @@
+// JamRoom.tsx — Live jam room with chat, participants, audio stream
 import { useParams, useNavigate } from "react-router-dom";
-import { useState, useEffect, useMemo, useCallback, memo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { 
+import {
   ArrowLeft,
   Music,
   Users,
@@ -14,11 +15,14 @@ import {
   LogOut,
   Settings,
   RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useJam, useUpdateRoomActivity } from "@/hooks/useJams";
 import { useAllUsers } from "@/hooks/useUsers";
 import { useHLSPlayer } from "@/hooks/useHLSPlayer";
+import { LoadingState } from "@/components/LoadingState";
+import { EmptyState } from "@/components/EmptyState";
 import type { User } from "@/lib/api/types";
 
 interface JamRoomProps {
@@ -31,12 +35,12 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
   const navigate = useNavigate();
   const { user, isGuest } = useAuthStore();
   const { data: room, isLoading } = useJam(roomIdToUse || "");
-  // Only fetch users when room is loaded (for participants and message users)
   const { data: allUsers = [] } = useAllUsers(undefined, !!room && !isLoading);
   const updateActivityMutation = useUpdateRoomActivity();
   const [message, setMessage] = useState("");
   const [clientError, setClientError] = useState<string | null>(null);
-  
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
   // HLS stream player
   const hlsPlayer = useHLSPlayer(room?.streamUrl);
   const [messages, setMessages] = useState<Array<{
@@ -47,36 +51,37 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
     content: string;
     timestamp: Date;
   }>>([]);
-  
+
   // Track activity when user enters room
   useEffect(() => {
     if (roomIdToUse && !isGuest) {
-      // Update activity on mount
       updateActivityMutation.mutate(roomIdToUse);
-      
-      // Update activity every 5 minutes while in room
+
       const interval = setInterval(() => {
         updateActivityMutation.mutate(roomIdToUse);
       }, 5 * 60 * 1000);
-      
+
       return () => clearInterval(interval);
     }
   }, [roomIdToUse, isGuest, updateActivityMutation]);
-  
-  
-  // Mock participants (using first few users as participants) - memoized
+
+  // Auto-scroll chat on new messages
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Mock participants
   const participants = useMemo(
     () => allUsers.slice(0, room?.participants || 3),
     [allUsers, room?.participants]
   );
-  
-  // Check if current user is the host
+
   const isHost = !isGuest && user && room && room.hostId === user.id;
 
   const handleSendMessage = useCallback((e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || isGuest || !roomIdToUse) return; // Guests can't send messages
-    
+    if (!message.trim() || isGuest || !roomIdToUse) return;
+
     const newMessage = {
       id: Date.now().toString(),
       userId: user?.id || "",
@@ -85,16 +90,13 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
       content: message.trim(),
       timestamp: new Date(),
     };
-    
+
     setMessages(prev => [...prev, newMessage]);
     setMessage("");
-    
-    // Update room activity when message is sent
     updateActivityMutation.mutate(roomIdToUse);
   }, [message, isGuest, roomIdToUse, user, updateActivityMutation]);
-  
+
   const handleLeaveRoom = useCallback(() => {
-    // Clear persisted room ID
     localStorage.removeItem("currentJamRoomId");
     navigate("/jams");
   }, [navigate]);
@@ -123,9 +125,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
   if (isLoading) {
     return (
       <div className="p-6">
-        <div className="text-center py-8 text-muted-foreground">
-          <p className="text-sm">Loading room...</p>
-        </div>
+        <LoadingState message="Loading room..." />
       </div>
     );
   }
@@ -133,28 +133,27 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
   if (!room) {
     return (
       <div className="p-6">
-        <div className="text-center py-8 text-muted-foreground">
-          <p className="text-sm">Room not found</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate("/jams")}
-            className="mt-4"
-          >
-            Back to Jams
-          </Button>
-        </div>
+        <EmptyState
+          icon={Music}
+          title="Room not found"
+          action={
+            <Button variant="outline" size="sm" onClick={() => navigate("/jams")}>
+              Back to Jams
+            </Button>
+          }
+        />
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex h-full min-h-0 bg-background">
       {/* Main Room Content */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {/* Room Header */}
-        <div className="bg-gradient-to-br from-primary/20 via-primary/8 to-background border-b border-border p-4 flex-shrink-0 relative overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,oklch(0.78_0.16_70/12%)_0%,transparent_60%)]" />
+        <div className="bg-gradient-to-br from-primary/25 via-primary/12 to-primary/3 border-b border-border p-4 flex-shrink-0 relative overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,oklch(0.78_0.16_70/15%)_0%,transparent_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,oklch(0.78_0.16_70/8%)_0%,transparent_50%)]" />
           <div className="flex items-center gap-4 relative z-10">
             <Button
               variant="ghost"
@@ -184,14 +183,13 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
               )}
               <div className="flex items-center gap-4 text-xs text-muted-foreground">
                 {room.genre && (
-                  <div className="flex items-center gap-1">
-                    <Music className="h-3 w-3 text-primary/60" />
-                    <span>{room.genre}</span>
-                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium">
+                    {room.genre}
+                  </span>
                 )}
                 <div className="flex items-center gap-1">
                   <Users className="h-3 w-3" />
-                  <span>{room.participants}/{room.maxParticipants} participants</span>
+                  <span>{room.participants}/{room.maxParticipants}</span>
                 </div>
                 <div>
                   Host: <span className="text-foreground/80">{room.hostName}</span>
@@ -204,17 +202,23 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                   variant={clientError ? "destructive" : "default"}
                   size="sm"
                   onClick={handleJoinClient}
-                  className={`flex items-center gap-2 ${!clientError ? "glow-primary" : ""}`}
+                  className={`flex items-center gap-2 ${!clientError ? "glow-primary animate-glow-pulse" : ""}`}
                   title={clientError ? "Client not available" : "Join with client"}
                 >
                   Jam
                 </Button>
+                {room.streamUrl && hlsPlayer.isPlaying && (
+                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-red-500/15 text-red-500 font-semibold">
+                    <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                    LIVE
+                  </span>
+                )}
                 {isHost && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => navigate("/jams")}
-                    className="flex items-center gap-2"
+                    className="flex items-center gap-2 glass border-border/50"
                     title="Manage room settings"
                   >
                     <Settings className="h-4 w-4" />
@@ -225,15 +229,19 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                   variant="outline"
                   size="sm"
                   onClick={handleLeaveRoom}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 glass border-border/50"
                 >
                   <LogOut className="h-4 w-4" />
                   Leave
                 </Button>
               </div>
-              <div className="h-4 text-xs text-destructive">
-                {clientError && clientError}
-              </div>
+              {/* Client error banner */}
+              {clientError && (
+                <div className="glass rounded-lg px-3 py-1.5 flex items-center gap-2 text-xs text-destructive">
+                  <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                  <span className="truncate max-w-48">{clientError}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -244,13 +252,13 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <div className="mb-4 flex-shrink-0">
               <h3 className="text-sm font-heading font-semibold mb-3">Live Audio Stream</h3>
-              <div className="p-4 glass-strong rounded-lg">
+              <div className="p-4 glass-strong rounded-xl">
                 {room.streamUrl ? (
                   <div className="flex items-center gap-3">
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-12 w-12 rounded-full"
+                      className="h-12 w-12 rounded-full glass hover:bg-foreground/[0.06]"
                       onClick={() => hlsPlayer.togglePlayPause()}
                       disabled={hlsPlayer.isLoading}
                     >
@@ -269,7 +277,12 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                           Live Jam Session
                         </span>
                         {hlsPlayer.isPlaying && (
-                          <span className="h-2 w-2 bg-red-500 rounded-full animate-pulse" />
+                          <span className="flex items-end gap-0.5 h-4 text-primary">
+                            <span className="eq-bar eq-bar-1" />
+                            <span className="eq-bar eq-bar-2" />
+                            <span className="eq-bar eq-bar-3" />
+                            <span className="eq-bar eq-bar-4" />
+                          </span>
                         )}
                       </div>
                       {hlsPlayer.error ? (
@@ -284,7 +297,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                                 hlsPlayer.play();
                               }, 200);
                             }}
-                            className="h-7 text-xs"
+                            className="h-7 text-xs glass border-border/50"
                             disabled={hlsPlayer.isLoading}
                           >
                             <RefreshCw className="h-3 w-3 mr-1" />
@@ -292,14 +305,15 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                           </Button>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 bg-muted-foreground/20 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-primary transition-all"
+                        <div className="flex items-center gap-2 group/progress">
+                          <div className="flex-1 h-1.5 group-hover/progress:h-2.5 bg-foreground/[0.08] rounded-full overflow-hidden transition-all duration-200">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all"
                               style={{ width: hlsPlayer.isPlaying ? "100%" : "0%" }}
                             />
                           </div>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-xs text-muted-foreground tabular-nums flex items-center gap-1">
+                            {hlsPlayer.isPlaying && <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />}
                             {hlsPlayer.isPlaying ? "LIVE" : hlsPlayer.isReady ? "PAUSED" : "OFFLINE"}
                           </span>
                         </div>
@@ -308,47 +322,56 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                   </div>
                 ) : (
                   <div className="text-center py-4 text-muted-foreground">
+                    <Music className="h-8 w-8 mx-auto mb-2 text-primary/20" />
                     <p className="text-sm">No stream available</p>
                     <p className="text-xs mt-1">Stream will start when the host begins jamming</p>
                   </div>
                 )}
               </div>
             </div>
-            
+
             {/* Participants Section */}
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <h3 className="text-sm font-heading font-semibold mb-3 flex-shrink-0">Participants</h3>
-              <div className="space-y-2 overflow-y-auto flex-1">
+              <h3 className="text-sm font-heading font-semibold mb-3 flex-shrink-0">
+                Participants ({participants.length})
+              </h3>
+              <div className="space-y-1 overflow-y-auto flex-1">
                 {participants.map((participant: User) => (
                   <div
                     key={participant.id}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-primary/5 hover:translate-x-0.5 transition-all cursor-pointer"
+                    onClick={() => navigate(`/profile/${participant.username}`)}
                   >
-                    <Avatar size="sm" className="h-8 w-8">
-                      <AvatarImage src={participant.avatar_url || ""} />
-                      <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-                        {participant.username.substring(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
+                    <div className="relative">
+                      <Avatar size="sm" className="h-8 w-8">
+                        <AvatarImage src={participant.avatar_url || ""} />
+                        <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                          {participant.username.substring(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-green-400 border-2 border-background" />
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{participant.username}</div>
-                      {/* Status not available in Convex User type */}
                     </div>
+                    {room.hostId === participant.id && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">Host</span>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Chat Sidebar */}
-          <div className="w-80 border-l border-border flex flex-col glass min-h-0 overflow-hidden">
-            <div className="p-3 border-b border-border flex-shrink-0">
+          {/* Chat Sidebar — responsive width */}
+          <div className="w-72 lg:w-80 xl:w-96 border-l border-border/50 flex flex-col glass rounded-xl min-h-0 overflow-hidden animate-page-in" style={{ animationDelay: '0.15s' }}>
+            <div className="p-3 border-b border-border/50 flex-shrink-0">
               <h3 className="text-sm font-heading font-semibold">Chat</h3>
               {isGuest && (
-                <p className="text-xs text-muted-foreground mt-1">Listening mode - chat disabled</p>
+                <p className="text-xs text-muted-foreground mt-1">Listening mode — chat disabled</p>
               )}
             </div>
-            
+
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-3 space-y-3">
               {messages.length === 0 ? (
@@ -382,18 +405,19 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                   );
                 })
               )}
+              <div ref={chatEndRef} />
             </div>
 
             {/* Message Input */}
             {!isGuest && (
-              <div className="p-3 border-t border-border flex-shrink-0">
+              <div className="p-3 border-t border-border/50 flex-shrink-0">
                 <form onSubmit={handleSendMessage} className="flex gap-2">
                   <Input
                     type="text"
                     placeholder="Type a message..."
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    className="flex-1"
+                    className="flex-1 glass border-border/50"
                   />
                   <Button
                     type="submit"
@@ -413,4 +437,3 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
 }
 
 export default memo(JamRoom);
-

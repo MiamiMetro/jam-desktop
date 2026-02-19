@@ -1,6 +1,6 @@
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { HashRouter } from "react-router-dom";
+import { HashRouter, useNavigate } from "react-router-dom";
 import { ConvexReactClient } from "convex/react";
 import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -25,19 +25,32 @@ const queryClient = new QueryClient({
 function AuthSetup() {
   // Keep auth state store in sync
   useConvexAuth();
-  
+
   // Ensure Convex profile exists after Better Auth
   useEnsureProfile();
-  
+
+  const navigate = useNavigate();
   const checkSession = useAuthStore((state) => state.checkSession);
-  
+  const isGuest = useAuthStore((state) => state.isGuest);
+
   useEffect(() => {
     // Check session asynchronously on mount
     checkSession().catch(() => {
       // Silently handle errors - they're already handled in the store
     });
   }, [checkSession]);
-  
+
+  // Restore saved path after login completes
+  useEffect(() => {
+    if (!isGuest) {
+      const returnPath = sessionStorage.getItem("auth_return_path");
+      if (returnPath) {
+        sessionStorage.removeItem("auth_return_path");
+        navigate(returnPath, { replace: true });
+      }
+    }
+  }, [isGuest, navigate]);
+
   return null;
 }
 

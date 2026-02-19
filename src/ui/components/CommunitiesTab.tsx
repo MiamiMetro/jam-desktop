@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useSearchParams, useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -43,7 +43,12 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
   const { data: selectedCommunity } = useCommunity(communityId || "");
   const { data: communityPosts = [], isLoading: postsLoading } = useCommunityPosts(communityId || "");
   const toggleLikeMutation = useToggleLike();
-  const [communitySearchInput, setCommunitySearchInput] = useState(searchQuery);
+  const handleSearchChange = useCallback((query: string) => {
+    const params: Record<string, string> = {};
+    if (categoryFilter) params.category = categoryFilter;
+    if (query) params.search = query;
+    setSearchParams(params, { replace: true });
+  }, [categoryFilter, setSearchParams]);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   
   const handleAuthorClick = (username: string) => {
@@ -64,13 +69,6 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
     }
   };
 
-  const handleCommunitySearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const params: Record<string, string> = {};
-    if (categoryFilter) params.category = categoryFilter;
-    if (communitySearchInput) params.search = communitySearchInput;
-    setSearchParams(params);
-  };
 
   const handleCommunityClick = (communityId: string) => {
     navigate(`/community/${communityId}`);
@@ -154,7 +152,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
               {selectedCommunity.category.map((cat) => (
                 <span
                   key={cat}
-                  className="text-xs px-2.5 py-1 rounded-full glass text-muted-foreground"
+                  className="text-xs px-2.5 py-1 rounded-full bg-primary/8 text-primary"
                 >
                   {cat}
                 </span>
@@ -178,7 +176,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
         />
 
         {/* Posts Feed */}
-        <div className="divide-y divide-border">
+        <div className="divide-y divide-white/[0.04]">
           {postsLoading ? (
             <LoadingState message="Loading posts..." />
           ) : communityPosts.length === 0 ? (
@@ -216,34 +214,38 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
   return (
     <div className="p-5">
       <div>
-        <div className="mb-5">
-          <h2 className="text-2xl font-heading font-bold mb-1">Communities</h2>
-          <p className="text-sm text-muted-foreground">Find your people and make music together</p>
+        <div className="mb-5 -mx-5 -mt-5 px-5 pt-5 pb-4 bg-gradient-to-br from-primary/12 via-primary/5 to-transparent relative overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_80%_at_80%_-20%,oklch(0.78_0.16_70/8%),transparent)] pointer-events-none" />
+          <div className="relative animate-page-in">
+            <h2 className="text-2xl font-heading font-bold mb-1">Communities</h2>
+            <p className="text-sm text-muted-foreground">Find your people and make music together</p>
+          </div>
         </div>
 
         {/* Search */}
         <SearchInput
           placeholder="Search communities..."
-          value={communitySearchInput}
-          onChange={setCommunitySearchInput}
-          onSubmit={handleCommunitySearch}
+          value={searchQuery}
+          onSearch={handleSearchChange}
         />
 
-        {/* Category Filters - Always visible pill bar */}
-        <div className="mb-5 flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
-          {CATEGORIES.map((category) => (
-            <button
-              key={category}
-              onClick={() => handleCategoryClick(category)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 ${
-                categoryFilter === category
-                  ? "bg-primary text-primary-foreground shadow-[0_0_12px_oklch(0.78_0.16_70/30%)]"
-                  : "glass text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {category}
-            </button>
-          ))}
+        {/* Category Filters - Sticky pill bar */}
+        <div className="mb-5 sticky top-0 z-10 -mx-5 px-5 py-2 glass-strong">
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
+            {CATEGORIES.map((category) => (
+              <button
+                key={category}
+                onClick={() => handleCategoryClick(category)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 ${
+                  categoryFilter === category
+                    ? "bg-primary text-primary-foreground shadow-[0_0_12px_oklch(0.78_0.16_70/30%)]"
+                    : "glass text-muted-foreground hover:text-foreground hover:ring-1 hover:ring-primary/20"
+                }`}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Communities List */}
@@ -256,7 +258,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
               : "No communities available yet"}
           />
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 animate-stagger">
             {communities.map((community) => (
               <Card
                 key={community.id}
