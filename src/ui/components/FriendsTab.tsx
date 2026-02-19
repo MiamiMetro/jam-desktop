@@ -34,6 +34,7 @@ function FriendsTab() {
   const [leftView, setLeftView] = useState<LeftView>("conversations");
   const [activeDmPartnerId, setActiveDmPartnerId] = useState<string | null>(null);
   const [friendSearch, setFriendSearch] = useState("");
+  const [userSearch, setUserSearch] = useState("");
 
   // Sort friends by last message time
   const sortedFriends = [...friends].sort((a: User, b: User) => {
@@ -92,7 +93,14 @@ function FriendsTab() {
                 variant="ghost"
                 size="icon"
                 className={`h-8 w-8 rounded-full ${leftView === "search" ? "bg-primary/10 text-primary" : ""}`}
-                onClick={() => setLeftView(leftView === "search" ? "conversations" : "search")}
+                onClick={() => {
+                  if (leftView === "search") {
+                    setLeftView("conversations");
+                    setUserSearch("");
+                  } else {
+                    setLeftView("search");
+                  }
+                }}
                 title="Find people"
               >
                 <Search className="h-4 w-4" />
@@ -114,7 +122,7 @@ function FriendsTab() {
             </div>
           </div>
 
-          {/* Search friends input — only in conversations view */}
+          {/* Search input — changes based on current view */}
           {leftView === "conversations" && (
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
@@ -135,15 +143,44 @@ function FriendsTab() {
               )}
             </div>
           )}
+          {leftView === "search" && (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                type="text"
+                placeholder="Search by username..."
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                className="pl-9 h-9 text-sm bg-muted/50 border-transparent focus:bg-background focus:border-border"
+                autoFocus
+              />
+              {userSearch && (
+                <button
+                  onClick={() => setUserSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          )}
+          {leftView === "requests" && (
+            <div className="flex items-center gap-2 h-9">
+              <Button variant="ghost" size="icon-xs" className="h-7 w-7 hover:bg-muted/50" onClick={() => setLeftView("conversations")}>
+                <ArrowLeft className="h-3.5 w-3.5" />
+              </Button>
+              <span className="text-sm font-medium text-muted-foreground">Friend Requests</span>
+            </div>
+          )}
         </div>
 
         {/* Left Content */}
         <div className="flex-1 min-h-0 overflow-y-auto">
           {leftView === "search" && (
-            <UserSearchPanel onClose={() => setLeftView("conversations")} />
+            <UserSearchPanel searchQuery={userSearch} />
           )}
           {leftView === "requests" && (
-            <FriendRequestsPanel onBack={() => setLeftView("conversations")} />
+            <FriendRequestsPanel />
           )}
           {leftView === "conversations" && (
             <>

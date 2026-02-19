@@ -1,5 +1,5 @@
 import { useMutation, useConvex } from "convex/react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { useAuthStore } from '@/stores/authStore';
@@ -120,15 +120,21 @@ export const useFriendRequests = () => {
 
 export const useRequestFriend = () => {
   const sendRequest = useMutation(api.friends.sendRequest);
-  
+  const queryClient = useQueryClient();
+
+  const invalidateFriendQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['friends'] });
+  };
+
   return {
     mutate: (userId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
       sendRequest({ friendId: userId as Id<"profiles"> })
-        .then(() => options?.onSuccess?.())
+        .then(() => { invalidateFriendQueries(); options?.onSuccess?.(); })
         .catch((error) => options?.onError?.(error));
     },
     mutateAsync: async (userId: string) => {
       await sendRequest({ friendId: userId as Id<"profiles"> });
+      invalidateFriendQueries();
     },
     isPending: false,
   };
@@ -136,32 +142,43 @@ export const useRequestFriend = () => {
 
 export const useAcceptFriend = () => {
   const acceptRequest = useMutation(api.friends.acceptRequest);
-  
+  const queryClient = useQueryClient();
+
+  const invalidateFriendQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['friends'] });
+  };
+
   return {
     mutate: (userId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
       acceptRequest({ userId: userId as Id<"profiles"> })
-        .then(() => options?.onSuccess?.())
+        .then(() => { invalidateFriendQueries(); options?.onSuccess?.(); })
         .catch((error) => options?.onError?.(error));
     },
     mutateAsync: async (userId: string) => {
       await acceptRequest({ userId: userId as Id<"profiles"> });
+      invalidateFriendQueries();
     },
     isPending: false,
   };
 };
 
 export const useDeclineFriend = () => {
-  // Decline uses remove - same as removing a friend request
   const removeFriend = useMutation(api.friends.remove);
-  
+  const queryClient = useQueryClient();
+
+  const invalidateFriendQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['friends'] });
+  };
+
   return {
     mutate: (userId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
       removeFriend({ userId: userId as Id<"profiles"> })
-        .then(() => options?.onSuccess?.())
+        .then(() => { invalidateFriendQueries(); options?.onSuccess?.(); })
         .catch((error) => options?.onError?.(error));
     },
     mutateAsync: async (userId: string) => {
       await removeFriend({ userId: userId as Id<"profiles"> });
+      invalidateFriendQueries();
     },
     isPending: false,
   };
@@ -169,32 +186,43 @@ export const useDeclineFriend = () => {
 
 export const useDeleteFriend = () => {
   const removeFriend = useMutation(api.friends.remove);
+  const queryClient = useQueryClient();
+
+  const invalidateFriendQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['friends'] });
+  };
 
   return {
     mutate: (userId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
       removeFriend({ userId: userId as Id<"profiles"> })
-        .then(() => options?.onSuccess?.())
+        .then(() => { invalidateFriendQueries(); options?.onSuccess?.(); })
         .catch((error) => options?.onError?.(error));
     },
     mutateAsync: async (userId: string) => {
       await removeFriend({ userId: userId as Id<"profiles"> });
+      invalidateFriendQueries();
     },
     isPending: false,
   };
 };
 
 export const useCancelFriendRequest = () => {
-  // Cancel uses remove - same as removing/declining a friend request
   const removeFriend = useMutation(api.friends.remove);
+  const queryClient = useQueryClient();
+
+  const invalidateFriendQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['friends'] });
+  };
 
   return {
     mutate: (userId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
       removeFriend({ userId: userId as Id<"profiles"> })
-        .then(() => options?.onSuccess?.())
+        .then(() => { invalidateFriendQueries(); options?.onSuccess?.(); })
         .catch((error) => options?.onError?.(error));
     },
     mutateAsync: async (userId: string) => {
       await removeFriend({ userId: userId as Id<"profiles"> });
+      invalidateFriendQueries();
     },
     isPending: false,
   };

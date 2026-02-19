@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useConvex } from "convex/react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { useAuthStore } from '@/stores/authStore';
@@ -225,8 +225,14 @@ export const useComments = (postId: string) => {
 
 export const useCreateComment = () => {
   const createComment = useMutation(api.comments.create);
+  const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['comments'] });
+    queryClient.invalidateQueries({ queryKey: ['posts'] });
+  };
+
   return {
     mutate: (
       variables: { postId: string; content: string; audioFile?: File },
@@ -236,22 +242,22 @@ export const useCreateComment = () => {
         options?.onError?.(new Error('User not authenticated'));
         return;
       }
-      
+
       createComment({
         postId: variables.postId as Id<"posts">,
         text: variables.content || undefined,
       })
-        .then(() => options?.onSuccess?.())
+        .then(() => { invalidate(); options?.onSuccess?.(); })
         .catch((error) => options?.onError?.(error));
     },
     mutateAsync: async (variables: { postId: string; content: string; audioFile?: File }) => {
       if (!user) throw new Error('User not authenticated');
-      
+
       const result = await createComment({
         postId: variables.postId as Id<"posts">,
         text: variables.content || undefined,
       });
-
+      invalidate();
       return convertComment(result);
     },
     isPending: false,
@@ -260,18 +266,24 @@ export const useCreateComment = () => {
 
 export const useCreatePost = () => {
   const createPost = useMutation(api.posts.create);
-  
+  const queryClient = useQueryClient();
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['posts'] });
+  };
+
   return {
     mutate: (
       variables: { content: string; audioFile?: File | null },
       options?: { onSuccess?: () => void; onError?: (error: Error) => void }
     ) => {
       createPost({ text: variables.content || undefined })
-        .then(() => options?.onSuccess?.())
+        .then(() => { invalidate(); options?.onSuccess?.(); })
         .catch((error) => options?.onError?.(error));
     },
     mutateAsync: async (variables: { content: string; audioFile?: File | null }) => {
       const result = await createPost({ text: variables.content || undefined });
+      invalidate();
       return convertPost(result);
     },
     isPending: false,
@@ -280,15 +292,21 @@ export const useCreatePost = () => {
 
 export const useDeletePost = () => {
   const deletePost = useMutation(api.posts.remove);
-  
+  const queryClient = useQueryClient();
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['posts'] });
+  };
+
   return {
     mutate: (postId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
       deletePost({ postId: postId as Id<"posts"> })
-        .then(() => options?.onSuccess?.())
+        .then(() => { invalidate(); options?.onSuccess?.(); })
         .catch((error) => options?.onError?.(error));
     },
     mutateAsync: async (postId: string) => {
       await deletePost({ postId: postId as Id<"posts"> });
+      invalidate();
     },
     isPending: false,
   };
@@ -296,15 +314,21 @@ export const useDeletePost = () => {
 
 export const useToggleLike = () => {
   const toggleLike = useMutation(api.posts.toggleLike);
-  
+  const queryClient = useQueryClient();
+
+  const invalidatePostQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['posts'] });
+  };
+
   return {
     mutate: (postId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
       toggleLike({ postId: postId as Id<"posts"> })
-        .then(() => options?.onSuccess?.())
+        .then(() => { invalidatePostQueries(); options?.onSuccess?.(); })
         .catch((error) => options?.onError?.(error));
     },
     mutateAsync: async (postId: string) => {
       const result = await toggleLike({ postId: postId as Id<"posts"> });
+      invalidatePostQueries();
       return convertPost(result);
     },
     isPending: false,
@@ -317,16 +341,21 @@ export const useToggleLike = () => {
  */
 export const useToggleCommentLike = () => {
   const toggleLike = useMutation(api.comments.toggleLike);
-  
+  const queryClient = useQueryClient();
+
+  const invalidateCommentQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['comments'] });
+  };
+
   return {
     mutate: (commentId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
       toggleLike({ commentId: commentId as Id<"comments"> })
-        .then(() => options?.onSuccess?.())
+        .then(() => { invalidateCommentQueries(); options?.onSuccess?.(); })
         .catch((error) => options?.onError?.(error));
     },
     mutateAsync: async (commentId: string) => {
       const result = await toggleLike({ commentId: commentId as Id<"comments"> });
-      // Convert the comment result to FrontendComment format
+      invalidateCommentQueries();
       return convertComment(result);
     },
     isPending: false,

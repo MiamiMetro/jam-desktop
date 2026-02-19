@@ -245,13 +245,15 @@ export const getConversations = query({
       cursorTime = cursorParticipation._creationTime;
     }
 
-    // Use the new compound index to filter by profile + isActive efficiently
-    // This avoids over-fetching inactive (merged) conversations!
+    // Use by_profile index and filter isActive in-memory
+    // Cannot use by_profile_active because older records have isActive: undefined
+    // (field was added later), and eq("isActive", true) skips undefined values
     let query = ctx.db
       .query("conversation_participants")
-      .withIndex("by_profile_active", (q) =>
-        q.eq("profileId", profile._id).eq("isActive", true)
+      .withIndex("by_profile", (q) =>
+        q.eq("profileId", profile._id)
       )
+      .filter((q) => q.neq(q.field("isActive"), false))
       .order("desc");
 
     // Apply cursor filter if provided
