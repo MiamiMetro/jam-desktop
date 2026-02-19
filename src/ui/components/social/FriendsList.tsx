@@ -1,6 +1,5 @@
 // FriendsList.tsx — Friends list with conversation sorting, search, and unread indicators
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +15,6 @@ interface FriendsListProps {
 }
 
 export default function FriendsList({ onSelectFriend }: FriendsListProps) {
-  const navigate = useNavigate();
   const { user } = useAuthStore();
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");

@@ -17,7 +17,6 @@ import { useUser } from "@/hooks/useUsers";
 import { useUserPosts, useToggleLike, type FrontendPost } from "@/hooks/usePosts";
 import { useFriends, useRequestFriend, useSentFriendRequests, useDeleteFriend } from "@/hooks/useFriends";
 import { EmptyState } from "@/components/EmptyState";
-import { LoadingState } from "@/components/LoadingState";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
 import { PostCard } from "@/components/PostCard";
 import { formatTimeAgo, formatDuration } from "@/lib/postUtils";

@@ -1,6 +1,5 @@
 // FriendsTab.tsx — Twitter DM-style split panel: conversation list left, active view right
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +23,6 @@ import type { User } from "@/lib/api/types";
 type LeftView = "conversations" | "search" | "requests";
 
 function FriendsTab() {
-  const navigate = useNavigate();
   const { isGuest, user } = useAuthStore();
   const { openLogin } = useAuthModalStore();
   const { data: friendRequests = [] } = useFriendRequests();

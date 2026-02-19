@@ -25,7 +25,6 @@ import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useAuthModalStore } from "@/stores/authModalStore";
 import { useJam } from "@/hooks/useJams";
-import { useFriendRequests } from "@/hooks/useFriends";
 
 interface NavItem {
   label: string;
@@ -47,8 +46,6 @@ export default function NavSidebar() {
   const { isGuest, user } = useAuthStore();
   const { theme, setTheme } = useUIStore();
   const { openLogin } = useAuthModalStore();
-  const { data: friendRequests = [] } = useFriendRequests();
-
   const persistedRoomId = localStorage.getItem("currentJamRoomId");
   const { data: currentRoom } = useJam(persistedRoomId || "");
 

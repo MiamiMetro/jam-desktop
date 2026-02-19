@@ -1,10 +1,8 @@
 // MainContent.tsx — Main content area with route-based rendering
-import { useEffect, useRef, useState, startTransition, lazy, Suspense, useMemo } from "react";
+import { useEffect, useRef, useState, startTransition, lazy, Suspense } from "react";
 import { useLocation } from "react-router-dom";
 import { Spinner } from "@/components/ui/spinner";
 import { useScrollRestoration } from "@/hooks/useScrollRestoration";
-import { useJam } from "@/hooks/useJams";
-
 const FeedTab = lazy(() => import("@/components/FeedTab"));
 const JamsTab = lazy(() => import("@/components/JamsTab"));
 const FriendsTab = lazy(() => import("@/components/FriendsTab"));
