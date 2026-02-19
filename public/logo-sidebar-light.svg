@@ -1,4 +1,4 @@
-<svg viewBox="30 50 450 450" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="30 50 450 450" xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision">
   <defs>
     <!-- Punch massively thick holes out of the pick for the stream engine concept -->
     <mask id="wave-cutout">
