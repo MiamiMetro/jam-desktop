@@ -149,34 +149,36 @@ export default function NavSidebar() {
         </div>
 
         {!isGuest && user ? (
-          <DropdownMenu>
-              <DropdownMenuTrigger render={
-                <button
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-all duration-200 cursor-pointer"
-                >
-                  <Avatar size="sm" className="ring-2 ring-primary/20 pointer-events-none flex-shrink-0">
-                    <AvatarImage src={user.avatar_url || ""} alt={user.username || "Profile"} />
-                    <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-                      {user.username?.substring(0, 2).toUpperCase() || "U"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-sm font-medium truncate text-foreground">
-                    {user.username || "User"}
-                  </span>
-                </button>
-              } />
-            <DropdownMenuContent side="top" align="start" sideOffset={4} className="w-48">
-              <DropdownMenuItem onClick={() => user.username && navigate(`/profile/${user.username}`)}>
-                <UserIcon className="h-4 w-4 mr-2" />
-                Profile
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => useAuthStore.getState().logout()}>
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div>
+            <DropdownMenu>
+                <DropdownMenuTrigger render={
+                  <button
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors duration-200 cursor-pointer"
+                  >
+                    <Avatar size="sm" className="ring-2 ring-primary/20 pointer-events-none flex-shrink-0">
+                      <AvatarImage src={user.avatar_url || ""} alt={user.username || "Profile"} />
+                      <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                        {user.username?.substring(0, 2).toUpperCase() || "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium truncate text-foreground">
+                      {user.username || "User"}
+                    </span>
+                  </button>
+                } />
+              <DropdownMenuContent side="top" align="start" sideOffset={4} className="w-48">
+                <DropdownMenuItem onClick={() => user.username && navigate(`/profile/${user.username}`)}>
+                  <UserIcon className="h-4 w-4 mr-2" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => useAuthStore.getState().logout()}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         ) : (
           <Button
             variant="default"
