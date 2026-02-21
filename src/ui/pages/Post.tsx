@@ -24,6 +24,7 @@ import { LoadMoreButton } from "@/components/LoadMoreButton";
 import { useAudioPlayer } from "@/hooks/useAudioPlayer";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { ComposePost } from "@/components/ComposePost";
+import { AutoLinkedText } from "@/components/AutoLinkedText";
 
 function Post() {
   const { id } = useParams<{ id: string }>();
@@ -168,15 +169,17 @@ function Post() {
                     {communityName}
                   </button>
                 ) : null}
+                <span className="text-xs text-muted-foreground">
+                  • {formatTimeAgo(post.timestamp)}
+                </span>
               </div>
-              <span className="text-xs text-muted-foreground">
-                {formatTimeAgo(post.timestamp)}
-              </span>
             </div>
           </div>
 
           {post.content && (
-            <p className="text-base mt-4 whitespace-pre-wrap leading-relaxed">{post.content}</p>
+            <div className="text-base mt-4 leading-relaxed">
+              <AutoLinkedText text={post.content} className="whitespace-pre-wrap" linkClassName="text-blue-500 hover:text-blue-600 underline" />
+            </div>
           )}
 
           {/* Audio player */}
@@ -322,7 +325,7 @@ function Post() {
                         </span>
                       </div>
                       {comment.content && (
-                        <p className="text-sm whitespace-pre-wrap leading-relaxed">{comment.content}</p>
+                        <AutoLinkedText text={comment.content} className="text-sm whitespace-pre-wrap leading-relaxed" linkClassName="text-blue-500 hover:text-blue-600 underline" />
                       )}
                       {comment.audioFile && (
                         <AudioPlayer
