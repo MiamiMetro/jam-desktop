@@ -327,11 +327,38 @@ export function useHLSPlayer(streamUrl?: string) {
     initializedRef.current = false;
   }, []);
 
+  const savedVolume = parseFloat(localStorage.getItem("jam-volume") || "0.8");
+  const [volume, setVolumeState] = useState(savedVolume);
+  const prevVolumeRef = useRef(savedVolume);
+
+  const setVolume = useCallback((v: number) => {
+    const clamped = Math.max(0, Math.min(1, v));
+    if (clamped > 0) {
+      prevVolumeRef.current = clamped;
+      localStorage.setItem("jam-volume", String(clamped));
+    }
+    setVolumeState(clamped);
+    if (audioRef.current) {
+      audioRef.current.volume = clamped;
+    }
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    if (volume > 0) {
+      setVolume(0);
+    } else {
+      setVolume(prevVolumeRef.current);
+    }
+  }, [volume, setVolume]);
+
   return {
     isPlaying,
     isLoading,
     error,
     isReady,
+    volume,
+    setVolume,
+    toggleMute,
     play,
     pause,
     togglePlayPause,

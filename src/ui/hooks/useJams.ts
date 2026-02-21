@@ -1,5 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 
+export type RoomParticipant = {
+  userId: string;
+  username: string;
+  avatar?: string;
+  role: "performer" | "listener";
+  instrument?: string;
+};
+
 // Room type - keeping local since Convex backend doesn't have jams yet
 export type Room = {
   id: string;
@@ -17,6 +25,7 @@ export type Room = {
   lastActiveAt: Date;
   createdAt: Date;
   streamUrl?: string;
+  mockParticipants?: RoomParticipant[];
 };
 
 // In-memory storage for user rooms
@@ -36,9 +45,14 @@ const mockRooms: Room[] = [
     hostId: "99",
     communityId: "lofi",
     isEnabled: true,
-    streamUrl: "http://193.187.132.179:8080/hls/stream.m3u8",
+    streamUrl: "https://virtual-channel.unified-streaming.com/demo_channel-stable.isml/.m3u8",
     lastActiveAt: new Date(Date.now() - 1000 * 60 * 30),
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2),
+    mockParticipants: [
+      { userId: "99", username: "Tylobic", role: "performer", instrument: "Guitar" },
+      { userId: "p2", username: "BeatMaker", role: "performer", instrument: "Drums" },
+      { userId: "p3", username: "SynthWave", role: "listener" },
+    ],
   },
 ];
 

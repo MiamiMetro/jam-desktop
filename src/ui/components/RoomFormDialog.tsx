@@ -14,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Lock } from "lucide-react";
+import { Lock, Minus, Plus } from "lucide-react";
 
 export interface RoomFormData {
   name: string;
@@ -73,52 +73,69 @@ export function RoomFormDialog({
           <AlertDialogTitle className="font-heading">{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="room-name">Room Name</Label>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="room-name" className="text-xs font-medium text-muted-foreground">Room Name</Label>
             <Input
               id="room-name"
               placeholder="e.g., Chill Vibes"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="bg-muted/50 border-transparent focus:bg-background focus:border-border"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="room-description">Description (Optional)</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="room-description" className="text-xs font-medium text-muted-foreground">Description <span className="text-muted-foreground/50">(Optional)</span></Label>
             <Textarea
               id="room-description"
               placeholder="What's this room about?"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              rows={3}
+              rows={2}
+              className="bg-muted/50 border-transparent focus:bg-background focus:border-border resize-none"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="room-genre">Genre (Optional)</Label>
-            <Input
-              id="room-genre"
-              placeholder="e.g., Lo-Fi, Rock, Electronic"
-              value={form.genre}
-              onChange={(e) => setForm({ ...form, genre: e.target.value })}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="room-max">Max Participants</Label>
-            <Input
-              id="room-max"
-              type="number"
-              min="2"
-              max="20"
-              value={form.maxParticipants}
-              onChange={(e) => setForm({ ...form, maxParticipants: parseInt(e.target.value) || 8 })}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="room-genre" className="text-xs font-medium text-muted-foreground">Genre <span className="text-muted-foreground/50">(Optional)</span></Label>
+              <Input
+                id="room-genre"
+                placeholder="e.g., Lo-Fi, Jazz"
+                value={form.genre}
+                onChange={(e) => setForm({ ...form, genre: e.target.value })}
+                className="bg-muted/50 border-transparent focus:bg-background focus:border-border"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-muted-foreground">Max Participants</Label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, maxParticipants: Math.max(2, form.maxParticipants - 1) })}
+                  className="h-9 w-9 flex items-center justify-center rounded-md bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                </button>
+                <span className="w-8 text-center text-sm font-medium tabular-nums">{form.maxParticipants}</span>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, maxParticipants: Math.min(20, form.maxParticipants + 1) })}
+                  className="h-9 w-9 flex items-center justify-center rounded-md bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
           </div>
           <div className="flex items-center justify-between gap-3 rounded-lg glass px-4 py-3">
             <div className="flex items-center gap-2">
               <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-              <Label htmlFor="room-private" className="cursor-pointer text-sm">
-                Private Room
-              </Label>
+              <div>
+                <Label htmlFor="room-private" className="cursor-pointer text-sm">
+                  Private Room
+                </Label>
+                <p className="text-[11px] text-muted-foreground/60">Only invited users can join</p>
+              </div>
             </div>
             <Switch
               id="room-private"

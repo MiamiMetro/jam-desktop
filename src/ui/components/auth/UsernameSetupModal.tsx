@@ -18,6 +18,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useAuthModalStore } from "@/stores/authModalStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useProfileStore } from "@/hooks/useEnsureProfile";
+import { Logo } from "@/components/Logo";
 
 export default function UsernameSetupModal() {
   const { isOpen, mode, close } = useAuthModalStore();
@@ -93,7 +94,7 @@ export default function UsernameSetupModal() {
         <div className="bg-gradient-to-br from-primary/15 via-primary/8 to-transparent px-6 pt-6 pb-4 animate-page-in">
           <div className="flex items-center gap-2.5 mb-3">
             <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/15">
-              <img src={isDark ? "./logo-sidebar-dark.svg" : "./logo-sidebar-light.svg"} alt="Jam Logo" className="w-5 h-5 opacity-90" />
+              <Logo className="w-5 h-5 opacity-90" />
             </div>
             <span className="font-heading font-bold text-lg tracking-tight">Jam</span>
           </div>

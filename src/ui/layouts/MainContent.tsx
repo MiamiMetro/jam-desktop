@@ -1,21 +1,17 @@
-// MainContent.tsx — Main content area with route-based rendering
+// MainContent.tsx — Content area with React Router Outlet + persistent JamRoom
 import { useEffect, useRef, useState, startTransition, lazy, Suspense } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, Outlet } from "react-router-dom";
 import { Spinner } from "@/components/ui/spinner";
 import { useScrollRestoration } from "@/hooks/useScrollRestoration";
-const FeedTab = lazy(() => import("@/components/FeedTab"));
-const JamsTab = lazy(() => import("@/components/JamsTab"));
-const FriendsTab = lazy(() => import("@/components/FriendsTab"));
-const CommunitiesTab = lazy(() => import("@/components/CommunitiesTab"));
-const Profile = lazy(() => import("@/pages/Profile"));
-const Post = lazy(() => import("@/pages/Post"));
+
 const JamRoom = lazy(() => import("@/pages/JamRoom"));
 
 export default function MainContent() {
   const location = useLocation();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isOnJamRoute = location.pathname.startsWith("/jam/");
 
-  // Jam room persistence (same logic from MainPage)
+  // Jam room persistence — keep JamRoom mounted when navigating away
   const jamRoomMatch = location.pathname.match(/^\/jam\/(.+)$/);
   const urlRoomId = jamRoomMatch ? jamRoomMatch[1] : null;
 
@@ -54,24 +50,20 @@ export default function MainContent() {
       }
     >
       <div className="flex-1 relative">
-        {/* Regular pages */}
+        {/* Regular pages — rendered via React Router Outlet with page transition */}
         <div
           ref={scrollContainerRef}
           className="absolute inset-0 overflow-y-auto"
-          style={{ display: location.pathname.startsWith("/jam/") ? "none" : "block" }}
+          style={{ display: isOnJamRoute ? "none" : "block" }}
         >
-          {location.pathname === "/feed" && <FeedTab />}
-          {location.pathname === "/jams" && <JamsTab />}
-          {location.pathname === "/friends" && <FriendsTab />}
-          {(location.pathname.startsWith("/community/") || location.pathname === "/communities") && <CommunitiesTab />}
-          {location.pathname.startsWith("/profile/") && <Profile />}
-          {location.pathname.startsWith("/post/") && <Post />}
+          <Outlet />
         </div>
-        {/* JamRoom — kept mounted when active */}
+
+        {/* JamRoom — kept mounted when active, hidden when on other pages */}
         {jamRoomId && (
           <div
             className="absolute inset-0 overflow-hidden"
-            style={{ display: location.pathname.startsWith("/jam/") ? "block" : "none" }}
+            style={{ display: isOnJamRoute ? "block" : "none" }}
           >
             <JamRoom roomId={jamRoomId} />
           </div>

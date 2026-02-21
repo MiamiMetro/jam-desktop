@@ -23,10 +23,6 @@ export default function UserSearchPanel({ searchQuery }: UserSearchPanelProps) {
     isLoading: isLoadingAllUsers,
   } = useAllUsers(debouncedQuery.trim() || undefined, shouldFetch);
 
-  const filteredUsers = allUsers.filter((u: User) =>
-    u.username.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   if (!searchQuery.trim()) {
     return (
       <div className="flex flex-col items-center justify-center py-10 text-center px-4">
@@ -44,7 +40,7 @@ export default function UserSearchPanel({ searchQuery }: UserSearchPanelProps) {
     );
   }
 
-  if (filteredUsers.length === 0) {
+  if (allUsers.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-10 text-center px-4">
         <p className="text-xs text-muted-foreground">No users found</p>
@@ -54,7 +50,7 @@ export default function UserSearchPanel({ searchQuery }: UserSearchPanelProps) {
 
   return (
     <div>
-      {filteredUsers.map((searchUser: User) => (
+      {allUsers.map((searchUser: User) => (
         <button
           key={searchUser.id}
           className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-primary/5 transition-colors cursor-pointer text-left"

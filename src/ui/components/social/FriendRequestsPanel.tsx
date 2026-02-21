@@ -59,7 +59,7 @@ export default function FriendRequestsPanel() {
             ) : (
               <div>
                 {friendRequests.map((req: User) => (
-                  <div key={req.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-primary/5 transition-colors">
+                  <div key={req.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-primary/5 transition-colors border-l-2 border-l-primary/40">
                     <button className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={() => navigate(`/profile/${req.username}`)}>
                       <Avatar size="sm" className="h-9 w-9 flex-shrink-0">
                         <AvatarImage src={req.avatar_url || ""} alt={req.username} />
@@ -73,7 +73,7 @@ export default function FriendRequestsPanel() {
                     </button>
                     <Button
                       variant="ghost" size="icon-xs"
-                      className="h-7 w-7 text-green-500 hover:text-green-400 hover:bg-green-500/15 rounded-full"
+                      className="h-7 w-7 text-green-500 hover:text-green-400 hover:bg-green-500/15 rounded-full transition-colors"
                       onClick={() => acceptMutation.mutate(req.id)}
                       disabled={acceptMutation.isPending || declineMutation.isPending}
                       title="Accept"
@@ -82,7 +82,7 @@ export default function FriendRequestsPanel() {
                     </Button>
                     <Button
                       variant="ghost" size="icon-xs"
-                      className="h-7 w-7 text-red-500 hover:text-red-400 hover:bg-red-500/15 rounded-full"
+                      className="h-7 w-7 text-red-500 hover:text-red-400 hover:bg-red-500/15 rounded-full transition-colors"
                       onClick={() => declineMutation.mutate(req.id)}
                       disabled={acceptMutation.isPending || declineMutation.isPending}
                       title="Decline"
@@ -150,7 +150,7 @@ export default function FriendRequestsPanel() {
                     </button>
                     <Button
                       variant="ghost" size="icon-xs"
-                      className="h-7 w-7 text-red-500 hover:text-red-400 hover:bg-red-500/15 rounded-full"
+                      className="h-7 w-7 text-red-500 hover:text-red-400 hover:bg-red-500/15 rounded-full transition-colors"
                       onClick={() => cancelMutation.mutate(req.id)}
                       disabled={cancelMutation.isPending}
                       title="Cancel request"

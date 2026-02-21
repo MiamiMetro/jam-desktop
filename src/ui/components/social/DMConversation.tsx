@@ -1,5 +1,5 @@
 // DMConversation.tsx — Full DM conversation with fixed bottom input, proper scroll containment
-import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { AutoLinkedText } from "@/components/AutoLinkedText";
 import { ArrowLeft, Send, ChevronDown } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useAllUsers, useMessages, useSendMessage, useMarkAsRead, useConversations } from "@/hooks/useUsers";
+import { useConversationScroll } from "@/hooks/useConversationScroll";
 
 type MessageWithTime = {
   id: string;
@@ -60,17 +61,9 @@ interface DMConversationProps {
 export default function DMConversation({ partnerId, onBack }: DMConversationProps) {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [messageInput, setMessageInput] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
-  const MAX_MESSAGE_LENGTH = 300;
-
-  const shouldAutoScrollRef = useRef(true);
-  const justSentMessageRef = useRef(false);
-  const [isScrolledUp, setIsScrolledUp] = useState(false);
-  const [newMessagesWhileScrolledUp, setNewMessagesWhileScrolledUp] = useState(0);
-  const [scrollUpStartMessageId, setScrollUpStartMessageId] = useState<string | null>(null);
+  const MAX_MESSAGE_LENGTH = 500;
 
   const { data: allUsers = [] } = useAllUsers(undefined, !!partnerId);
   const { data: conversations = [] } = useConversations(user?.id || "");
@@ -88,109 +81,19 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
 
   const chatPartner = allUsers.find((u: { id: string }) => u.id === partnerId);
 
-  // Scroll state management
-  const scrollStateRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
-  const prevMessagesLengthRef = useRef(messages.length);
-  const isLoadingOlderRef = useRef(false);
-  const justLoadedOlderMessagesRef = useRef(false);
-
-  useEffect(() => {
-    if (isLoadingOlderMessages && !isLoadingOlderRef.current) {
-      isLoadingOlderRef.current = true;
-      const container = messagesContainerRef.current;
-      if (container) {
-        scrollStateRef.current = { scrollHeight: container.scrollHeight, scrollTop: container.scrollTop };
-      }
-    } else if (!isLoadingOlderMessages) {
-      isLoadingOlderRef.current = false;
-    }
-  }, [isLoadingOlderMessages]);
-
-  useLayoutEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-    const messagesIncreased = messages.length > prevMessagesLengthRef.current;
-    if (messagesIncreased && scrollStateRef.current && !isLoadingOlderMessages) {
-      const { scrollHeight: oldScrollHeight, scrollTop: oldScrollTop } = scrollStateRef.current;
-      container.scrollTop = oldScrollTop + (container.scrollHeight - oldScrollHeight);
-      scrollStateRef.current = null;
-      justLoadedOlderMessagesRef.current = true;
-    }
-    prevMessagesLengthRef.current = messages.length;
-  }, [messages.length, isLoadingOlderMessages]);
-
-  const lastMessageId = messages.length > 0 ? messages[messages.length - 1]?.id : null;
-
-  useEffect(() => {
-    if (justLoadedOlderMessagesRef.current) { justLoadedOlderMessagesRef.current = false; return; }
-    const scrollToBottom = () => {
-      const container = messagesContainerRef.current;
-      if (container) container.scrollTop = container.scrollHeight;
-    };
-    if (justSentMessageRef.current) {
-      justSentMessageRef.current = false;
-      setTimeout(scrollToBottom, 0);
-      setTimeout(scrollToBottom, 100);
-      return;
-    }
-    if (shouldAutoScrollRef.current) scrollToBottom();
-  }, [lastMessageId]);
-
-  useEffect(() => {
-    shouldAutoScrollRef.current = true;
-    if (messagesEndRef.current) {
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "auto" }), 100);
-    }
-  }, [partnerId]);
-
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-    let currentScrollUpStartId = scrollUpStartMessageId;
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
-      shouldAutoScrollRef.current = isNearBottom;
-      const wasScrolledUp = !shouldAutoScrollRef.current;
-      setIsScrolledUp(!isNearBottom);
-      if (isNearBottom && wasScrolledUp) {
-        setNewMessagesWhileScrolledUp(0);
-        setScrollUpStartMessageId(null);
-        currentScrollUpStartId = null;
-      }
-      if (!isNearBottom && !currentScrollUpStartId && messages.length > 0) {
-        const newId = messages[messages.length - 1]?.id || null;
-        setScrollUpStartMessageId(newId);
-        currentScrollUpStartId = newId;
-      }
-    };
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [messages, scrollUpStartMessageId]);
-
-  const lastMessageIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    const currentLastId = messages.length > 0 ? messages[messages.length - 1]?.id : null;
-    if (isScrolledUp && currentLastId && lastMessageIdRef.current && currentLastId !== lastMessageIdRef.current) {
-      setNewMessagesWhileScrolledUp(prev => prev + 1);
-    }
-    lastMessageIdRef.current = currentLastId ?? null;
-  }, [messages, isScrolledUp]);
-
-  // Reset scroll state
-  useEffect(() => {
-    setIsScrolledUp(false);
-    setNewMessagesWhileScrolledUp(0);
-    setSendError(null);
-    setScrollUpStartMessageId(null);
-    lastMessageIdRef.current = null;
-    scrollStateRef.current = null;
-    isLoadingOlderRef.current = false;
-    justLoadedOlderMessagesRef.current = false;
-    justSentMessageRef.current = false;
-    prevMessagesLengthRef.current = 0;
-    shouldAutoScrollRef.current = true;
-  }, [partnerId]);
+  const {
+    messagesEndRef,
+    messagesContainerRef,
+    isScrolledUp,
+    newMessagesWhileScrolledUp,
+    scrollUpStartMessageId,
+    scrollToBottom,
+    markJustSentMessage,
+  } = useConversationScroll({
+    messages,
+    partnerId,
+    isLoadingOlderMessages,
+  });
 
   // Mark as read logic
   const canMarkOnLeaveRef = useRef(false);
@@ -234,12 +137,7 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
 
   const handleSendMessage = () => {
     if (!messageInput.trim() || !user) return;
-    shouldAutoScrollRef.current = true;
-    justSentMessageRef.current = true;
-    justLoadedOlderMessagesRef.current = false;
-    setIsScrolledUp(false);
-    setNewMessagesWhileScrolledUp(0);
-    setScrollUpStartMessageId(null);
+    markJustSentMessage();
     setSendError(null);
     sendMessageMutation.mutate(
       { senderId: user.id, receiverId: partnerId, content: messageInput.trim() },
@@ -254,16 +152,14 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
     setMessageInput("");
   };
 
+  const charCount = messageInput.length;
+  const showCharCount = charCount > MAX_MESSAGE_LENGTH * 0.8;
+
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* ─── Conversation Header ─── */}
+      {/* Conversation Header */}
       <div className="px-4 py-3 border-b border-border flex items-center gap-3 flex-shrink-0 glass-strong">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 rounded-full flex-shrink-0"
-          onClick={onBack}
-        >
+        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full flex-shrink-0" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         {chatPartner && (
@@ -284,7 +180,7 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
         )}
       </div>
 
-      {/* ─── Messages Area ─── */}
+      {/* Messages Area */}
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto min-h-0 relative">
         <div className="px-4 py-3 space-y-1">
           {hasOlderMessages && (
@@ -357,12 +253,7 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
             <Button
               variant="secondary" size="icon"
               className="h-9 w-9 rounded-full shadow-lg relative pointer-events-auto border border-border"
-              onClick={() => {
-                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-                shouldAutoScrollRef.current = true;
-                setNewMessagesWhileScrolledUp(0);
-                setScrollUpStartMessageId(null);
-              }}
+              onClick={scrollToBottom}
             >
               <ChevronDown className="h-4 w-4" />
               {newMessagesWhileScrolledUp > 0 && (
@@ -375,7 +266,7 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
         )}
       </div>
 
-      {/* ─── Error Banner ─── */}
+      {/* Error Banner */}
       {sendError && (
         <div className="px-4 py-2 bg-destructive/10 border-t border-destructive/20 flex-shrink-0">
           <p className="text-xs text-destructive flex items-center gap-2">
@@ -385,21 +276,30 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
         </div>
       )}
 
-      {/* ─── Message Input — pinned to bottom ─── */}
+      {/* Message Input */}
       <div className="px-4 py-3 border-t border-border flex-shrink-0 bg-background">
         <form
           onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}
           className="flex items-center gap-2"
         >
-          <Input
-            type="text"
-            placeholder="Start a new message"
-            value={messageInput}
-            onChange={(e) => setMessageInput(e.target.value)}
-            className="flex-1 h-10 text-sm bg-muted/50 border-transparent focus:bg-background focus:border-border rounded-full px-4"
-            maxLength={MAX_MESSAGE_LENGTH}
-            autoFocus
-          />
+          <div className="flex-1 relative">
+            <Input
+              type="text"
+              placeholder="Start a new message"
+              value={messageInput}
+              onChange={(e) => setMessageInput(e.target.value)}
+              className="w-full h-10 text-sm bg-muted/50 border-transparent focus:bg-background focus:border-border rounded-full px-4 pr-12"
+              maxLength={MAX_MESSAGE_LENGTH}
+              autoFocus
+            />
+            {showCharCount && (
+              <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] tabular-nums ${
+                charCount >= MAX_MESSAGE_LENGTH ? "text-destructive" : "text-muted-foreground"
+              }`}>
+                {charCount}/{MAX_MESSAGE_LENGTH}
+              </span>
+            )}
+          </div>
           <Button
             type="submit"
             size="icon"

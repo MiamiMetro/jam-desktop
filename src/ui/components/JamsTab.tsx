@@ -17,8 +17,13 @@ import {
 import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useJams, useMyRoom, useCreateRoom, useUpdateRoom, useActivateRoom, useDeactivateRoom } from "@/hooks/useJams";
+import { Avatar, AvatarFallback, AvatarImage, AvatarBadge } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
+import { RoomCard } from "@/components/RoomCard";
+import { useFriends } from "@/hooks/useFriends";
+import { useOnlineUsers } from "@/hooks/useUsers";
+import { Logo } from "@/components/Logo";
 
 interface JamsTabProps {
   onGuestAction?: () => void;
@@ -32,6 +37,8 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
   const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const searchQuery = searchParams.get("search") || "";
   const { data: rooms = [], isLoading: roomsLoading } = useJams();
+  const { data: friends = [] } = useFriends();
+  const { data: onlineUsers = [] } = useOnlineUsers();
   const { data: myRoom, isLoading: myRoomLoading } = useMyRoom(user?.id);
   const createRoomMutation = useCreateRoom();
   const updateRoomMutation = useUpdateRoom();
@@ -136,15 +143,14 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
   };
 
   return (
-    <div className="p-6">
-      {/* Hero Header */}
-      <div className="mb-6 -mx-6 -mt-6 px-6 pt-6 pb-5 bg-gradient-to-br from-primary/12 via-primary/5 to-transparent relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_80%_at_80%_-20%,oklch(0.78_0.16_70/8%),transparent)] pointer-events-none" />
-        <div className="relative animate-page-in">
-          <h2 className="text-2xl font-heading font-bold mb-1">Jams</h2>
-          <p className="text-sm text-muted-foreground">Live rooms where the music happens</p>
-        </div>
+    <div className="flex flex-col h-full">
+      {/* Compact Header */}
+      <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
+        <Music className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-sm font-heading font-semibold text-muted-foreground">Jams</h2>
       </div>
+
+      <div className="flex-1 overflow-y-auto p-5">
 
       {/* My Room Section */}
       {!isGuest && user && (
@@ -244,22 +250,18 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
               </div>
             </div>
           ) : (
-            <div className="p-6 rounded-xl glass border border-dashed border-border/50">
-              <div className="text-center">
-                <img
-                  src={isDark ? "./logo-sidebar-dark.svg" : "./logo-sidebar-light.svg"}
-                  className="h-10 w-10 mx-auto mb-3 opacity-40 animate-float"
-                  alt="Jam Logo"
-                />
-                <p className="text-sm font-medium mb-1">You don't have a room yet</p>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Create your room to start jamming with others
-                </p>
-                <Button variant="default" size="sm" onClick={() => setIsCreateRoomOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create My Room
-                </Button>
+            <div className="flex items-center gap-4 p-4 rounded-xl glass border border-dashed border-border/50">
+              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Music className="h-5 w-5 text-primary" />
               </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">Create your room to start jamming</p>
+                <p className="text-xs text-muted-foreground">Set up a room and invite friends</p>
+              </div>
+              <Button variant="default" size="sm" onClick={() => setIsCreateRoomOpen(true)} className="flex-shrink-0">
+                <Plus className="h-4 w-4 mr-1" />
+                Create
+              </Button>
             </div>
           )}
         </div>
@@ -281,6 +283,41 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
         mode="edit"
         initialData={editInitialData}
       />
+
+      {/* Friends Jamming Now */}
+      {!isGuest && (() => {
+        const onlineIds = new Set(onlineUsers.map(u => u.id));
+        const onlineFriends = friends.filter(f => f && onlineIds.has(f.id));
+        const activeRooms = rooms.filter(r => r.isEnabled);
+        if (onlineFriends.length === 0 || activeRooms.length === 0) return null;
+        return (
+          <div className="mb-6">
+            <h3 className="text-sm font-heading font-semibold text-muted-foreground mb-3">
+              Friends Jamming Now
+            </h3>
+            <div className="flex gap-3 overflow-x-auto pb-1">
+              {onlineFriends.slice(0, 6).map(friend => friend && (
+                <button
+                  key={friend.id}
+                  onClick={() => navigate(`/profile/${friend.username}`)}
+                  className="flex flex-col items-center gap-1.5 p-3 rounded-xl glass hover:glass-strong transition-all duration-200 cursor-pointer min-w-[80px] hover:ring-1 hover:ring-primary/20"
+                >
+                  <Avatar size="default" className="ring-2 ring-green-500/30">
+                    <AvatarImage src={friend.avatar_url || ""} alt={friend.username} />
+                    <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                      {friend.username.substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                    <AvatarBadge className="bg-green-500" />
+                  </Avatar>
+                  <span className="text-xs font-medium truncate w-full text-center">
+                    {friend.username}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Search */}
       <SearchInput
@@ -312,52 +349,10 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
           </div>
         ) : (
           filteredRooms.map((room) => (
-            <div
-              key={room.id}
-              onClick={() => handleRoomClick(room.id)}
-              className="p-4 rounded-xl glass hover:glass-strong cursor-pointer transition-all duration-200 group hover:ring-1 hover:ring-primary/20 hover:-translate-y-0.5 relative overflow-hidden"
-            >
-              {/* Active pulse indicator */}
-              {room.isEnabled && (
-                <div className="absolute top-3 right-3 h-2 w-2 rounded-full bg-green-400 animate-pulse" />
-              )}
-              <div className="flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Hash className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <h3 className="text-sm font-semibold truncate">
-                      {room.name}
-                    </h3>
-                    {room.isPrivate && (
-                      <Lock className="h-3 w-3 text-muted-foreground" />
-                    )}
-                  </div>
-                  {room.description && (
-                    <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
-                      {room.description}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
-                    {room.genre && (
-                      <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium">
-                        {room.genre}
-                      </span>
-                    )}
-                    <div className="flex items-center gap-1">
-                      <Users className="h-3 w-3" />
-                      <span>
-                        {room.participants}/{room.maxParticipants}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Host: {room.hostName}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <RoomCard key={room.id} room={room} onClick={handleRoomClick} />
           ))
         )}
+      </div>
       </div>
     </div>
   );

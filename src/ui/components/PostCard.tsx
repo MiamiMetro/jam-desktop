@@ -1,11 +1,14 @@
+import { useState, useCallback } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Heart,
   MessageCircle,
   Share2,
+  Check,
   Hash as HashIcon,
 } from "lucide-react";
-import { PostAudioPlayer } from "@/components/PostAudioPlayer";
+import { AudioPlayer } from "@/components/AudioPlayer";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { AutoLinkedText } from "@/components/AutoLinkedText";
 
 import type { FrontendPost } from '@/hooks/usePosts';
@@ -20,9 +23,7 @@ interface PostCardProps {
   onPostClick?: (postId: string) => void;
   onLike?: (postId: string) => void;
   onPlayPause?: () => void;
-  onGuestAction?: () => void;
   formatTimeAgo: (date: Date) => string;
-  formatDuration: (seconds: number) => string;
 }
 
 export function PostCard({
@@ -35,19 +36,28 @@ export function PostCard({
   onPostClick,
   onLike,
   onPlayPause,
-  onGuestAction: _onGuestAction,
   formatTimeAgo,
-  formatDuration: _formatDuration,
 }: PostCardProps) {
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/#/post/${post.id}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [post.id]);
+
   return (
-    <div className="p-5 hover:bg-muted/20 transition-all duration-200">
+    <div className="p-5 border-l-2 border-l-transparent hover:border-l-primary/40 hover:bg-muted/15 transition-all duration-200">
       <div className="flex gap-3">
         <button
           onClick={() => onAuthorClick?.(post.author.username)}
           className="flex-shrink-0 cursor-pointer p-0 m-0 border-0 bg-transparent hover:opacity-80 transition-opacity self-start"
           aria-label={`Go to ${post.author.username}'s profile`}
         >
-          <Avatar size="default" className="pointer-events-none ring-1 ring-border">
+          <Avatar size="default" className="pointer-events-none ring-2 ring-border">
             <AvatarImage src={post.author.avatar || ""} alt={post.author.username} />
             <AvatarFallback className="bg-muted text-muted-foreground">
               {post.author.username.substring(0, 2).toUpperCase()}
@@ -63,9 +73,14 @@ export function PostCard({
               {post.author.username}
             </button>
             {post.isGlobal ? (
-              <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary">
-                Discover
-              </span>
+              <Tooltip>
+                <TooltipTrigger>
+                  <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary cursor-default">
+                    Global
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Visible to everyone</TooltipContent>
+              </Tooltip>
             ) : communityName ? (
               <button
                 onClick={() => post.community && onCommunityClick?.(post.community)}
@@ -87,14 +102,15 @@ export function PostCard({
             />
           )}
           {post.audioFile && (
-            <PostAudioPlayer
+            <AudioPlayer
               audioFile={post.audioFile}
               isActive={isPlaying}
               onActivate={() => onPlayPause?.()}
               isGuest={isGuest}
+              variant="post"
             />
           )}
-          <div className="flex items-center gap-6 mt-3">
+          <div className="flex items-center gap-6 mt-3 pt-3 border-t border-border/30">
             <button
               type="button"
               onClick={(e) => {
@@ -119,12 +135,20 @@ export function PostCard({
               <MessageCircle className="h-4 w-4" />
               <span>{post.comments}</span>
             </button>
-            <button 
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            >
-              <Share2 className="h-4 w-4" />
-              <span>{post.shares}</span>
-            </button>
+            <Tooltip open={copied || undefined}>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={handleShare}
+                  className={`flex items-center gap-2 text-sm transition-colors cursor-pointer ${
+                    copied ? "text-green-500" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+                  {copied && <span>Copied!</span>}
+                </button>
+              </TooltipTrigger>
+              {copied && <TooltipContent>Link copied!</TooltipContent>}
+            </Tooltip>
           </div>
         </div>
       </div>

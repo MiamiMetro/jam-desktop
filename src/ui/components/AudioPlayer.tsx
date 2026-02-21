@@ -1,9 +1,10 @@
+// AudioPlayer.tsx — Unified audio player for posts and comments
 import { Button } from "@/components/ui/button";
 import { Music, Play, Pause } from "lucide-react";
 import { useAudioPlayer } from "@/hooks/useAudioPlayer";
 import { formatDuration } from "@/lib/postUtils";
 
-interface PostAudioPlayerProps {
+interface AudioPlayerProps {
   audioFile: {
     url: string;
     title: string;
@@ -12,9 +13,16 @@ interface PostAudioPlayerProps {
   isActive: boolean;
   onActivate: () => void;
   isGuest?: boolean;
+  variant?: "post" | "comment";
 }
 
-export function PostAudioPlayer({ audioFile, isActive, onActivate, isGuest = false }: PostAudioPlayerProps) {
+export function AudioPlayer({
+  audioFile,
+  isActive,
+  onActivate,
+  isGuest = false,
+  variant = "post",
+}: AudioPlayerProps) {
   // Only enable audio player if URL is valid (not "#" placeholder)
   const audioUrl = audioFile.url && audioFile.url !== "#" ? audioFile.url : undefined;
   const audioPlayer = useAudioPlayer(isActive ? audioUrl : undefined);
@@ -38,7 +46,7 @@ export function PostAudioPlayer({ audioFile, isActive, onActivate, isGuest = fal
   };
 
   return (
-    <div className="mb-3 p-3 bg-muted rounded-lg">
+    <div className={`p-3 bg-muted rounded-lg ${variant === "post" ? "mb-3" : "mt-2"}`}>
       <div className="flex items-center gap-3">
         <Button
           variant="ghost"
@@ -61,11 +69,11 @@ export function PostAudioPlayer({ audioFile, isActive, onActivate, isGuest = fal
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <div 
+            <div
               className="flex-1 h-1.5 bg-muted-foreground/20 rounded-full overflow-hidden cursor-pointer"
               onClick={handleSeek}
             >
-              <div 
+              <div
                 className="h-full bg-primary transition-all"
                 style={{ width: isActive ? `${audioPlayer.progress}%` : "0%" }}
               />
@@ -79,4 +87,3 @@ export function PostAudioPlayer({ audioFile, isActive, onActivate, isGuest = fal
     </div>
   );
 }
-

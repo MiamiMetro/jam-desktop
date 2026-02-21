@@ -1,6 +1,6 @@
 // FriendsTab.tsx — Twitter DM-style split panel: conversation list left, active view right
 import { useState } from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage, AvatarBadge } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,7 +14,7 @@ import {
 import { useAuthStore } from "@/stores/authStore";
 import { useAuthModalStore } from "@/stores/authModalStore";
 import { useFriends, useFriendRequests } from "@/hooks/useFriends";
-import { useConversations } from "@/hooks/useUsers";
+import { useConversations, useOnlineUsers } from "@/hooks/useUsers";
 import DMConversation from "@/components/social/DMConversation";
 import UserSearchPanel from "@/components/social/UserSearchPanel";
 import FriendRequestsPanel from "@/components/social/FriendRequestsPanel";
@@ -28,6 +28,8 @@ function FriendsTab() {
   const { data: friendRequests = [] } = useFriendRequests();
   const { data: friends = [] } = useFriends();
   const { data: conversations = [] } = useConversations(user?.id || "");
+  const { data: onlineUsers = [] } = useOnlineUsers();
+  const onlineIds = new Set(onlineUsers.map(u => u.id));
 
   const [leftView, setLeftView] = useState<LeftView>("conversations");
   const [activeDmPartnerId, setActiveDmPartnerId] = useState<string | null>(null);
@@ -83,9 +85,9 @@ function FriendsTab() {
       {/* ─── Left Panel: Conversations ─── */}
       <div className="w-[320px] min-w-[320px] surface-elevated flex flex-col h-full">
         {/* Left Header */}
-        <div className="px-4 pt-4 pb-3 flex-shrink-0">
+        <div className="px-4 pt-3 pb-3 flex-shrink-0 border-b border-border">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-heading font-bold">Messages</h2>
+            <h2 className="text-sm font-heading font-semibold text-muted-foreground">Messages</h2>
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
@@ -210,18 +212,21 @@ function FriendsTab() {
                       <button
                         key={friend.id}
                         onClick={() => handleSelectFriend(friend.id)}
-                        className={`w-full flex items-center gap-3 px-4 py-3 transition-colors text-left cursor-pointer border-b border-border/50 ${
+                        className={`w-full flex items-center gap-3 px-4 py-3 transition-all text-left cursor-pointer border-b border-border/50 border-l-2 ${
                           isActive
-                            ? "bg-primary/8 border-r-2 border-r-primary"
-                            : "hover:bg-muted/50"
+                            ? "bg-primary/8 border-l-primary"
+                            : "border-l-transparent hover:bg-muted/50 hover:border-l-primary/30"
                         }`}
                       >
                         <div className="relative flex-shrink-0">
-                          <Avatar size="default" className="h-11 w-11">
+                          <Avatar size="default" className={`h-11 w-11 ${onlineIds.has(friend.id) ? "ring-2 ring-green-500/30" : ""}`}>
                             <AvatarImage src={friend.avatar_url || ""} alt={friend.username} />
                             <AvatarFallback className="bg-muted text-muted-foreground text-sm">
                               {friend.username.substring(0, 2).toUpperCase()}
                             </AvatarFallback>
+                            {onlineIds.has(friend.id) && (
+                              <AvatarBadge className="bg-green-500" />
+                            )}
                           </Avatar>
                           {conversation?.hasUnread && (
                             <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-primary border-2 border-card" />
@@ -273,12 +278,12 @@ function FriendsTab() {
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
-            <div className="h-16 w-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-              <MessageCircle className="h-8 w-8 text-muted-foreground/40 animate-float" />
+            <div className="h-14 w-14 rounded-full bg-muted/30 flex items-center justify-center mb-3">
+              <MessageCircle className="h-7 w-7 text-muted-foreground/30" />
             </div>
-            <h3 className="text-lg font-heading font-semibold mb-1">Select a conversation</h3>
-            <p className="text-sm text-muted-foreground max-w-xs">
-              Choose a friend from the list to start messaging, or find new people to connect with
+            <h3 className="text-base font-heading font-semibold mb-1 text-muted-foreground">No conversation selected</h3>
+            <p className="text-sm text-muted-foreground/60 max-w-xs">
+              Pick a friend from the list to start chatting
             </p>
           </div>
         )}

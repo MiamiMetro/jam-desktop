@@ -39,7 +39,7 @@ export function ComposePost({
   textareaRows = 4,
   textareaMinHeight = "100px",
   maxLength = MAX_POST_LENGTH,
-  wrapperClassName = "glass border-b border-border p-5",
+  wrapperClassName = "glass-strong rounded-xl mx-4 my-3 p-4",
   inputId = "audio-upload",
   isSubmitting = false,
 }: ComposePostProps) {
@@ -137,9 +137,9 @@ export function ComposePost({
             placeholder={placeholder}
             value={newPost.content}
             onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
-            className="resize-none border-border w-full overflow-wrap-anywhere"
-            style={{ minHeight: textareaMinHeight }}
-            rows={textareaRows}
+            className="resize-none border-border w-full overflow-wrap-anywhere transition-all duration-200 focus:min-h-[120px]"
+            style={{ minHeight: newPost.content ? textareaMinHeight : "60px" }}
+            rows={newPost.content ? textareaRows : 2}
             maxLength={maxLength}
             wrap="soft"
           />

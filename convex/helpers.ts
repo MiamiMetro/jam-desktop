@@ -127,9 +127,13 @@ export async function getCurrentProfile(ctx: QueryCtx | MutationCtx) {
  * Get the current user's profile, throwing an error if not authenticated
  */
 export async function requireAuth(ctx: QueryCtx | MutationCtx) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
+    throw new Error("NOT_AUTHENTICATED: You must be signed in");
+  }
   const profile = await getCurrentProfile(ctx);
   if (!profile) {
-    throw new Error("Not authenticated");
+    throw new Error("PROFILE_REQUIRED: You must create a profile before performing this action");
   }
   return profile;
 }

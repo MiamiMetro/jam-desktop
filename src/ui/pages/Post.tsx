@@ -1,6 +1,6 @@
-// Post.tsx — Post detail page with glass surfaces and polished interactions
-import { useParams, useNavigate } from "react-router-dom";
-import { useState } from "react";
+// Post.tsx — Post detail page with single column layout, comments below
+import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useState, useCallback } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,7 @@ import {
   Heart,
   MessageCircle,
   Share2,
+  Check,
   Hash as HashIcon,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
@@ -21,12 +22,14 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
 import { useAudioPlayer } from "@/hooks/useAudioPlayer";
-import { CommentAudioPlayer } from "@/components/CommentAudioPlayer";
+import { AudioPlayer } from "@/components/AudioPlayer";
 import { ComposePost } from "@/components/ComposePost";
 
 function Post() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isModal = !!(location.state as any)?.backgroundLocation;
   const { isGuest } = useAuthStore();
   const { data: post, isLoading } = usePost(id || "");
   const commentsQuery = useComments(id || "");
@@ -38,15 +41,22 @@ function Post() {
   const toggleCommentLikeMutation = useToggleCommentLike();
   const { data: communities = [] } = useCommunities();
 
-  // Audio player for post audio
   const postAudioUrl = post?.audioFile?.url;
   const postAudioPlayer = useAudioPlayer(postAudioUrl);
 
-  // Track which comment audio is playing
   const [playingCommentId, setPlayingCommentId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = useCallback(() => {
+    const url = `${window.location.origin}/#/post/${id}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [id]);
 
   const handleAuthorClick = (username: string) => {
-      navigate(`/profile/${username}`);
+    navigate(`/profile/${username}`);
   };
 
   const handleCommunityClick = (communityId: string) => {
@@ -73,17 +83,11 @@ function Post() {
 
   const handleSubmitComment = (content: string, audioFile: File | null) => {
     if (!id || (!content.trim() && !audioFile) || isGuest) return;
-
     createCommentMutation.mutate(
       { postId: id, content: content.trim() || "", audioFile: audioFile || undefined },
-      {
-        onSuccess: () => {
-          // State is managed by ComposePost, so we don't need to reset it here
-        },
-      }
+      { onSuccess: () => {} }
     );
   };
-
 
   const getCommunityName = (communityId?: string) => {
     if (!communityId) return null;
@@ -110,46 +114,46 @@ function Post() {
   const communityName = getCommunityName(post.community);
 
   return (
-    <div className="p-4 animate-page-in">
-      {/* Back Button */}
-      <div className="mb-4">
+    <div className="flex flex-col h-full">
+      {/* Compact Header Bar */}
+      <div className="px-4 py-2.5 border-b border-border flex items-center gap-3 flex-shrink-0">
         <Button
           variant="ghost"
-          size="sm"
+          size="icon"
+          className="h-8 w-8 rounded-lg hover:bg-muted/50"
           onClick={() => navigate(-1)}
-          className="glass rounded-lg flex items-center gap-2 hover:bg-foreground/[0.06]"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back
         </Button>
       </div>
 
-      {/* Post Content */}
-      <div className="max-w-3xl mx-auto">
-        <div className="glass-strong rounded-xl p-6">
-          <div className="flex gap-3">
+      {/* Scrollable content — single column */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Post content */}
+        <div className="p-6">
+          <div className="flex gap-4">
             <button
               onClick={() => handleAuthorClick(post.author.username)}
               className="flex-shrink-0 cursor-pointer p-0 border-0 bg-transparent hover:opacity-80 transition-opacity self-start"
             >
-              <Avatar size="default">
+              <Avatar size="lg" className="ring-2 ring-border">
                 <AvatarImage src={post.author.avatar || ""} alt={post.author.username} />
-                <AvatarFallback className="bg-muted text-muted-foreground">
+                <AvatarFallback className="bg-muted text-muted-foreground text-lg">
                   {post.author.username.substring(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
             </button>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <button
                   onClick={() => handleAuthorClick(post.author.username)}
-                  className="font-heading font-semibold text-base hover:underline cursor-pointer"
+                  className="font-heading font-bold text-lg hover:underline cursor-pointer"
                 >
                   {post.author.username}
                 </button>
                 {post.isGlobal ? (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                    Discover
+                    Global
                   </span>
                 ) : communityName ? (
                   <button
@@ -157,166 +161,174 @@ function Post() {
                     className="text-xs px-2 py-0.5 rounded-full glass hover:bg-foreground/[0.06] transition-colors flex items-center gap-1"
                   >
                     <HashIcon className="h-3 w-3" />
-                    From {communityName}
+                    {communityName}
                   </button>
                 ) : null}
-                <span className="text-sm text-muted-foreground">
-                  {formatTimeAgo(post.timestamp)}
-                </span>
               </div>
-              {post.content && (
-                <p className="text-base mb-4 whitespace-pre-wrap">{post.content}</p>
-              )}
-              {post.audioFile && (
-                <div className="mb-4 p-4 glass rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-12 w-12 rounded-full glass hover:bg-foreground/[0.06]"
-                      onClick={() => {
+              <span className="text-xs text-muted-foreground">
+                {formatTimeAgo(post.timestamp)}
+              </span>
+            </div>
+          </div>
+
+          {post.content && (
+            <p className="text-base mt-4 whitespace-pre-wrap leading-relaxed">{post.content}</p>
+          )}
+
+          {/* Audio player */}
+          {post.audioFile && (
+            <div className="mt-4 p-4 glass-strong rounded-xl">
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-12 w-12 rounded-full glass hover:bg-foreground/[0.06] transition-colors flex-shrink-0"
+                  onClick={() => {
+                    if (isGuest) return;
+                    postAudioPlayer.togglePlayPause();
+                  }}
+                >
+                  {postAudioPlayer.isPlaying ? (
+                    <Pause className="h-6 w-6" />
+                  ) : (
+                    <Play className="h-6 w-6" />
+                  )}
+                </Button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Music className="h-4 w-4 text-primary flex-shrink-0" />
+                    <span className="text-sm font-heading font-semibold truncate">
+                      {post.audioFile.title}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 group/progress">
+                    <div
+                      className="flex-1 h-1.5 group-hover/progress:h-2.5 bg-foreground/[0.08] rounded-full overflow-hidden cursor-pointer transition-all duration-200"
+                      onClick={(e) => {
                         if (isGuest) return;
-                        postAudioPlayer.togglePlayPause();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const x = e.clientX - rect.left;
+                        const percentage = (x / rect.width) * 100;
+                        postAudioPlayer.seek(percentage);
                       }}
                     >
-                      {postAudioPlayer.isPlaying ? (
-                        <Pause className="h-6 w-6" />
-                      ) : (
-                        <Play className="h-6 w-6" />
-                      )}
-                    </Button>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Music className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                        <span className="text-base font-medium truncate">
-                          {post.audioFile.title}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 group/progress">
-                        <div className="flex-1 h-1.5 group-hover/progress:h-2.5 bg-foreground/[0.08] rounded-full overflow-hidden cursor-pointer transition-all duration-200"
-                          onClick={(e) => {
-                            if (isGuest) return;
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            const x = e.clientX - rect.left;
-                            const percentage = (x / rect.width) * 100;
-                            postAudioPlayer.seek(percentage);
-                          }}
-                        >
-                          <div
-                            className="h-full bg-primary rounded-full transition-all"
-                            style={{ width: `${postAudioPlayer.progress}%` }}
-                          />
-                        </div>
-                        <span className="text-sm text-muted-foreground tabular-nums">
-                          {formatDuration(post.audioFile.duration)}
-                        </span>
-                      </div>
+                      <div
+                        className="h-full bg-primary rounded-full transition-all"
+                        style={{ width: `${postAudioPlayer.progress}%` }}
+                      />
                     </div>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {formatDuration(post.audioFile.duration)}
+                    </span>
                   </div>
                 </div>
-              )}
-              <div className="flex items-center gap-6 pt-4 border-t border-border/50">
-                <button
-                  onClick={handleLikePost}
-                  className={`flex items-center gap-2 text-base transition-all cursor-pointer active:scale-90 ${
-                    post.isLiked
-                      ? "text-red-500 hover:text-red-600"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <Heart className={`h-5 w-5 transition-transform ${post.isLiked ? "fill-current" : ""}`} />
-                  <span>{post.likes}</span>
-                </button>
-                <button
-                  className="flex items-center gap-2 text-base text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                >
-                  <MessageCircle className="h-5 w-5" />
-                  <span>{post.comments}</span>
-                </button>
-                <button className="flex items-center gap-2 text-base text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                  <Share2 className="h-5 w-5" />
-                  <span>{post.shares}</span>
-                </button>
               </div>
             </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center gap-6 mt-5 pt-4 border-t border-border/30">
+            <button
+              onClick={handleLikePost}
+              className={`flex items-center gap-2 text-sm transition-all cursor-pointer active:scale-90 ${
+                post.isLiked
+                  ? "text-red-500 hover:text-red-600"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Heart className={`h-5 w-5 transition-transform ${post.isLiked ? "fill-current" : ""}`} />
+              <span>{post.likes}</span>
+            </button>
+            <span className="flex items-center gap-2 text-sm text-muted-foreground">
+              <MessageCircle className="h-5 w-5" />
+              <span>{post.comments}</span>
+            </span>
+            <button
+              onClick={handleShare}
+              className={`flex items-center gap-2 text-sm transition-colors cursor-pointer ${
+                copied ? "text-green-500" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {copied ? <Check className="h-5 w-5" /> : <Share2 className="h-5 w-5" />}
+              {copied && <span>Copied!</span>}
+            </button>
           </div>
         </div>
 
         {/* Comments Section */}
-        <div className="mt-6 glass-strong rounded-xl p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="w-1 h-5 rounded-full bg-primary" />
-            <h3 className="text-lg font-heading font-semibold">Comments ({comments.length})</h3>
+        <div className="border-t border-border">
+          <div className="px-6 py-3 flex items-center gap-2">
+            <span className="w-1 h-4 rounded-full bg-primary" />
+            <h3 className="text-sm font-heading font-semibold">Comments</h3>
+            <span className="text-xs text-muted-foreground">({comments.length})</span>
           </div>
 
-          {/* Comment Form */}
           {!isGuest && (
-            <div className="mb-6 pb-6">
+            <div className="px-6 pb-4">
               <ComposePost
                 placeholder="Write a comment..."
                 onSubmit={handleSubmitComment}
-                submitButtonText="Post Comment"
-                textareaRows={3}
-                textareaMinHeight="80px"
+                submitButtonText="Comment"
+                textareaRows={2}
+                textareaMinHeight="60px"
                 maxLength={1000}
-                wrapperClassName="glass rounded-xl p-4"
+                wrapperClassName="glass rounded-xl p-3"
                 inputId="comment-audio-upload"
                 isSubmitting={createCommentMutation.isPending}
               />
             </div>
           )}
 
-          {/* Comments List */}
           {commentsLoading ? (
             <LoadingState message="Loading comments..." />
           ) : comments.length === 0 ? (
-            <EmptyState
-              icon={MessageCircle}
-              title="No comments yet"
-              description="Be the first to comment!"
-            />
+            <div className="flex flex-col items-center py-12 text-center px-6">
+              <MessageCircle className="h-8 w-8 text-muted-foreground/30 mb-2" />
+              <p className="text-sm text-muted-foreground">No comments yet</p>
+              <p className="text-xs text-muted-foreground/60">Be the first to comment!</p>
+            </div>
           ) : (
             <>
-              <div className="space-y-4">
-                {comments.map((comment) => {
-                return (
-                  <div key={comment.id} className="flex gap-3 p-3 rounded-lg hover:bg-foreground/[0.03] transition-colors">
+              <div className="divide-y divide-border/30">
+                {comments.map((comment) => (
+                  <div key={comment.id} className="flex gap-3 px-6 py-3 hover:bg-muted/10 transition-all">
                     <button
                       type="button"
                       onClick={() => navigate(`/profile/${comment.author.username}`)}
                       className="flex-shrink-0 p-0 m-0 border-0 bg-transparent cursor-pointer hover:opacity-80 transition-opacity self-start"
                       aria-label={`Go to ${comment.author.username}'s profile`}
                     >
-                      <Avatar size="default" className="pointer-events-none">
+                      <Avatar size="sm" className="pointer-events-none ring-1 ring-border">
                         <AvatarImage src={comment.author.avatar || ""} alt={comment.author.username} />
-                        <AvatarFallback className="bg-muted text-muted-foreground">
+                        <AvatarFallback className="bg-muted text-muted-foreground text-xs">
                           {comment.author.username.substring(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
                     </button>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-0.5">
                         <button
                           onClick={() => navigate(`/profile/${comment.author.username}`)}
-                          className="font-heading font-semibold text-sm hover:underline cursor-pointer"
+                          className="font-semibold text-xs hover:underline cursor-pointer"
                         >
                           {comment.author.username}
                         </button>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-[11px] text-muted-foreground">
                           {formatTimeAgo(comment.timestamp)}
                         </span>
                       </div>
                       {comment.content && (
-                        <p className="text-sm whitespace-pre-wrap mb-2">{comment.content}</p>
+                        <p className="text-sm whitespace-pre-wrap leading-relaxed">{comment.content}</p>
                       )}
                       {comment.audioFile && (
-                        <CommentAudioPlayer
+                        <AudioPlayer
                           audioFile={comment.audioFile}
                           isActive={playingCommentId === comment.id}
                           onActivate={() => setPlayingCommentId(comment.id)}
+                          variant="comment"
                         />
                       )}
-                      <div className="flex items-center gap-4 mt-2">
+                      <div className="flex items-center gap-4 mt-1.5">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -329,20 +341,21 @@ function Post() {
                               : "text-muted-foreground hover:text-foreground"
                           }`}
                         >
-                          <Heart className={`h-3.5 w-3.5 ${comment.isLiked ? "fill-current" : ""}`} />
+                          <Heart className={`h-3 w-3 ${comment.isLiked ? "fill-current" : ""}`} />
                           <span>{comment.likes || 0}</span>
                         </button>
                       </div>
                     </div>
                   </div>
-                );
-                })}
+                ))}
               </div>
-              <LoadMoreButton
-                hasNextPage={hasNextPage}
-                isFetchingNextPage={isFetchingNextPage}
-                fetchNextPage={fetchNextPage}
-              />
+              <div className="p-4">
+                <LoadMoreButton
+                  hasNextPage={hasNextPage}
+                  isFetchingNextPage={isFetchingNextPage}
+                  fetchNextPage={fetchNextPage}
+                />
+              </div>
             </>
           )}
         </div>

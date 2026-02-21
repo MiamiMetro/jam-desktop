@@ -13,6 +13,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -21,23 +22,31 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { AvatarBadge, AvatarGroup } from "@/components/ui/avatar";
+import { Logo } from "@/components/Logo";
 import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useAuthModalStore } from "@/stores/authModalStore";
 import { useJam } from "@/hooks/useJams";
+import { useFriends } from "@/hooks/useFriends";
+import { useOnlineUsers } from "@/hooks/useUsers";
 
 interface NavItem {
   label: string;
   icon: React.ReactNode;
   path: string;
   matchPrefix?: string;
+  shortcut: string;
 }
 
+const isMac = navigator.platform.toUpperCase().includes("MAC");
+const modKey = isMac ? "\u2318" : "Ctrl+";
+
 const navItems: NavItem[] = [
-  { label: "Jams", icon: <Music className="h-5 w-5" />, path: "/jams" },
-  { label: "Feed", icon: <Rss className="h-5 w-5" />, path: "/feed" },
-  { label: "Friends", icon: <MessageCircle className="h-5 w-5" />, path: "/friends" },
-  { label: "Communities", icon: <UsersIcon className="h-5 w-5" />, path: "/communities", matchPrefix: "/communit" },
+  { label: "Jams", icon: <Music className="h-5 w-5" />, path: "/jams", shortcut: `${modKey}1` },
+  { label: "Feed", icon: <Rss className="h-5 w-5" />, path: "/feed", shortcut: `${modKey}2` },
+  { label: "Friends", icon: <MessageCircle className="h-5 w-5" />, path: "/friends", shortcut: `${modKey}3` },
+  { label: "Communities", icon: <UsersIcon className="h-5 w-5" />, path: "/communities", matchPrefix: "/communit", shortcut: `${modKey}4` },
 ];
 
 export default function NavSidebar() {
@@ -48,6 +57,8 @@ export default function NavSidebar() {
   const { openLogin } = useAuthModalStore();
   const persistedRoomId = localStorage.getItem("currentJamRoomId");
   const { data: currentRoom } = useJam(persistedRoomId || "");
+  const { data: friends = [] } = useFriends();
+  const { data: onlineUsers = [] } = useOnlineUsers();
 
   const isActive = (item: NavItem) => {
     if (item.matchPrefix) return location.pathname.startsWith(item.matchPrefix);
@@ -77,11 +88,7 @@ export default function NavSidebar() {
           onClick={() => navigate("/jams")}
         >
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/15 group-hover:bg-primary/20 transition-colors">
-            <img
-              src={isDark ? "./logo-sidebar-dark.svg" : "./logo-sidebar-light.svg"}
-              alt="Jam Logo"
-              className="w-5 h-5 opacity-90 group-hover:opacity-100 transition-opacity"
-            />
+            <Logo className="w-5 h-5 opacity-90 group-hover:opacity-100 transition-opacity" />
           </div>
           <h1 className="text-xl font-heading font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
             Jam
@@ -94,22 +101,28 @@ export default function NavSidebar() {
         {navItems.map((item) => {
           const active = isActive(item);
           return (
-            <button
-              key={item.path}
-              onClick={() => navigate(item.path)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer relative ${active
-                ? "bg-primary/12 text-primary shadow-[inset_0_0_12px_oklch(0.78_0.16_70/8%)]"
-                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground hover:translate-x-0.5"
-                }`}
-            >
-              {active && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-primary animate-glow-pulse" />
-              )}
-              <span className={`transition-colors duration-200 ${active ? "text-primary" : ""}`}>
-                {item.icon}
-              </span>
-              <span>{item.label}</span>
-            </button>
+            <Tooltip key={item.path}>
+              <TooltipTrigger
+                render={
+                  <button
+                    onClick={() => navigate(item.path)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer relative ${active
+                      ? "bg-primary/12 text-primary shadow-[inset_0_0_12px_oklch(0.78_0.16_70/8%)]"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground "
+                      }`}
+                  >
+                    {active && (
+                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-primary" />
+                    )}
+                    <span className={`transition-colors duration-200 ${active ? "text-primary" : ""}`}>
+                      {item.icon}
+                    </span>
+                    <span>{item.label}</span>
+                  </button>
+                }
+              />
+              <TooltipContent side="right">{item.shortcut}</TooltipContent>
+            </Tooltip>
           );
         })}
 
@@ -119,11 +132,11 @@ export default function NavSidebar() {
             onClick={() => navigate(`/jam/${persistedRoomId}`)}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer relative ${isRoomActive
               ? "bg-primary/12 text-primary shadow-[inset_0_0_12px_oklch(0.78_0.16_70/8%)]"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground hover:translate-x-0.5"
+              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground "
               }`}
           >
             {isRoomActive && (
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-primary animate-glow-pulse" />
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-primary" />
             )}
             <Music className="h-5 w-5" />
             <span className="truncate flex-1 text-left">{currentRoom.name}</span>
@@ -134,6 +147,43 @@ export default function NavSidebar() {
           </button>
         )}
       </nav>
+
+      {/* Online Friends */}
+      {!isGuest && (() => {
+        const onlineIds = new Set(onlineUsers.map(u => u.id));
+        const onlineFriends = friends.filter(f => f && onlineIds.has(f.id));
+        if (onlineFriends.length === 0) return null;
+        const shown = onlineFriends.slice(0, 4);
+        const extra = onlineFriends.length - shown.length;
+        return (
+          <div className="px-3 pb-2 mt-2 pt-2 border-t border-border/30 mx-3">
+            <button
+              onClick={() => navigate("/friends")}
+              className="w-full text-left group cursor-pointer"
+            >
+              <p className="text-[11px] font-medium text-muted-foreground mb-2 px-1 uppercase tracking-wider">
+                Friends Online
+              </p>
+              <div className="flex items-center gap-2 px-1">
+                <AvatarGroup>
+                  {shown.map(friend => friend && (
+                    <Avatar key={friend.id} size="sm" className="ring-2 ring-background">
+                      <AvatarImage src={friend.avatar_url || ""} alt={friend.username} />
+                      <AvatarFallback className="bg-muted text-muted-foreground text-[10px]">
+                        {friend.username.substring(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                      <AvatarBadge className="bg-green-500" />
+                    </Avatar>
+                  ))}
+                </AvatarGroup>
+                {extra > 0 && (
+                  <span className="text-xs text-muted-foreground">+{extra}</span>
+                )}
+              </div>
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Bottom section */}
       <div className="px-3 pb-3 flex-shrink-0 space-y-2">

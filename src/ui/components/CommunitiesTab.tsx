@@ -1,29 +1,54 @@
 import { useState, useCallback } from "react";
-import { useSearchParams, useParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useParams, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   Music,
   Users,
   ArrowLeft,
+  Disc3,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useCommunities, useCommunity } from "@/hooks/useCommunities";
-import { useCommunityPosts, useToggleLike } from "@/hooks/usePosts";
+import { useCommunityPosts, useToggleLike, useCreatePost } from "@/hooks/usePosts";
 import { PostCard } from "@/components/PostCard";
 import { ComposePost } from "@/components/ComposePost";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { SearchInput } from "@/components/SearchInput";
-import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
+import { formatTimeAgo } from "@/lib/postUtils";
 import type { FrontendPost } from "@/hooks/usePosts";
 
 const CATEGORIES = [
-  "LoFi", "Metal", "Electronic", "Jazz", "Hip Hop", "Indie", 
-  "Classical", "R&B", "Reggae", "Beginner", "Late Night", 
+  "LoFi", "Metal", "Electronic", "Jazz", "Hip Hop", "Indie",
+  "Classical", "R&B", "Reggae", "Beginner", "Late Night",
   "Practice", "Collab"
 ];
+
+// Genre-to-color map for community avatars
+const GENRE_COLORS: Record<string, { bg: string; text: string }> = {
+  "LoFi": { bg: "bg-indigo-500/20", text: "text-indigo-400" },
+  "Rock": { bg: "bg-red-500/20", text: "text-red-400" },
+  "Metal": { bg: "bg-red-600/20", text: "text-red-500" },
+  "Electronic": { bg: "bg-purple-500/20", text: "text-purple-400" },
+  "Jazz": { bg: "bg-amber-500/20", text: "text-amber-400" },
+  "Hip Hop": { bg: "bg-green-500/20", text: "text-green-400" },
+  "Indie": { bg: "bg-teal-500/20", text: "text-teal-400" },
+  "Classical": { bg: "bg-rose-500/20", text: "text-rose-400" },
+  "R&B": { bg: "bg-pink-500/20", text: "text-pink-400" },
+  "Reggae": { bg: "bg-yellow-500/20", text: "text-yellow-400" },
+  "Beginner": { bg: "bg-sky-500/20", text: "text-sky-400" },
+  "Late Night": { bg: "bg-violet-500/20", text: "text-violet-400" },
+  "Practice": { bg: "bg-cyan-500/20", text: "text-cyan-400" },
+  "Collab": { bg: "bg-orange-500/20", text: "text-orange-400" },
+};
+
+function getGenreColor(categories: string[]) {
+  for (const cat of categories) {
+    if (GENRE_COLORS[cat]) return GENRE_COLORS[cat];
+  }
+  return { bg: "bg-primary/20", text: "text-primary" };
+}
 
 interface CommunitiesTabProps {
   onGuestAction?: () => void;
@@ -33,6 +58,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
   const { id: communityId } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const categoryFilter = searchParams.get("category") || "";
   const searchQuery = searchParams.get("search") || "";
   const { isGuest } = useAuthStore();
@@ -75,7 +101,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
   };
 
   const handlePostClick = (postId: string) => {
-    navigate(`/post/${postId}`);
+    navigate(`/post/${postId}`, { state: { backgroundLocation: location } });
   };
 
   const handleJoin = (_targetCommunityId: string) => {
@@ -86,8 +112,14 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
     // TODO: Implement join functionality with _targetCommunityId
   };
 
-  const handleCreatePost = (_content: string, _audioFile: File | null) => {
-    // TODO: Implement actual post creation with API using _content and _audioFile
+  const createPostMutation = useCreatePost();
+
+  const handleCreatePost = (content: string, _audioFile: File | null) => {
+    if (!content.trim()) return;
+    createPostMutation.mutate(
+      { content: content.trim() },
+      { onSuccess: () => {} }
+    );
   };
 
   const handleLikePost = async (postId: string) => {
@@ -102,153 +134,179 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
     }
   };
 
-  if (selectedCommunity) {
-    return (
-      <>
-        {/* Community Header Banner */}
-        <div className="relative h-48 bg-gradient-to-br from-primary/25 via-primary/10 to-background border-b border-border overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,oklch(0.78_0.16_70/15%)_0%,transparent_60%)]" />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-4 left-4 z-10 glass hover:glass-strong"
-            onClick={() => navigate(-1)}
-            title="Go back"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </div>
+  // Mock active members for sidebar
+  const mockMembers = [
+    { id: "m1", username: "Tylobic", avatar: "" },
+    { id: "m2", username: "BeatMaker", avatar: "" },
+    { id: "m3", username: "SynthWave", avatar: "" },
+    { id: "m4", username: "JazzCat", avatar: "" },
+    { id: "m5", username: "LoFiKing", avatar: "" },
+  ];
 
-        {/* Community Content */}
-        <div className="relative px-5 pb-5 border-b border-border">
-          {/* Community Avatar */}
-          <div className="relative -mt-16 mb-4">
-            <div className="h-28 w-28 rounded-full border-4 border-background overflow-hidden ring-2 ring-primary/30 shadow-[0_0_20px_oklch(0.78_0.16_70/20%)]">
-              <Avatar className="h-full w-full">
+  if (selectedCommunity) {
+    const communityGenre = getGenreColor(selectedCommunity.category);
+    return (
+      <div className="flex h-full">
+        {/* Main Content */}
+        <div className="flex-1 min-w-0 overflow-y-auto border-r border-border">
+          {/* Community Header — compact, consistent */}
+          <div className="px-5 py-3 border-b border-border flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 flex-shrink-0"
+                onClick={() => navigate(-1)}
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <Avatar className="h-10 w-10 flex-shrink-0 ring-1 ring-border">
                 <AvatarImage src="" alt={selectedCommunity.name} />
-                <AvatarFallback className="bg-primary text-primary-foreground text-3xl font-bold h-full w-full">
+                <AvatarFallback className={`${communityGenre.bg} ${communityGenre.text} text-sm font-bold`}>
                   {selectedCommunity.name.substring(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-sm font-heading font-bold truncate">{selectedCommunity.name}</h1>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Users className="h-3 w-3" />
+                    {selectedCommunity.activeCount} active
+                  </span>
+                  <span className="text-border">·</span>
+                  <span>{selectedCommunity.totalMembers} members</span>
+                  {selectedCommunity.category.slice(0, 2).map((cat) => {
+                    const catColor = GENRE_COLORS[cat] || { bg: "bg-muted", text: "text-muted-foreground" };
+                    return (
+                      <span key={cat} className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${catColor.bg} ${catColor.text}`}>
+                        {cat}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+              <Button
+                onClick={() => handleJoin(selectedCommunity.id)}
+                size="sm"
+                className="glow-primary flex-shrink-0"
+              >
+                Join
+              </Button>
             </div>
+            {selectedCommunity.description && (
+              <p className="text-xs text-muted-foreground mt-2 ml-[52px] line-clamp-2">
+                {selectedCommunity.description}
+              </p>
+            )}
           </div>
 
-          {/* Community Info */}
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <h1 className="text-2xl font-heading font-bold">{selectedCommunity.name}</h1>
-            </div>
-            <p className="text-muted-foreground mb-3">{selectedCommunity.description}</p>
-            <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
-              <div className="flex items-center gap-1">
-                <Users className="h-4 w-4" />
-                <span>{selectedCommunity.activeCount} active</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span>{selectedCommunity.totalMembers} members</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap mb-4">
-              {selectedCommunity.category.map((cat) => (
-                <span
-                  key={cat}
-                  className="text-xs px-2.5 py-1 rounded-full bg-primary/8 text-primary"
-                >
-                  {cat}
-                </span>
-              ))}
-            </div>
-            <Button
-              onClick={() => handleJoin(selectedCommunity.id)}
-              size="sm"
-              className="glow-primary"
-            >
-              Join Community
-            </Button>
+          {/* Compose Post Area */}
+          <ComposePost
+            placeholder={`Post to ${selectedCommunity.name}...`}
+            onSubmit={handleCreatePost}
+            onGuestAction={onGuestAction}
+          />
+
+          {/* Posts Feed */}
+          <div className="divide-y divide-border/50">
+            {postsLoading ? (
+              <LoadingState message="Loading posts..." />
+            ) : communityPosts.length === 0 ? (
+              <EmptyState
+                icon={Music}
+                title="No posts yet"
+                description="Be the first to share something!"
+              />
+            ) : (
+              communityPosts.map((post: FrontendPost) => (
+                <div key={post.id} className="hover:bg-foreground/[0.03] transition-colors">
+                  <PostCard
+                    post={post}
+                    communityName={null}
+                    isPlaying={playingAudioId === post.id}
+                    isGuest={isGuest}
+                    onAuthorClick={handleAuthorClick}
+                    onCommunityClick={handleCommunityClick}
+                    onPostClick={handlePostClick}
+                    onLike={handleLikePost}
+                    onPlayPause={() => setPlayingAudioId(playingAudioId === post.id ? null : post.id)}
+                    formatTimeAgo={formatTimeAgo}
+                  />
+                </div>
+              ))
+            )}
           </div>
         </div>
 
-        {/* Compose Post Area */}
-        <ComposePost
-          placeholder={selectedCommunity ? `Post to ${selectedCommunity.name}...` : "What's on your mind? Share a message or upload audio..."}
-          onSubmit={handleCreatePost}
-          onGuestAction={onGuestAction}
-        />
-
-        {/* Posts Feed */}
-        <div className="divide-y divide-white/[0.04]">
-          {postsLoading ? (
-            <LoadingState message="Loading posts..." />
-          ) : communityPosts.length === 0 ? (
-            <EmptyState 
-              icon={Music} 
-              title="No posts yet" 
-              description="Be the first to share something!"
-            />
-          ) : (
-            communityPosts.map((post: FrontendPost) => {
-              return (
-                <PostCard
-                  key={post.id}
-                  post={post}
-                  communityName={null}
-                  isPlaying={playingAudioId === post.id}
-                  isGuest={isGuest}
-                  onAuthorClick={handleAuthorClick}
-                  onCommunityClick={handleCommunityClick}
-                  onPostClick={handlePostClick}
-                  onLike={handleLikePost}
-                  onPlayPause={() => setPlayingAudioId(playingAudioId === post.id ? null : post.id)}
-                  onGuestAction={onGuestAction}
-                  formatTimeAgo={formatTimeAgo}
-                  formatDuration={formatDuration}
-                />
-              );
-            })
-          )}
+        {/* Members Sidebar */}
+        <div className="w-60 flex-shrink-0 p-4 overflow-y-auto">
+          <h3 className="text-xs font-heading font-semibold text-muted-foreground mb-3 flex items-center gap-2 uppercase tracking-wider">
+            <Users className="h-3.5 w-3.5" />
+            Active Members
+          </h3>
+          <div className="space-y-1">
+            {mockMembers.map((member) => (
+              <button
+                key={member.id}
+                onClick={() => navigate(`/profile/${member.username}`)}
+                className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+              >
+                <Avatar size="sm" className="h-8 w-8">
+                  <AvatarImage src={member.avatar} alt={member.username} />
+                  <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                    {member.username.substring(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium truncate">{member.username}</span>
+              </button>
+            ))}
+          </div>
         </div>
-      </>
+      </div>
     );
   }
 
   return (
-    <div className="p-5">
-      <div>
-        <div className="mb-5 -mx-5 -mt-5 px-5 pt-5 pb-4 bg-gradient-to-br from-primary/12 via-primary/5 to-transparent relative overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_80%_at_80%_-20%,oklch(0.78_0.16_70/8%),transparent)] pointer-events-none" />
-          <div className="relative animate-page-in">
-            <h2 className="text-2xl font-heading font-bold mb-1">Communities</h2>
-            <p className="text-sm text-muted-foreground">Find your people and make music together</p>
-          </div>
-        </div>
+    <div className="flex flex-col h-full">
+      {/* Compact Header */}
+      <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
+        <Disc3 className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-sm font-heading font-semibold text-muted-foreground">Communities</h2>
+      </div>
 
-        {/* Search */}
+      {/* Search + Filters */}
+      <div className="px-5 pt-3 flex-shrink-0">
         <SearchInput
           placeholder="Search communities..."
           value={searchQuery}
           onSearch={handleSearchChange}
+          className="mb-3"
         />
 
-        {/* Category Filters - Sticky pill bar */}
-        <div className="mb-5 sticky top-0 z-10 -mx-5 px-5 py-2 glass-strong">
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
-            {CATEGORIES.map((category) => (
+        {/* Category Filters — genre-colored active state */}
+        <div className="flex gap-2 overflow-x-auto pb-3 scrollbar-thin">
+          {CATEGORIES.map((category) => {
+            const isActive = categoryFilter === category;
+            const genreColor = GENRE_COLORS[category] || { bg: "bg-primary/20", text: "text-primary" };
+            return (
               <button
                 key={category}
                 onClick={() => handleCategoryClick(category)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 ${
-                  categoryFilter === category
-                    ? "bg-primary text-primary-foreground shadow-[0_0_12px_oklch(0.78_0.16_70/30%)]"
+                className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 cursor-pointer ${
+                  isActive
+                    ? `${genreColor.bg} ${genreColor.text} ring-1 ring-current/20`
                     : "glass text-muted-foreground hover:text-foreground hover:ring-1 hover:ring-primary/20"
                 }`}
               >
                 {category}
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
+      </div>
 
-        {/* Communities List */}
+      {/* Communities List */}
+      <div className="flex-1 overflow-y-auto">
         {communities.length === 0 ? (
           <EmptyState
             icon={Music}
@@ -258,54 +316,57 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
               : "No communities available yet"}
           />
         ) : (
-          <div className="space-y-3 animate-stagger">
-            {communities.map((community) => (
-              <Card
-                key={community.id}
-                className="p-4 cursor-pointer glass hover:glass-strong transition-all duration-200 hover:ring-1 hover:ring-primary/20"
-                onClick={() => handleCommunityClick(community.id)}
-              >
-                <div className="flex items-center gap-4">
+          <div className="divide-y divide-border/50">
+            {communities.map((community) => {
+              const genreColor = getGenreColor(community.category);
+              return (
+                <div
+                  key={community.id}
+                  className="flex items-center gap-4 px-5 py-3.5 cursor-pointer hover:bg-foreground/[0.03] transition-colors border-l-2 border-l-transparent hover:border-l-primary/40"
+                  onClick={() => handleCommunityClick(community.id)}
+                >
                   <div className="flex-shrink-0">
-                    <div className="h-12 w-12 rounded-full overflow-hidden ring-1 ring-border">
-                      <Avatar className="h-full w-full">
-                        <AvatarImage src="" alt={community.name} />
-                        <AvatarFallback className="bg-primary text-primary-foreground text-lg font-bold h-full w-full">
-                          {community.name.substring(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                    </div>
+                    <Avatar className="h-11 w-11 ring-1 ring-border">
+                      <AvatarImage src="" alt={community.name} />
+                      <AvatarFallback className={`${genreColor.bg} ${genreColor.text} text-base font-bold`}>
+                        {community.name.substring(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-heading font-semibold text-base">{community.name}</h3>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <h3 className="font-heading font-semibold text-sm truncate">{community.name}</h3>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-2 line-clamp-1">
+                    <p className="text-xs text-muted-foreground mb-1.5 line-clamp-1">
                       {community.description}
                     </p>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1">
+                      <span className="flex items-center gap-1">
                         <Users className="h-3 w-3" />
-                        <span>{community.activeCount} active</span>
-                      </div>
-                      <span>•</span>
+                        {community.activeCount} active
+                      </span>
+                      <span className="text-border">·</span>
                       <span>{community.totalMembers} members</span>
-                      <div className="flex items-center gap-2 ml-auto">
-                        {community.category.slice(0, 3).map((cat) => (
-                          <span
-                            key={cat}
-                            className="px-2 py-0.5 rounded-full text-[10px] glass"
-                          >
-                            {cat}
-                          </span>
-                        ))}
-                      </div>
                     </div>
                   </div>
+
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {community.category.slice(0, 2).map((cat) => {
+                      const catColor = GENRE_COLORS[cat] || { bg: "bg-muted", text: "text-muted-foreground" };
+                      return (
+                        <span
+                          key={cat}
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${catColor.bg} ${catColor.text}`}
+                        >
+                          {cat}
+                        </span>
+                      );
+                    })}
+                  </div>
                 </div>
-              </Card>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
