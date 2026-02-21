@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, session, shell } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -210,6 +210,7 @@ if (!gotTheLock) {
             minHeight: 216,
             show: false, // Don't show until ready
             backgroundColor: '#ffffff', // Match your app background
+            autoHideMenuBar: process.platform !== 'darwin', // Hide menu on Windows/Linux, keep on macOS
             webPreferences: {
                 preload: preloadPath,
                 nodeIntegration: false,
@@ -262,6 +263,78 @@ if (!gotTheLock) {
             event.preventDefault();
             console.warn('[Security] Webview attachment blocked');
         });
+
+        // Custom application menu
+        const isMac = process.platform === 'darwin';
+        const menuTemplate: Electron.MenuItemConstructorOptions[] = [
+            // macOS app menu (required — uses app name automatically)
+            ...(isMac ? [{
+                role: 'appMenu' as const,
+            }] : []),
+            // File
+            {
+                label: 'File',
+                submenu: [
+                    isMac ? { role: 'close' as const } : { role: 'quit' as const },
+                ],
+            },
+            // Edit — keep for text input support (copy/paste/undo)
+            { role: 'editMenu' as const },
+            // View
+            {
+                label: 'View',
+                submenu: [
+                    {
+                        label: 'Toggle Theme',
+                        accelerator: isMac ? 'Cmd+T' : 'Ctrl+T',
+                        click: () => mainWindow?.webContents.send('toggle-theme'),
+                    },
+                    { type: 'separator' },
+                    { role: 'reload' as const },
+                    { role: 'forceReload' as const },
+                    ...(isDev() ? [{ role: 'toggleDevTools' as const }] : []),
+                    { type: 'separator' as const },
+                    { role: 'resetZoom' as const },
+                    { role: 'zoomIn' as const },
+                    { role: 'zoomOut' as const },
+                    { type: 'separator' as const },
+                    { role: 'togglefullscreen' as const },
+                ],
+            },
+            // Navigate
+            {
+                label: 'Navigate',
+                submenu: [
+                    {
+                        label: 'Jams',
+                        accelerator: isMac ? 'Cmd+1' : 'Ctrl+1',
+                        click: () => mainWindow?.webContents.send('navigate', '/jams'),
+                    },
+                    {
+                        label: 'Feed',
+                        accelerator: isMac ? 'Cmd+2' : 'Ctrl+2',
+                        click: () => mainWindow?.webContents.send('navigate', '/feed'),
+                    },
+                    {
+                        label: 'Friends',
+                        accelerator: isMac ? 'Cmd+3' : 'Ctrl+3',
+                        click: () => mainWindow?.webContents.send('navigate', '/friends'),
+                    },
+                    {
+                        label: 'Communities',
+                        accelerator: isMac ? 'Cmd+4' : 'Ctrl+4',
+                        click: () => mainWindow?.webContents.send('navigate', '/communities'),
+                    },
+                ],
+            },
+            // Window
+            {
+                role: 'windowMenu' as const,
+            },
+        ];
+
+        const menu = Menu.buildFromTemplate(menuTemplate);
+        Menu.setApplicationMenu(menu);
 
         // Show window when ready to prevent white screen flash
         mainWindow.once('ready-to-show', () => {

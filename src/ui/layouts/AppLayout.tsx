@@ -40,6 +40,17 @@ export default function AppLayout() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
+  // Listen for menu-triggered theme toggle
+  useEffect(() => {
+    window.electron?.onToggleTheme(() => {
+      const currentTheme =
+        useUIStore.getState().theme === "system"
+          ? window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+          : useUIStore.getState().theme;
+      setTheme(currentTheme === "dark" ? "light" : "dark");
+    });
+  }, [setTheme]);
+
   // Theme management — dark is the default, light is opt-in
   useEffect(() => {
     const root = document.documentElement;

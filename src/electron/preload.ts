@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld('electron', {
     onNavigate: (callback: (path: string) => void) => {
         ipcRenderer.on('navigate', (_event, path) => callback(path));
     },
+    onToggleTheme: (callback: () => void) => {
+        ipcRenderer.on('toggle-theme', () => callback());
+    },
 });
 
 
