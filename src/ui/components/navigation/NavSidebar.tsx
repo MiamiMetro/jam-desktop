@@ -223,22 +223,14 @@ export default function NavSidebar() {
             </DropdownMenu>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="default"
-              className="flex-1 animate-glow-pulse"
-              onClick={openLogin}
-            >
-              <LogIn className="h-4 w-4 mr-2" />
-              Sign In
-            </Button>
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-lg glass text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer flex-shrink-0"
-            >
-              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </button>
-          </div>
+          <Button
+            variant="default"
+            className="w-full animate-glow-pulse"
+            onClick={openLogin}
+          >
+            <LogIn className="h-4 w-4 mr-2" />
+            Sign In
+          </Button>
         )}
       </div>
     </div>
