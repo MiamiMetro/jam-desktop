@@ -3,7 +3,6 @@ import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Lock, Minus, Plus } from "lucide-react";
+import { Globe, Lock, Minus, Plus } from "lucide-react";
 
 export interface RoomFormData {
   name: string;
@@ -127,22 +126,37 @@ export function RoomFormDialog({
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-between gap-3 rounded-lg glass px-4 py-3">
-            <div className="flex items-center gap-2">
-              <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-              <div>
-                <Label htmlFor="room-private" className="cursor-pointer text-sm">
-                  Private Room
-                </Label>
-                <p className="text-[11px] text-muted-foreground/60">Only invited users can join</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, isPrivate: false })}
+              className={`flex items-center gap-2.5 px-4 py-3 rounded-lg transition-all duration-200 cursor-pointer ${
+                !form.isPrivate
+                  ? "glass-strong ring-1 ring-primary/30 text-foreground"
+                  : "glass text-muted-foreground hover:text-foreground hover:ring-1 hover:ring-border"
+              }`}
+            >
+              <Globe className={`h-4 w-4 flex-shrink-0 ${!form.isPrivate ? "text-primary" : ""}`} />
+              <div className="text-left">
+                <p className="text-sm font-medium">Public</p>
+                <p className="text-[11px] text-muted-foreground/60">Anyone can join</p>
               </div>
-            </div>
-            <Switch
-              id="room-private"
-              checked={form.isPrivate}
-              onCheckedChange={(checked: boolean) => setForm({ ...form, isPrivate: checked })}
-              size="sm"
-            />
+            </button>
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, isPrivate: true })}
+              className={`flex items-center gap-2.5 px-4 py-3 rounded-lg transition-all duration-200 cursor-pointer ${
+                form.isPrivate
+                  ? "glass-strong ring-1 ring-primary/30 text-foreground"
+                  : "glass text-muted-foreground hover:text-foreground hover:ring-1 hover:ring-border"
+              }`}
+            >
+              <Lock className={`h-4 w-4 flex-shrink-0 ${form.isPrivate ? "text-primary" : ""}`} />
+              <div className="text-left">
+                <p className="text-sm font-medium">Private</p>
+                <p className="text-[11px] text-muted-foreground/60">Invite only</p>
+              </div>
+            </button>
           </div>
         </div>
         <AlertDialogFooter>
