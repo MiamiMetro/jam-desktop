@@ -295,7 +295,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
         />
 
         {/* Category Filters — genre-colored active state */}
-        <div className="flex gap-2 overflow-x-auto py-1 pb-3 scrollbar-thin">
+        <div className="flex flex-wrap gap-2 py-1 pb-3">
           {CATEGORIES.map((category) => {
             const isActive = categoryFilter === category;
             const genreColor = GENRE_COLORS[category] || { bg: "bg-primary/20", text: "text-primary" };

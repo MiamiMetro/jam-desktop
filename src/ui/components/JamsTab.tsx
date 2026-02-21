@@ -324,11 +324,13 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
       })()}
 
       {/* Search */}
-      <SearchInput
-        placeholder="Search jams..."
-        value={searchQuery}
-        onSearch={handleSearchChange}
-      />
+      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm pb-3 -mx-5 px-5">
+        <SearchInput
+          placeholder="Search jams..."
+          value={searchQuery}
+          onSearch={handleSearchChange}
+        />
+      </div>
 
       {/* Other Jams Grid */}
       <div className="mb-3">

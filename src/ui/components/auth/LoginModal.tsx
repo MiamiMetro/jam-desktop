@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useAuthModalStore } from "@/stores/authModalStore";
 import { AuthModalShell } from "./AuthModalShell";
@@ -14,6 +15,7 @@ export default function LoginModal() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const open = isOpen && mode === "login";
 
@@ -75,16 +77,26 @@ export default function LoginModal() {
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="login-password" className="text-xs">Password</Label>
-        <Input
-          id="login-password"
-          type="password"
-          placeholder="••••••••"
-          value={password}
-          onChange={(e) => { setPassword(e.target.value); setError(null); }}
-          required
-          disabled={isSubmitting}
-          className="h-10 glass border-border/50 focus:ring-primary/30"
-        />
+        <div className="relative">
+          <Input
+            id="login-password"
+            type={showPassword ? "text" : "password"}
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => { setPassword(e.target.value); setError(null); }}
+            required
+            disabled={isSubmitting}
+            className="h-10 glass border-border/50 focus:ring-primary/30 pr-10"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            tabIndex={-1}
+          >
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
       </div>
     </AuthModalShell>
   );

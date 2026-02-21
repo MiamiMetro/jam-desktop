@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useAuthModalStore } from "@/stores/authModalStore";
 import { AuthModalShell } from "./AuthModalShell";
@@ -15,6 +16,8 @@ export default function SignupModal() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const open = isOpen && mode === "signup";
 
@@ -82,29 +85,49 @@ export default function SignupModal() {
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="signup-password" className="text-xs">Password</Label>
-        <Input
-          id="signup-password"
-          type="password"
-          placeholder="••••••••"
-          value={password}
-          onChange={(e) => { setPassword(e.target.value); setError(null); }}
-          required
-          disabled={isSubmitting}
-          className="h-10 glass border-border/50 focus:ring-primary/30"
-        />
+        <div className="relative">
+          <Input
+            id="signup-password"
+            type={showPassword ? "text" : "password"}
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => { setPassword(e.target.value); setError(null); }}
+            required
+            disabled={isSubmitting}
+            className="h-10 glass border-border/50 focus:ring-primary/30 pr-10"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            tabIndex={-1}
+          >
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="signup-confirm" className="text-xs">Confirm Password</Label>
-        <Input
-          id="signup-confirm"
-          type="password"
-          placeholder="••••••••"
-          value={confirmPassword}
-          onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
-          required
-          disabled={isSubmitting}
-          className="h-10 glass border-border/50 focus:ring-primary/30"
-        />
+        <div className="relative">
+          <Input
+            id="signup-confirm"
+            type={showConfirmPassword ? "text" : "password"}
+            placeholder="••••••••"
+            value={confirmPassword}
+            onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
+            required
+            disabled={isSubmitting}
+            className="h-10 glass border-border/50 focus:ring-primary/30 pr-10"
+          />
+          <button
+            type="button"
+            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            tabIndex={-1}
+          >
+            {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
       </div>
     </AuthModalShell>
   );
