@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useSearchParams, useParams, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback, AvatarGroup } from "@/components/ui/avatar";
 import {
   Music,
   Users,
@@ -134,7 +134,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
     }
   };
 
-  // Mock active members for sidebar
+  // Mock active members for sidebar and list avatars
   const mockMembers = [
     { id: "m1", username: "Tylobic", avatar: "" },
     { id: "m2", username: "BeatMaker", avatar: "" },
@@ -142,6 +142,17 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
     { id: "m4", username: "JazzCat", avatar: "" },
     { id: "m5", username: "LoFiKing", avatar: "" },
   ];
+
+  // Deterministic mock members per community (rotate from pool)
+  const getMockMembersForCommunity = (communityId: string) => {
+    const hash = communityId.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+    const start = hash % mockMembers.length;
+    return [
+      mockMembers[start % mockMembers.length],
+      mockMembers[(start + 1) % mockMembers.length],
+      mockMembers[(start + 2) % mockMembers.length],
+    ];
+  };
 
   if (selectedCommunity) {
     const communityGenre = getGenreColor(selectedCommunity.category);
@@ -351,7 +362,16 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <AvatarGroup>
+                      {getMockMembersForCommunity(community.id).map(m => (
+                        <Avatar key={m.id} size="xs" className="h-5 w-5 ring-1 ring-background">
+                          <AvatarFallback className="bg-muted text-muted-foreground text-[7px]">
+                            {m.username.substring(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                      ))}
+                    </AvatarGroup>
                     {community.category.slice(0, 2).map((cat) => {
                       const catColor = GENRE_COLORS[cat] || { bg: "bg-muted", text: "text-muted-foreground" };
                       return (

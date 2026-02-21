@@ -16,15 +16,12 @@ import { Label } from "@/components/ui/label";
 
 import { useAuthStore } from "@/stores/authStore";
 import { useAuthModalStore } from "@/stores/authModalStore";
-import { useUIStore } from "@/stores/uiStore";
 import { useProfileStore } from "@/hooks/useEnsureProfile";
 import { Logo } from "@/components/Logo";
 
 export default function UsernameSetupModal() {
   const { isOpen, mode, close } = useAuthModalStore();
   const { setUser } = useAuthStore();
-  const { theme } = useUIStore();
-  const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const createProfile = useMutation(api.profiles.createProfile);
 
   const [username, setUsername] = useState("");

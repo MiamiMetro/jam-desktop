@@ -15,7 +15,6 @@ import {
   Lock,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
-import { useUIStore } from "@/stores/uiStore";
 import { useJams, useMyRoom, useCreateRoom, useUpdateRoom, useActivateRoom, useDeactivateRoom } from "@/hooks/useJams";
 import { Avatar, AvatarFallback, AvatarImage, AvatarBadge } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/EmptyState";
@@ -23,7 +22,6 @@ import { LoadingState } from "@/components/LoadingState";
 import { RoomCard } from "@/components/RoomCard";
 import { useFriends } from "@/hooks/useFriends";
 import { useOnlineUsers } from "@/hooks/useUsers";
-import { Logo } from "@/components/Logo";
 
 interface JamsTabProps {
   onGuestAction?: () => void;
@@ -31,10 +29,8 @@ interface JamsTabProps {
 
 function JamsTab({ onGuestAction }: JamsTabProps) {
   const { isGuest, user } = useAuthStore();
-  const { theme } = useUIStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const searchQuery = searchParams.get("search") || "";
   const { data: rooms = [], isLoading: roomsLoading } = useJams();
   const { data: friends = [] } = useFriends();
@@ -296,24 +292,32 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
               Friends Jamming Now
             </h3>
             <div className="flex gap-3 overflow-x-auto pb-1">
-              {onlineFriends.slice(0, 6).map(friend => friend && (
-                <button
-                  key={friend.id}
-                  onClick={() => navigate(`/profile/${friend.username}`)}
-                  className="flex flex-col items-center gap-1.5 p-3 rounded-xl glass hover:glass-strong transition-all duration-200 cursor-pointer min-w-[80px] hover:ring-1 hover:ring-primary/20"
-                >
-                  <Avatar size="default" className="ring-2 ring-green-500/30">
-                    <AvatarImage src={friend.avatar_url || ""} alt={friend.username} />
-                    <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-                      {friend.username.substring(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                    <AvatarBadge className="bg-green-500" />
-                  </Avatar>
-                  <span className="text-xs font-medium truncate w-full text-center">
-                    {friend.username}
-                  </span>
-                </button>
-              ))}
+              {onlineFriends.slice(0, 6).map((friend, index) => {
+                if (!friend) return null;
+                // Assign friend to a room (round-robin for mock display)
+                const friendRoom = activeRooms[index % activeRooms.length];
+                return (
+                  <button
+                    key={friend.id}
+                    onClick={() => navigate(`/jam/${friendRoom.id}`)}
+                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl glass hover:glass-strong transition-all duration-200 cursor-pointer min-w-[80px] hover:ring-1 hover:ring-primary/20"
+                  >
+                    <Avatar size="default" className="ring-2 ring-green-500/30">
+                      <AvatarImage src={friend.avatar_url || ""} alt={friend.username} />
+                      <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                        {friend.username.substring(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                      <AvatarBadge className="bg-green-500" />
+                    </Avatar>
+                    <span className="text-xs font-medium truncate w-full text-center">
+                      {friend.username}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground/60 truncate w-full text-center">
+                      in {friendRoom.name}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         );

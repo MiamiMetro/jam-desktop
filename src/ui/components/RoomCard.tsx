@@ -1,6 +1,6 @@
 // RoomCard.tsx — Reusable room card for jam room listings
 import { Hash, Users, Lock } from "lucide-react";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback, AvatarGroup } from "@/components/ui/avatar";
 import type { Room } from "@/hooks/useJams";
 
 interface RoomCardProps {
@@ -50,7 +50,19 @@ export function RoomCard({ room, onClick }: RoomCardProps) {
             {room.hostName.substring(0, 2).toUpperCase()}
           </AvatarFallback>
         </Avatar>
-        <span className="text-xs text-muted-foreground">{room.hostName}</span>
+        <span className="text-xs text-muted-foreground flex-1 truncate">{room.hostName}</span>
+        {room.mockParticipants && room.mockParticipants.length > 0 && (
+          <AvatarGroup>
+            {room.mockParticipants.slice(0, 3).map(p => (
+              <Avatar key={p.userId} size="xs" className="h-5 w-5 ring-1 ring-background">
+                <AvatarImage src={p.avatar || ""} alt={p.username} />
+                <AvatarFallback className="bg-muted text-muted-foreground text-[7px]">
+                  {p.username.substring(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+            ))}
+          </AvatarGroup>
+        )}
       </div>
     </div>
   );

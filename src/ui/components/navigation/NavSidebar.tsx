@@ -187,16 +187,6 @@ export default function NavSidebar() {
 
       {/* Bottom section */}
       <div className="px-3 pb-3 flex-shrink-0 space-y-2">
-        {/* Theme toggle */}
-        <div className="flex justify-end px-1">
-          <button
-            onClick={toggleTheme}
-            className="p-2 rounded-lg glass text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer"
-          >
-            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
-        </div>
-
         {!isGuest && user ? (
           <div>
             <DropdownMenu>
@@ -220,6 +210,10 @@ export default function NavSidebar() {
                   <UserIcon className="h-4 w-4 mr-2" />
                   Profile
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={toggleTheme}>
+                  {isDark ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}
+                  {isDark ? "Light Mode" : "Dark Mode"}
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => useAuthStore.getState().logout()}>
                   <LogOut className="h-4 w-4 mr-2" />
@@ -229,14 +223,22 @@ export default function NavSidebar() {
             </DropdownMenu>
           </div>
         ) : (
-          <Button
-            variant="default"
-            className="w-full animate-glow-pulse"
-            onClick={openLogin}
-          >
-            <LogIn className="h-4 w-4 mr-2" />
-            Sign In
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="default"
+              className="flex-1 animate-glow-pulse"
+              onClick={openLogin}
+            >
+              <LogIn className="h-4 w-4 mr-2" />
+              Sign In
+            </Button>
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg glass text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer flex-shrink-0"
+            >
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+          </div>
         )}
       </div>
     </div>

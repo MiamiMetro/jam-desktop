@@ -1,5 +1,5 @@
 // AuthModalShell.tsx — Shared branded auth modal base (header, gradient, form wrapper, footer)
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
-import { useUIStore } from "@/stores/uiStore";
 import { Logo } from "@/components/Logo";
 
 interface AuthModalShellProps {
@@ -43,9 +42,6 @@ export function AuthModalShell({
   onFooterLink,
   children,
 }: AuthModalShellProps) {
-  const { theme } = useUIStore();
-  const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-sm p-0 overflow-hidden">

@@ -1,5 +1,5 @@
 // Post.tsx — Post detail page with single column layout, comments below
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useState, useCallback } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -28,8 +28,6 @@ import { ComposePost } from "@/components/ComposePost";
 function Post() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
-  const isModal = !!(location.state as any)?.backgroundLocation;
   const { isGuest } = useAuthStore();
   const { data: post, isLoading } = usePost(id || "");
   const commentsQuery = useComments(id || "");
@@ -125,10 +123,16 @@ function Post() {
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
+        {post && (
+          <span className="text-sm text-muted-foreground">
+            Post by <span className="font-medium text-foreground">{post.author.username}</span>
+          </span>
+        )}
       </div>
 
-      {/* Scrollable content — single column */}
+      {/* Scrollable content — centered */}
       <div className="flex-1 overflow-y-auto">
+        <div className="max-w-2xl mx-auto w-full">
         {/* Post content */}
         <div className="p-6">
           <div className="flex gap-4">
@@ -358,6 +362,7 @@ function Post() {
               </div>
             </>
           )}
+        </div>
         </div>
       </div>
     </div>

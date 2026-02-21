@@ -136,16 +136,14 @@ export function PostCard({
               <span>{post.comments}</span>
             </button>
             <Tooltip open={copied || undefined}>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={handleShare}
-                  className={`flex items-center gap-2 text-sm transition-colors cursor-pointer ${
-                    copied ? "text-green-500" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
-                  {copied && <span>Copied!</span>}
-                </button>
+              <TooltipTrigger
+                onClick={handleShare}
+                className={`flex items-center gap-2 text-sm transition-colors cursor-pointer ${
+                  copied ? "text-green-500" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+                {copied && <span>Copied!</span>}
               </TooltipTrigger>
               {copied && <TooltipContent>Link copied!</TooltipContent>}
             </Tooltip>

@@ -93,13 +93,37 @@ function Profile() {
 
   if (isLoading) {
     return (
-      <div className="p-6">
-        <div className="h-36 rounded-xl glass animate-pulse mb-6" />
-        <div className="flex gap-4 mb-4">
-          <div className="h-24 w-24 rounded-full glass animate-pulse" />
-          <div className="flex-1 space-y-3 pt-4">
-            <div className="h-6 w-40 rounded glass animate-pulse" />
-            <div className="h-4 w-24 rounded glass animate-pulse" />
+      <div className="flex flex-col h-full">
+        {/* Banner skeleton */}
+        <div className="h-36 animate-shimmer flex-shrink-0" />
+        {/* Two-column skeleton */}
+        <div className="flex-1 flex min-h-0">
+          {/* Left sidebar skeleton */}
+          <div className="w-[320px] min-w-[320px] border-r border-border p-5">
+            <div className="-mt-14 h-24 w-24 rounded-full animate-shimmer ring-2 ring-background mb-4" />
+            <div className="h-6 w-36 rounded animate-shimmer mb-2" />
+            <div className="h-4 w-48 rounded animate-shimmer mb-4" />
+            <div className="flex items-center gap-3 mb-4 pb-4 border-b border-border/50">
+              <div className="h-4 w-16 rounded animate-shimmer" />
+              <div className="h-4 w-16 rounded animate-shimmer" />
+            </div>
+            <div className="h-9 w-full rounded-lg animate-shimmer mb-4" />
+            <div className="pt-4 border-t border-border/50 space-y-2">
+              <div className="h-4 w-20 rounded animate-shimmer" />
+              <div className="h-10 w-full rounded-lg animate-shimmer" />
+            </div>
+          </div>
+          {/* Right content skeleton */}
+          <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex border-b border-border px-5 py-3 gap-4 flex-shrink-0">
+              <div className="h-4 w-20 rounded animate-shimmer" />
+              <div className="h-4 w-16 rounded animate-shimmer" />
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="h-24 w-full rounded-lg animate-shimmer" />
+              <div className="h-24 w-full rounded-lg animate-shimmer" />
+              <div className="h-24 w-full rounded-lg animate-shimmer" />
+            </div>
           </div>
         </div>
       </div>
@@ -175,25 +199,33 @@ function Profile() {
           <div className="flex items-center text-sm mb-4 pb-4 border-b border-border/50">
             <button
               onClick={() => setActiveTab("posts")}
-              className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer"
+              className={`flex items-center gap-1.5 transition-colors cursor-pointer pb-1 border-b-2 ${
+                activeTab === "posts"
+                  ? "border-b-primary text-foreground"
+                  : "border-b-transparent text-muted-foreground hover:text-foreground"
+              }`}
             >
               <span className="font-semibold text-primary">{userPosts.length}</span>
-              <span className="text-muted-foreground">Posts</span>
+              <span>Posts</span>
             </button>
             <span className="mx-3 text-border">·</span>
             <button
               onClick={() => setActiveTab("friends")}
-              className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer"
+              className={`flex items-center gap-1.5 transition-colors cursor-pointer pb-1 border-b-2 ${
+                activeTab === "friends"
+                  ? "border-b-primary text-foreground"
+                  : "border-b-transparent text-muted-foreground hover:text-foreground"
+              }`}
             >
               <span className="font-semibold text-primary">{profileUserFriends.length}</span>
-              <span className="text-muted-foreground">Friends</span>
+              <span>Friends</span>
             </button>
           </div>
 
           {/* Mutual friends */}
           {!isOwnProfile && mutualFriends.length > 0 && (
             <div className="flex items-center gap-2 mb-4">
-              <AvatarGroup max={3}>
+              <AvatarGroup>
                 {mutualFriends.slice(0, 3).map((friend: User) => (
                   <Avatar key={friend.id} size="xs" className="h-5 w-5">
                     <AvatarImage src={friend.avatar_url || ""} alt={friend.username} />

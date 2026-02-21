@@ -414,3 +414,30 @@ body::-webkit-scrollbar {
 .light .app-bg::after {
   opacity: 0.03;
 }
+
+/* Shimmer loading skeleton — left-to-right sweep */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    oklch(1 0 0 / 4%) 25%,
+    oklch(1 0 0 / 10%) 50%,
+    oklch(1 0 0 / 4%) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.light .animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    oklch(0.5 0.02 55 / 6%) 25%,
+    oklch(0.5 0.02 55 / 14%) 50%,
+    oklch(0.5 0.02 55 / 6%) 75%
+  );
+  background-size: 200% 100%;
+}
