@@ -1,5 +1,6 @@
 // FriendsTab.tsx — Twitter DM-style split panel: conversation list left, active view right
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage, AvatarBadge } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,8 +32,17 @@ function FriendsTab() {
   const { data: onlineUsers = [] } = useOnlineUsers();
   const onlineIds = new Set(onlineUsers.map(u => u.id));
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeDmPartnerId = searchParams.get("dm");
+  const setActiveDmPartnerId = useCallback((id: string | null) => {
+    if (id) {
+      setSearchParams({ dm: id });
+    } else {
+      setSearchParams({}, { replace: true });
+    }
+  }, [setSearchParams]);
+
   const [leftView, setLeftView] = useState<LeftView>("conversations");
-  const [activeDmPartnerId, setActiveDmPartnerId] = useState<string | null>(null);
   const [friendSearch, setFriendSearch] = useState("");
   const [userSearch, setUserSearch] = useState("");
 
