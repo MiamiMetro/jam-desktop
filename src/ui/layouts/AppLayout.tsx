@@ -1,5 +1,5 @@
 // AppLayout.tsx — Two-panel layout: NavSidebar | MainContent (Outlet + JamRoom)
-import { useEffect, useCallback } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import NavSidebar from "@/components/navigation/NavSidebar";
 import MainContent from "@/layouts/MainContent";
@@ -10,38 +10,10 @@ export default function AppLayout() {
   const { theme, setTheme } = useUIStore();
   const navigate = useNavigate();
 
-  // Keyboard shortcuts: Ctrl/Cmd + 1-4 for nav, Ctrl/Cmd + T for theme
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    const mod = e.ctrlKey || e.metaKey;
-    if (!mod) return;
-
-    const routes: Record<string, string> = {
-      "1": "/jams",
-      "2": "/feed",
-      "3": "/friends",
-      "4": "/communities",
-    };
-
-    if (routes[e.key]) {
-      e.preventDefault();
-      navigate(routes[e.key]);
-    } else if (e.key.toLowerCase() === "t") {
-      e.preventDefault();
-      const currentTheme =
-        theme === "system"
-          ? window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
-          : theme;
-      setTheme(currentTheme === "dark" ? "light" : "dark");
-    }
-  }, [navigate, theme, setTheme]);
-
+  // Menu-triggered navigation (Ctrl/Cmd+1-4) and theme toggle (Ctrl/Cmd+T)
+  // Shortcuts are registered as menu accelerators in main process
   useEffect(() => {
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
-
-  // Listen for menu-triggered theme toggle
-  useEffect(() => {
+    window.electron?.onNavigate((path) => navigate(path));
     window.electron?.onToggleTheme(() => {
       const currentTheme =
         useUIStore.getState().theme === "system"
@@ -49,7 +21,7 @@ export default function AppLayout() {
           : useUIStore.getState().theme;
       setTheme(currentTheme === "dark" ? "light" : "dark");
     });
-  }, [setTheme]);
+  }, [navigate, setTheme]);
 
   // Theme management — dark is the default, light is opt-in
   useEffect(() => {
