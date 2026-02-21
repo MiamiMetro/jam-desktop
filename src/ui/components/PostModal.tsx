@@ -1,5 +1,5 @@
 // PostModal.tsx — Modal overlay for post detail when opened from feed
-import { useEffect, useCallback, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -7,9 +7,11 @@ const Post = lazy(() => import("@/pages/Post"));
 
 export default function PostModal() {
   const navigate = useNavigate();
+  const [closing, setClosing] = useState(false);
 
   const handleClose = useCallback(() => {
-    navigate(-1);
+    setClosing(true);
+    setTimeout(() => navigate(-1), 150);
   }, [navigate]);
 
   // Close on Escape key
@@ -37,12 +39,19 @@ export default function PostModal() {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/60 animate-in fade-in duration-200"
+        className={`absolute inset-0 bg-black/60 transition-opacity duration-150 ${closing ? "opacity-0" : "animate-in fade-in duration-200"}`}
         onClick={handleClose}
       />
 
       {/* Modal */}
-      <div data-post-modal className="relative w-full max-w-2xl h-[85vh] bg-background rounded-xl border border-border shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+      <div
+        data-post-modal
+        className={`relative w-full max-w-2xl h-[85vh] bg-background rounded-xl border border-border shadow-2xl overflow-hidden flex flex-col transition-all duration-150 ${
+          closing
+            ? "opacity-0 scale-95"
+            : "animate-in fade-in zoom-in-95 duration-200"
+        }`}
+      >
         <Suspense
           fallback={
             <div className="flex items-center justify-center h-64">
