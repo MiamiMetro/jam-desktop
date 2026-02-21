@@ -37,12 +37,12 @@ export default function PostModal() {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/60"
+        className="absolute inset-0 bg-black/60 animate-in fade-in duration-200"
         onClick={handleClose}
       />
 
       {/* Modal */}
-      <div data-post-modal className="relative w-full max-w-2xl h-[85vh] bg-background rounded-xl border border-border shadow-2xl overflow-hidden flex flex-col">
+      <div data-post-modal className="relative w-full max-w-2xl h-[85vh] bg-background rounded-xl border border-border shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
         <Suspense
           fallback={
             <div className="flex items-center justify-center h-64">

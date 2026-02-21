@@ -3,16 +3,15 @@ import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { Globe, Lock, Minus, Plus } from "lucide-react";
 
 export interface RoomFormData {
@@ -66,12 +65,12 @@ export function RoomFormDialog({
     : isPending ? "Saving..." : "Save Changes";
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="max-w-md">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="font-heading">{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
-        </AlertDialogHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-heading">{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
             <Label htmlFor="room-name" className="text-xs font-medium text-muted-foreground">Room Name</Label>
@@ -159,16 +158,18 @@ export function RoomFormDialog({
             </button>
           </div>
         </div>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
+        <div className="flex justify-end gap-2 pt-2">
+          <DialogClose render={<Button variant="outline" />}>
+            Cancel
+          </DialogClose>
+          <Button
             onClick={() => onSubmit(form)}
             disabled={!form.name.trim() || isPending}
           >
             {submitLabel}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
