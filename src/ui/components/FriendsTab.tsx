@@ -292,9 +292,34 @@ function FriendsTab() {
               <MessageCircle className="h-7 w-7 text-muted-foreground/30" />
             </div>
             <h3 className="text-base font-heading font-semibold mb-1 text-muted-foreground">No conversation selected</h3>
-            <p className="text-sm text-muted-foreground/60 max-w-xs">
+            <p className="text-sm text-muted-foreground/60 max-w-xs mb-4">
               Pick a friend from the list to start chatting
             </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="glass"
+                onClick={() => setLeftView("search")}
+              >
+                <Search className="h-3.5 w-3.5 mr-1.5" />
+                Find People
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="glass relative"
+                onClick={() => setLeftView("requests")}
+              >
+                <UserCheck className="h-3.5 w-3.5 mr-1.5" />
+                Requests
+                {friendRequests.length > 0 && (
+                  <span className="ml-1.5 bg-primary text-primary-foreground text-[9px] px-1 rounded-full min-w-3.5 h-3.5 flex items-center justify-center leading-none">
+                    {friendRequests.length}
+                  </span>
+                )}
+              </Button>
+            </div>
           </div>
         )}
       </div>
