@@ -55,7 +55,7 @@ async function findOrCreateDM(
   ctx: MutationCtx,
   profileA: Id<"profiles">,
   profileB: Id<"profiles">
-): Promise<{ conversationId: Id<"conversations">; participantId: Id<"conversation_participants"> }> {
+): Promise<{ conversationId: Id<"conversations"> }> {
   // Build deterministic key (lexicographic sort)
   const dmKey = profileA < profileB 
     ? `${profileA}:${profileB}` 
@@ -113,23 +113,53 @@ async function findOrCreateDM(
     });
   }
 
-  // Get or find the sender's participant record
-  const senderParticipant = await ctx.db
-    .query("conversation_participants")
-    .withIndex("by_conversation_and_profile", (q) => 
-      q.eq("conversationId", conversationId).eq("profileId", profileA)
-    )
-    .first();
-
-  return { conversationId, participantId: senderParticipant!._id };
+  return { conversationId };
 }
 
 /**
- * Send a message to a user
+ * Ensure a DM conversation exists with another user and return its ID.
+ */
+export const ensureDmWithUser = mutation({
+  args: {
+    userId: v.id("profiles"),
+  },
+  handler: async (ctx, args) => {
+    const profile = await requireAuth(ctx);
+
+    await checkRateLimit(ctx, "general", profile._id);
+
+    if (profile._id === args.userId) {
+      throw new Error("You cannot create a DM with yourself");
+    }
+
+    const otherUser = await ctx.db.get(args.userId);
+    if (!otherUser) {
+      throw new Error("User not found");
+    }
+
+    const blocked = await isBlocked(ctx, profile._id, args.userId);
+    if (blocked) {
+      throw new Error("Cannot start a conversation with this user");
+    }
+
+    const friends = await areFriends(ctx, profile._id, args.userId);
+    if (!friends && otherUser.dmPrivacy !== "everyone") {
+      throw new Error(
+        "You can only send messages to friends or users who allow messages from everyone"
+      );
+    }
+
+    const { conversationId } = await findOrCreateDM(ctx, profile._id, args.userId);
+    return { conversationId };
+  },
+});
+
+/**
+ * Send a message to an existing conversation.
  */
 export const send = mutation({
   args: {
-    recipient_id: v.id("profiles"),
+    conversationId: v.id("conversations"),
     text: v.optional(v.string()),
     audio_url: v.optional(v.string()),
   },
@@ -138,11 +168,6 @@ export const send = mutation({
     
     // Rate limit: 30 messages per minute
     await checkRateLimit(ctx, "sendMessage", profile._id);
-
-    // Cannot send message to self
-    if (profile._id === args.recipient_id) {
-      throw new Error("You cannot send message to yourself");
-    }
 
     // Sanitize and validate inputs
     const text = sanitizeText(args.text);
@@ -156,38 +181,27 @@ export const send = mutation({
       throw new Error("Message must have either text or audio");
     }
 
-    // Check if blocked
-    const blocked = await isBlocked(ctx, profile._id, args.recipient_id);
-    if (blocked) {
-      throw new Error("Cannot send message to this user");
+    const conversation = await ctx.db.get(args.conversationId);
+    if (!conversation) {
+      throw new Error("Conversation not found");
+    }
+    if (conversation.mergedIntoConversationId != null) {
+      throw new Error("Conversation has been merged");
     }
 
-    // Get recipient profile
-    const recipient = await ctx.db.get(args.recipient_id);
-    if (!recipient) {
-      throw new Error("Recipient not found");
+    const senderParticipant = await ctx.db
+      .query("conversation_participants")
+      .withIndex("by_conversation_and_profile", (q) =>
+        q.eq("conversationId", args.conversationId).eq("profileId", profile._id)
+      )
+      .first();
+    if (!senderParticipant || senderParticipant.isActive === false) {
+      throw new Error("You are not a participant in this conversation");
     }
-
-    // Check if users are friends
-    const friends = await areFriends(ctx, profile._id, args.recipient_id);
-
-    // Check if message is allowed
-    if (!friends && recipient.dmPrivacy !== "everyone") {
-      throw new Error(
-        "You can only send messages to friends or users who allow messages from everyone"
-      );
-    }
-
-    // Find or create DM conversation
-    const { conversationId, participantId } = await findOrCreateDM(
-      ctx,
-      profile._id,
-      args.recipient_id
-    );
 
     // Insert message
     const messageId = await ctx.db.insert("messages", {
-      conversationId,
+      conversationId: args.conversationId,
       senderId: profile._id,
       text: text,
       audioUrl: audioUrl,
@@ -197,28 +211,42 @@ export const send = mutation({
     const message = await ctx.db.get(messageId);
 
     // Update conversation's lastMessageAt
-    await ctx.db.patch(conversationId, {
+    await ctx.db.patch(args.conversationId, {
       lastMessageAt: message!._creationTime,
+      lastMessageId: message!._id,
+      lastMessageSenderId: message!.senderId,
+      lastMessageText: message!.text,
+      lastMessageAudioUrl: message!.audioUrl,
+      lastMessageCreatedAt: message!._creationTime,
     });
 
     // Update participant activity timestamps for stable conversation ordering.
-    const participants = await ctx.db
-      .query("conversation_participants")
-      .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId))
-      .take(10);
+    let participantCursor: string | null = null;
+    let participantIsDone = false;
+    while (!participantIsDone) {
+      const participantPage = await ctx.db
+        .query("conversation_participants")
+        .withIndex("by_conversation", (q) =>
+          q.eq("conversationId", args.conversationId)
+        )
+        .paginate({ cursor: participantCursor, numItems: 100 });
 
-    for (const participant of participants) {
-      if (participant._id === participantId) {
-        // Sender should not see their own new message as unread.
-        await ctx.db.patch(participant._id, {
-          lastReadMessageAt: message!._creationTime,
-          lastActivityAt: message!._creationTime,
-        });
-      } else {
-        await ctx.db.patch(participant._id, {
-          lastActivityAt: message!._creationTime,
-        });
+      for (const participant of participantPage.page) {
+        if (participant._id === senderParticipant._id) {
+          // Sender should not see their own new message as unread.
+          await ctx.db.patch(participant._id, {
+            lastReadMessageAt: message!._creationTime,
+            lastActivityAt: message!._creationTime,
+          });
+        } else {
+          await ctx.db.patch(participant._id, {
+            lastActivityAt: message!._creationTime,
+          });
+        }
       }
+
+      participantCursor = participantPage.continueCursor;
+      participantIsDone = participantPage.isDone;
     }
 
     return {
@@ -266,13 +294,17 @@ export const getConversationsPaginated = query({
 
         let otherUser = null;
         if (!conv.isGroup) {
-          const otherParticipant = await ctx.db
+          const participantRows = await ctx.db
             .query("conversation_participants")
             .withIndex("by_conversation", (q) =>
               q.eq("conversationId", conv._id)
             )
-            .filter((q) => q.neq(q.field("profileId"), profile._id))
-            .first();
+            .take(10);
+          const otherParticipant = participantRows.find(
+            (participant) =>
+              participant.profileId !== profile._id &&
+              participant.isActive !== false
+          );
 
           if (otherParticipant) {
             const otherProfile = await ctx.db.get(otherParticipant.profileId);
@@ -287,13 +319,19 @@ export const getConversationsPaginated = query({
           }
         }
 
-        const lastMessage = await ctx.db
-          .query("messages")
-          .withIndex("by_conversation_time", (q) =>
-            q.eq("conversationId", conv._id)
-          )
-          .order("desc")
-          .first();
+        const lastMessage =
+          conv.lastMessageId &&
+          conv.lastMessageSenderId &&
+          conv.lastMessageCreatedAt != null
+            ? {
+                id: conv.lastMessageId,
+                conversation_id: conv._id,
+                sender_id: conv.lastMessageSenderId,
+                text: conv.lastMessageText ?? "",
+                audio_url: conv.lastMessageAudioUrl ?? "",
+                created_at: new Date(conv.lastMessageCreatedAt).toISOString(),
+              }
+            : null;
 
         return {
           id: conv._id,
@@ -301,16 +339,7 @@ export const getConversationsPaginated = query({
           name: conv.name,
           hasUnread,
           other_user: otherUser,
-          last_message: lastMessage
-            ? {
-                id: lastMessage._id,
-                conversation_id: lastMessage.conversationId,
-                sender_id: lastMessage.senderId,
-                text: lastMessage.text ?? "",
-                audio_url: lastMessage.audioUrl ?? "",
-                created_at: new Date(lastMessage._creationTime).toISOString(),
-              }
-            : null,
+          last_message: lastMessage,
           updated_at: new Date(
             p.lastActivityAt ?? conv.lastMessageAt ?? p._creationTime
           ).toISOString(),
@@ -331,36 +360,18 @@ export const getConversationsPaginated = query({
 });
 
 /**
- * Get messages with a specific user
- * Supports reverse cursor pagination (scroll up to load older)
- * Returns lastReadMessageAt for "New Messages" divider positioning
+ * Get messages by conversation ID.
+ * Supports reverse cursor pagination (scroll up to load older).
  */
-export const getWithUser = query({
+export const getByConversationPaginated = query({
   args: {
-    userId: v.id("profiles"),
+    conversationId: v.id("conversations"),
     limit: v.optional(v.number()),
     cursor: v.optional(v.number()), // _creationTime as cursor
   },
   handler: async (ctx, args) => {
     const profile = await getCurrentProfile(ctx);
     if (!profile) {
-      return { data: [], hasMore: false, nextCursor: null, lastReadMessageAt: null, otherParticipantLastRead: null };
-    }
-    const limit = args.limit ?? 50;
-
-    // Build deterministic key to find conversation
-    const dmKey = profile._id < args.userId 
-      ? `${profile._id}:${args.userId}` 
-      : `${args.userId}:${profile._id}`;
-
-    // Find dm_key entry
-    const dmKeyEntry = await ctx.db
-      .query("dm_keys")
-      .withIndex("by_dmKey", (q) => q.eq("dmKey", dmKey))
-      .first();
-
-    if (!dmKeyEntry) {
-      // No conversation yet
       return {
         data: [],
         hasMore: false,
@@ -370,72 +381,47 @@ export const getWithUser = query({
       };
     }
 
-    const conversationId = dmKeyEntry.conversationId;
-
-    // Check if conversation is merged (orphan) - redirect
-    const conversation = await ctx.db.get(conversationId);
-    if (!conversation) {
-      return { data: [], hasMore: false, nextCursor: null, lastReadMessageAt: null, otherParticipantLastRead: null };
-    }
-
-    if (conversation.mergedIntoConversationId != null) {
-      return { 
-        redirect: true, 
-        canonicalConversationId: conversation.mergedIntoConversationId,
-        data: [],
-        hasMore: false,
-        nextCursor: null,
-        lastReadMessageAt: null,
-        otherParticipantLastRead: null,
-      };
-    }
-
-    // Get current user's participant record for divider
     const participant = await ctx.db
       .query("conversation_participants")
-      .withIndex("by_conversation_and_profile", (q) => 
-        q.eq("conversationId", conversationId).eq("profileId", profile._id)
+      .withIndex("by_conversation_and_profile", (q) =>
+        q.eq("conversationId", args.conversationId).eq("profileId", profile._id)
       )
       .first();
+    if (!participant || participant.isActive === false) {
+      throw new Error("Conversation not found");
+    }
 
-    // Get other participant's lastReadMessageAt for read indicators
-    const otherParticipant = await ctx.db
-      .query("conversation_participants")
-      .withIndex("by_conversation_and_profile", (q) => 
-        q.eq("conversationId", conversationId).eq("profileId", args.userId)
-      )
-      .first();
+    const conversation = await ctx.db.get(args.conversationId);
+    if (!conversation || conversation.mergedIntoConversationId != null) {
+      throw new Error("Conversation not found");
+    }
 
-    // Query messages with cursor condition inside withIndex
+    const limit = args.limit ?? 50;
+
     let results: Doc<"messages">[];
     if (args.cursor == null) {
-      // First load: get newest N messages
       results = await ctx.db
         .query("messages")
-        .withIndex("by_conversation_time", (q) => q.eq("conversationId", conversationId))
+        .withIndex("by_conversation_time", (q) =>
+          q.eq("conversationId", args.conversationId)
+        )
         .order("desc")
         .take(limit + 1);
     } else {
-      // Subsequent loads: cursor inside withIndex for indexed range scan
       results = await ctx.db
         .query("messages")
-        .withIndex("by_conversation_time", (q) => 
-          q.eq("conversationId", conversationId).lt("_creationTime", args.cursor!)
+        .withIndex("by_conversation_time", (q) =>
+          q.eq("conversationId", args.conversationId).lt("_creationTime", args.cursor!)
         )
         .order("desc")
         .take(limit + 1);
     }
 
-    // Check if there are more messages
     const hasMore = results.length > limit;
     const data = results.slice(0, limit);
+    const nextCursor =
+      hasMore && data.length > 0 ? data[data.length - 1]._creationTime : null;
 
-    // Next cursor is the oldest message's _creationTime (for loading older)
-    // Must be computed BEFORE the reverse() call below (critical ordering constraint).
-    // data is ordered DESC (newest first), so data[data.length - 1] is the oldest message
-    const nextCursor = hasMore && data.length > 0 ? data[data.length - 1]._creationTime : null;
-
-    // Reverse for display (oldest at top, newest at bottom)
     const formattedMessages = data.reverse().map((msg) => ({
       id: msg._id,
       conversation_id: msg.conversationId,
@@ -446,14 +432,65 @@ export const getWithUser = query({
       _creationTime: msg._creationTime,
     }));
 
+    const participantPage = await ctx.db
+      .query("conversation_participants")
+      .withIndex("by_conversation", (q) => q.eq("conversationId", args.conversationId))
+      .take(50);
+
+    const otherParticipant = participantPage.find(
+      (p) => p.profileId !== profile._id && p.isActive !== false
+    );
+
     return {
       data: formattedMessages,
       hasMore,
       nextCursor,
-      lastReadMessageAt: participant?.lastReadMessageAt ?? null,
-      // For read indicators: when did the other person last read?
+      lastReadMessageAt: participant.lastReadMessageAt ?? null,
       otherParticipantLastRead: otherParticipant?.lastReadMessageAt ?? null,
     };
+  },
+});
+
+/**
+ * Get participants for a conversation.
+ */
+export const getParticipants = query({
+  args: {
+    conversationId: v.id("conversations"),
+  },
+  handler: async (ctx, args) => {
+    const profile = await getCurrentProfile(ctx);
+    if (!profile) return [];
+
+    const membership = await ctx.db
+      .query("conversation_participants")
+      .withIndex("by_conversation_and_profile", (q) =>
+        q.eq("conversationId", args.conversationId).eq("profileId", profile._id)
+      )
+      .first();
+    if (!membership || membership.isActive === false) {
+      return [];
+    }
+
+    const participants = await ctx.db
+      .query("conversation_participants")
+      .withIndex("by_conversation", (q) => q.eq("conversationId", args.conversationId))
+      .take(50);
+
+    const profiles = await Promise.all(
+      participants
+        .filter((p) => p.isActive !== false)
+        .map((participant) => ctx.db.get(participant.profileId))
+    );
+
+    return profiles
+      .filter((p): p is NonNullable<typeof p> => p !== null)
+      .map((p) => ({
+        id: p._id,
+        username: p.username,
+        display_name: p.displayName ?? "",
+        avatar_url: p.avatarUrl ?? "",
+      }));
   },
 });
 
@@ -463,29 +500,12 @@ export const getWithUser = query({
  */
 export const markAsRead = mutation({
   args: {
-    recipientId: v.id("profiles"),
+    conversationId: v.id("conversations"),
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
 
-    // Build deterministic key to find conversation
-    const dmKey = profile._id < args.recipientId 
-      ? `${profile._id}:${args.recipientId}` 
-      : `${args.recipientId}:${profile._id}`;
-
-    // Find dm_key entry
-    const dmKeyEntry = await ctx.db
-      .query("dm_keys")
-      .withIndex("by_dmKey", (q) => q.eq("dmKey", dmKey))
-      .first();
-
-    if (!dmKeyEntry) {
-      return { success: false };
-    }
-
-    const conversationId = dmKeyEntry.conversationId;
-    const conversation = await ctx.db.get(conversationId);
-    
+    const conversation = await ctx.db.get(args.conversationId);
     if (!conversation) {
       return { success: false };
     }
@@ -494,11 +514,11 @@ export const markAsRead = mutation({
     const participant = await ctx.db
       .query("conversation_participants")
       .withIndex("by_conversation_and_profile", (q) => 
-        q.eq("conversationId", conversationId).eq("profileId", profile._id)
+        q.eq("conversationId", args.conversationId).eq("profileId", profile._id)
       )
       .first();
 
-    if (!participant) {
+    if (!participant || participant.isActive === false) {
       return { success: false };
     }
 

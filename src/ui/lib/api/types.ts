@@ -22,7 +22,7 @@ type CommentsQueryReturn = FunctionReturnType<typeof api.comments.getByPostPagin
 export type Comment = CommentsQueryReturn["page"][number];
 
 // Infer Message type from messages query (Convex format - single source of truth)
-type MessagesQueryReturn = FunctionReturnType<typeof api.messages.getWithUser>;
+type MessagesQueryReturn = FunctionReturnType<typeof api.messages.getByConversationPaginated>;
 export type Message = MessagesQueryReturn["data"][number];
 
 // Infer Conversation type from conversations query (Convex format - single source of truth)

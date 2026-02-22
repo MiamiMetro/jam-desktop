@@ -17,9 +17,13 @@ import { checkRateLimit } from "./rateLimiter";
 async function formatPost(
   ctx: QueryCtx | MutationCtx,
   post: Doc<"posts">,
-  currentUserId?: Id<"profiles">
+  currentUserId?: Id<"profiles">,
+  options?: { author?: Doc<"profiles"> | null }
 ) {
-  const author = await ctx.db.get(post.authorId);
+  const author =
+    options?.author !== undefined
+      ? options.author
+      : await ctx.db.get(post.authorId);
 
   // Use denormalized counts for O(1) performance
   const likesCount = post.likesCount ?? 0;
@@ -180,8 +184,18 @@ export const getFeedPaginated = query({
       .order("desc")
       .paginate(args.paginationOpts);
 
+    const uniqueAuthorIds = [...new Set(result.page.map((post) => post.authorId))];
+    const authorEntries = await Promise.all(
+      uniqueAuthorIds.map(async (authorId) => [authorId, await ctx.db.get(authorId)] as const)
+    );
+    const authorMap = new Map(authorEntries);
+
     const page = await Promise.all(
-      result.page.map((post) => formatPost(ctx, post, currentProfile?._id))
+      result.page.map((post) =>
+        formatPost(ctx, post, currentProfile?._id, {
+          author: authorMap.get(post.authorId) ?? null,
+        })
+      )
     );
 
     return {
@@ -217,8 +231,18 @@ export const getByUsernamePaginated = query({
       .order("desc")
       .paginate(args.paginationOpts);
 
+    const uniqueAuthorIds = [...new Set(result.page.map((post) => post.authorId))];
+    const authorEntries = await Promise.all(
+      uniqueAuthorIds.map(async (authorId) => [authorId, await ctx.db.get(authorId)] as const)
+    );
+    const authorMap = new Map(authorEntries);
+
     const page = await Promise.all(
-      result.page.map((post) => formatPost(ctx, post, currentProfile?._id))
+      result.page.map((post) =>
+        formatPost(ctx, post, currentProfile?._id, {
+          author: authorMap.get(post.authorId) ?? null,
+        })
+      )
     );
 
     return {

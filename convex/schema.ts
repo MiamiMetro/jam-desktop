@@ -113,6 +113,12 @@ export default defineSchema({
     name: v.optional(v.string()), // For future group names
     // Denormalized for O(1) unread check (avoids N+1)
     lastMessageAt: v.optional(v.number()),
+    // Denormalized last message preview for conversation list rendering.
+    lastMessageId: v.optional(v.id("messages")),
+    lastMessageSenderId: v.optional(v.id("profiles")),
+    lastMessageText: v.optional(v.string()),
+    lastMessageAudioUrl: v.optional(v.string()),
+    lastMessageCreatedAt: v.optional(v.number()),
     // For duplicate DM cleanup - points to canonical conversation
     mergedIntoConversationId: v.optional(v.id("conversations")),
   })

@@ -3,13 +3,13 @@ import { useRef, useState, useEffect, useLayoutEffect } from "react";
 
 interface UseConversationScrollOptions {
   messages: Array<{ id: string; [key: string]: any }>;
-  partnerId: string;
+  conversationId: string;
   isLoadingOlderMessages: boolean;
 }
 
 export function useConversationScroll({
   messages,
-  partnerId,
+  conversationId,
   isLoadingOlderMessages,
 }: UseConversationScrollOptions) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -69,13 +69,13 @@ export function useConversationScroll({
     if (shouldAutoScrollRef.current) scrollToBottom();
   }, [lastMessageId]);
 
-  // Reset on partner change
+  // Reset on conversation change
   useEffect(() => {
     shouldAutoScrollRef.current = true;
     if (messagesEndRef.current) {
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "auto" }), 100);
     }
-  }, [partnerId]);
+  }, [conversationId]);
 
   // Scroll event listener — detect scrolled up state
   useEffect(() => {
@@ -113,7 +113,7 @@ export function useConversationScroll({
     lastMessageIdRef.current = currentLastId ?? null;
   }, [messages, isScrolledUp]);
 
-  // Full reset on partner change
+  // Full reset on conversation change
   useEffect(() => {
     setIsScrolledUp(false);
     setNewMessagesWhileScrolledUp(0);
@@ -125,7 +125,7 @@ export function useConversationScroll({
     justSentMessageRef.current = false;
     prevMessagesLengthRef.current = 0;
     shouldAutoScrollRef.current = true;
-  }, [partnerId]);
+  }, [conversationId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

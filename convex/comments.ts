@@ -27,9 +27,13 @@ function generateNextSegment(existingCount: number): string {
 async function formatComment(
   ctx: QueryCtx | MutationCtx,
   comment: Doc<"comments">,
-  currentUserId?: Id<"profiles">
+  currentUserId?: Id<"profiles">,
+  options?: { author?: Doc<"profiles"> | null }
 ) {
-  const author = await ctx.db.get(comment.authorId);
+  const author =
+    options?.author !== undefined
+      ? options.author
+      : await ctx.db.get(comment.authorId);
 
   // Use denormalized counts for O(1) performance
   const likesCount = comment.likesCount ?? 0;
@@ -252,8 +256,18 @@ export const getByPostPaginated = query({
       .withIndex("by_post_and_path", (q) => q.eq("postId", args.postId))
       .paginate(args.paginationOpts);
 
+    const uniqueAuthorIds = [...new Set(result.page.map((comment) => comment.authorId))];
+    const authorEntries = await Promise.all(
+      uniqueAuthorIds.map(async (authorId) => [authorId, await ctx.db.get(authorId)] as const)
+    );
+    const authorMap = new Map(authorEntries);
+
     const page = await Promise.all(
-      result.page.map((comment) => formatComment(ctx, comment, currentProfile?._id))
+      result.page.map((comment) =>
+        formatComment(ctx, comment, currentProfile?._id, {
+          author: authorMap.get(comment.authorId) ?? null,
+        })
+      )
     );
 
     return {
@@ -284,8 +298,18 @@ export const getRepliesPaginated = query({
       .withIndex("by_parent", (q) => q.eq("parentId", args.parentId))
       .paginate(args.paginationOpts);
 
+    const uniqueAuthorIds = [...new Set(result.page.map((comment) => comment.authorId))];
+    const authorEntries = await Promise.all(
+      uniqueAuthorIds.map(async (authorId) => [authorId, await ctx.db.get(authorId)] as const)
+    );
+    const authorMap = new Map(authorEntries);
+
     const page = await Promise.all(
-      result.page.map((comment) => formatComment(ctx, comment, currentProfile?._id))
+      result.page.map((comment) =>
+        formatComment(ctx, comment, currentProfile?._id, {
+          author: authorMap.get(comment.authorId) ?? null,
+        })
+      )
     );
 
     return {

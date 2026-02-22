@@ -16,7 +16,11 @@ import {
 import { useAuthStore } from "@/stores/authStore";
 import { useAuthModalStore } from "@/stores/authModalStore";
 import { useFriends, useFriendRequests } from "@/hooks/useFriends";
-import { useConversations, useOnlineUsers } from "@/hooks/useUsers";
+import {
+  useConversations,
+  useOnlineUsers,
+  useEnsureDmConversation,
+} from "@/hooks/useUsers";
 import DMConversation from "@/components/social/DMConversation";
 import UserSearchPanel from "@/components/social/UserSearchPanel";
 import FriendRequestsPanel from "@/components/social/FriendRequestsPanel";
@@ -43,11 +47,12 @@ function FriendsTab() {
   } = useFriends(serverFriendSearch);
   const { data: conversations = [] } = useConversations(user?.id || "");
   const { data: onlineUsers = [] } = useOnlineUsers();
+  const ensureDmConversation = useEnsureDmConversation();
   const onlineIds = new Set(onlineUsers.map(u => u.id));
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeDmPartnerId = searchParams.get("dm");
-  const setActiveDmPartnerId = useCallback((id: string | null) => {
+  const activeDmConversationId = searchParams.get("dm");
+  const setActiveDmConversationId = useCallback((id: string | null) => {
     if (id) {
       setSearchParams({ dm: id });
     } else {
@@ -70,9 +75,24 @@ function FriendsTab() {
     return 0;
   });
 
-  const handleSelectFriend = (friendId: string) => {
-    setActiveDmPartnerId(friendId);
-    setLeftView("conversations");
+  const handleSelectFriend = async (friendId: string) => {
+    const existingConversation = conversations.find(
+      (conversation) => String(conversation.userId) === String(friendId)
+    );
+
+    if (existingConversation) {
+      setActiveDmConversationId(existingConversation.id);
+      setLeftView("conversations");
+      return;
+    }
+
+    try {
+      const conversationId = await ensureDmConversation.mutateAsync(friendId);
+      setActiveDmConversationId(conversationId);
+      setLeftView("conversations");
+    } catch (error) {
+      console.error("Failed to open conversation:", error);
+    }
   };
 
   if (isGuest) {
@@ -224,12 +244,14 @@ function FriendsTab() {
                     const conversation = conversations.find(
                       (c) => String(c.userId) === String(friend.id)
                     );
-                    const isActive = activeDmPartnerId === friend.id;
+                    const isActive = activeDmConversationId === conversation?.id;
 
                     return (
                       <button
                         key={friend.id}
-                        onClick={() => handleSelectFriend(friend.id)}
+                        onClick={() => {
+                          void handleSelectFriend(friend.id);
+                        }}
                         className={`w-full flex items-center gap-3 px-4 py-3 transition-all text-left cursor-pointer border-b border-border/50 border-l-2 ${
                           isActive
                             ? "bg-primary/8 border-l-primary"
@@ -300,10 +322,10 @@ function FriendsTab() {
 
       {/* ─── Right Panel: Active DM or Empty State ─── */}
       <div className="flex-1 flex flex-col h-full min-h-0 min-w-0">
-        {activeDmPartnerId ? (
+        {activeDmConversationId ? (
           <DMConversation
-            partnerId={activeDmPartnerId}
-            onBack={() => setActiveDmPartnerId(null)}
+            conversationId={activeDmConversationId}
+            onBack={() => setActiveDmConversationId(null)}
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center px-6">

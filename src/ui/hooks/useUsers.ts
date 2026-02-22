@@ -83,6 +83,9 @@ interface UIConversation {
   id: string;
   userId: string;
   hasUnread: boolean;
+  isGroup: boolean;
+  name?: string;
+  otherUser?: User;
   lastMessage?: {
     id: string;
     senderId?: string;
@@ -94,6 +97,8 @@ interface UIConversation {
 
 function convertConversation(conv: {
   id: string;
+  isGroup: boolean;
+  name?: string;
   hasUnread: boolean;
   other_user?: { id: string; username: string; display_name: string; avatar_url: string } | null;
   last_message?: { id: string; sender_id: string; text?: string; audio_url?: string; created_at: string } | null;
@@ -101,6 +106,18 @@ function convertConversation(conv: {
   return {
     id: conv.id,
     userId: conv.other_user?.id || "",
+    isGroup: conv.isGroup,
+    name: conv.name,
+    otherUser: conv.other_user
+      ? {
+          id: conv.other_user.id as Id<"profiles">,
+          username: conv.other_user.username,
+          display_name: conv.other_user.display_name ?? "",
+          avatar_url: conv.other_user.avatar_url ?? "",
+          bio: "",
+          created_at: new Date().toISOString(),
+        }
+      : undefined,
     hasUnread: conv.hasUnread,
     lastMessage: conv.last_message
       ? {
@@ -152,6 +169,19 @@ export const useAllUsers = (search?: string, enabled = true) => {
   };
 };
 
+export const useConversationParticipants = (conversationId: string) => {
+  const result = useQuery(
+    api.messages.getParticipants,
+    conversationId ? { conversationId: conversationId as Id<"conversations"> } : "skip"
+  );
+
+  return {
+    data: result ? result.map(convertUser) : [],
+    isLoading: result === undefined && !!conversationId,
+    error: null,
+  };
+};
+
 export const useConversations = (userId: string) => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
@@ -177,11 +207,39 @@ export const useConversations = (userId: string) => {
   };
 };
 
-export const useMessages = (userId: string, partnerId: string) => {
+export const useEnsureDmConversation = () => {
+  const ensureDm = useMutation(api.messages.ensureDmWithUser);
+  const [isPending, setIsPending] = useState(false);
+
+  const run = async (partnerId: string) => {
+    setIsPending(true);
+    try {
+      const result = await ensureDm({ userId: partnerId as Id<"profiles"> });
+      return result.conversationId as string;
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return {
+    mutate: (
+      partnerId: string,
+      options?: { onSuccess?: (conversationId: string) => void; onError?: (error: Error) => void }
+    ) => {
+      run(partnerId)
+        .then((conversationId) => options?.onSuccess?.(conversationId))
+        .catch((error) => options?.onError?.(error as Error));
+    },
+    mutateAsync: run,
+    isPending,
+  };
+};
+
+export const useMessages = (userId: string, conversationId: string) => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
   const { isAuthSet } = useConvexAuthStore();
-  const canQuery = !isGuest && isAuthSet && isProfileReady && userId && partnerId;
+  const canQuery = !isGuest && isAuthSet && isProfileReady && userId && conversationId;
 
   type LocalUIMessage = ReturnType<typeof convertMessage>;
   const [olderMessages, setOlderMessages] = useState<LocalUIMessage[]>([]);
@@ -190,12 +248,12 @@ export const useMessages = (userId: string, partnerId: string) => {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [initialLastReadMessageAt, setInitialLastReadMessageAt] = useState<number | null>(null);
   const [hasInitializedLastRead, setHasInitializedLastRead] = useState(false);
-  const previousPartnerIdRef = useRef<string | null>(null);
+  const previousConversationIdRef = useRef<string | null>(null);
   const conversationOpenedAtRef = useRef<number>(Date.now());
 
   useEffect(() => {
-    if (!partnerId) {
-      previousPartnerIdRef.current = null;
+    if (!conversationId) {
+      previousConversationIdRef.current = null;
       setOlderMessages([]);
       setNextCursor(null);
       setHasMore(false);
@@ -204,8 +262,8 @@ export const useMessages = (userId: string, partnerId: string) => {
       setHasInitializedLastRead(false);
       return;
     }
-    if (previousPartnerIdRef.current === partnerId) return;
-    previousPartnerIdRef.current = partnerId;
+    if (previousConversationIdRef.current === conversationId) return;
+    previousConversationIdRef.current = conversationId;
     setOlderMessages([]);
     setNextCursor(null);
     setHasMore(false);
@@ -213,11 +271,11 @@ export const useMessages = (userId: string, partnerId: string) => {
     setInitialLastReadMessageAt(null);
     setHasInitializedLastRead(false);
     conversationOpenedAtRef.current = Date.now();
-  }, [partnerId]);
+  }, [conversationId]);
 
   const firstPageResult = useQuery(
-    api.messages.getWithUser,
-    canQuery ? { userId: partnerId as Id<"profiles">, limit: 50 } : "skip"
+    api.messages.getByConversationPaginated,
+    canQuery ? { conversationId: conversationId as Id<"conversations">, limit: 50 } : "skip"
   );
 
   useEffect(() => {
@@ -238,8 +296,8 @@ export const useMessages = (userId: string, partnerId: string) => {
 
     setIsLoadingMore(true);
     try {
-      const olderResult = await convex.query(api.messages.getWithUser, {
-        userId: partnerId as Id<"profiles">,
+      const olderResult = await convex.query(api.messages.getByConversationPaginated, {
+        conversationId: conversationId as Id<"conversations">,
         limit: 50,
         cursor: nextCursor,
       });
@@ -290,11 +348,6 @@ export const useMessages = (userId: string, partnerId: string) => {
     lastReadMessageAt: initialLastReadMessageAt,
     conversationOpenedAt: conversationOpenedAtRef.current,
     otherParticipantLastRead: firstPageResult?.otherParticipantLastRead ?? null,
-    redirect: firstPageResult && "redirect" in firstPageResult ? firstPageResult.redirect : false,
-    canonicalConversationId:
-      firstPageResult && "canonicalConversationId" in firstPageResult
-        ? (firstPageResult.canonicalConversationId as string)
-        : null,
     error: null,
   };
 };
@@ -303,11 +356,11 @@ export const useSendMessage = () => {
   const sendMessage = useMutation(api.messages.send);
   const [isPending, setIsPending] = useState(false);
 
-  const run = async (variables: { senderId: string; receiverId: string; content: string }) => {
+  const run = async (variables: { conversationId: string; content: string }) => {
     setIsPending(true);
     try {
       const result = await sendMessage({
-        recipient_id: variables.receiverId as Id<"profiles">,
+        conversationId: variables.conversationId as Id<"conversations">,
         text: variables.content || undefined,
       });
       return {
@@ -324,7 +377,7 @@ export const useSendMessage = () => {
 
   return {
     mutate: (
-      variables: { senderId: string; receiverId: string; content: string },
+      variables: { conversationId: string; content: string },
       options?: { onSuccess?: () => void; onError?: (error: Error) => void }
     ) => {
       run(variables)
@@ -339,13 +392,13 @@ export const useSendMessage = () => {
 export const useMarkAsRead = () => {
   const markAsRead = useMutation(api.messages.markAsRead);
   return {
-    mutate: (recipientId: string) => {
-      markAsRead({ recipientId: recipientId as Id<"profiles"> }).catch((error) =>
+    mutate: (conversationId: string) => {
+      markAsRead({ conversationId: conversationId as Id<"conversations"> }).catch((error) =>
         console.error("Failed to mark as read:", error)
       );
     },
-    mutateAsync: async (recipientId: string) => {
-      return await markAsRead({ recipientId: recipientId as Id<"profiles"> });
+    mutateAsync: async (conversationId: string) => {
+      return await markAsRead({ conversationId: conversationId as Id<"conversations"> });
     },
   };
 };

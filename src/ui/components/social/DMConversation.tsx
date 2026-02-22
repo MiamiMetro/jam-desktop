@@ -7,7 +7,13 @@ import { Input } from "@/components/ui/input";
 import { AutoLinkedText } from "@/components/AutoLinkedText";
 import { ArrowLeft, Send, ChevronDown } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
-import { useAllUsers, useMessages, useSendMessage, useMarkAsRead, useConversations } from "@/hooks/useUsers";
+import {
+  useMessages,
+  useSendMessage,
+  useMarkAsRead,
+  useConversations,
+  useConversationParticipants,
+} from "@/hooks/useUsers";
 import { useConversationScroll } from "@/hooks/useConversationScroll";
 
 type MessageWithTime = {
@@ -54,19 +60,19 @@ function formatTime(date: Date | string) {
 }
 
 interface DMConversationProps {
-  partnerId: string;
+  conversationId: string;
   onBack: () => void;
 }
 
-export default function DMConversation({ partnerId, onBack }: DMConversationProps) {
+export default function DMConversation({ conversationId, onBack }: DMConversationProps) {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const [messageInput, setMessageInput] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
   const MAX_MESSAGE_LENGTH = 500;
 
-  const { data: allUsers = [] } = useAllUsers(undefined, !!partnerId);
   const { data: conversations = [] } = useConversations(user?.id || "");
+  const { data: participants = [] } = useConversationParticipants(conversationId);
   const {
     data: messages = [],
     fetchNextPage: loadOlderMessages,
@@ -75,11 +81,19 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
     lastReadMessageAt,
     conversationOpenedAt,
     otherParticipantLastRead,
-  } = useMessages(user?.id || "", partnerId);
+  } = useMessages(user?.id || "", conversationId);
   const sendMessageMutation = useSendMessage();
   const markAsReadMutation = useMarkAsRead();
 
-  const chatPartner = allUsers.find((u: { id: string }) => u.id === partnerId);
+  const currentConversation = conversations.find(
+    (c) => String(c.id) === String(conversationId)
+  );
+  const chatPartner =
+    participants.find((participant) => participant.id !== user?.id) ?? null;
+  const isGroupConversation = currentConversation?.isGroup ?? false;
+  const conversationTitle = isGroupConversation
+    ? currentConversation?.name || "Group conversation"
+    : chatPartner?.username || "Conversation";
 
   const {
     messagesEndRef,
@@ -91,16 +105,15 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
     markJustSentMessage,
   } = useConversationScroll({
     messages,
-    partnerId,
+    conversationId,
     isLoadingOlderMessages,
   });
 
   // Mark as read logic
   const canMarkOnLeaveRef = useRef(false);
-  const currentPartnerRef = useRef<string | null>(null);
+  const currentConversationRef = useRef<string | null>(null);
   const hasMarkedCurrentUnreadRef = useRef(false);
   const prevHasUnreadRef = useRef(false);
-  const currentConversation = conversations.find((c) => String(c.userId) === String(partnerId));
   const hasUnread = currentConversation?.hasUnread ?? false;
 
   useEffect(() => {
@@ -109,38 +122,38 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
   }, [hasUnread]);
 
   useEffect(() => {
-    if (!partnerId) { canMarkOnLeaveRef.current = false; return; }
-    currentPartnerRef.current = partnerId;
+    if (!conversationId) { canMarkOnLeaveRef.current = false; return; }
+    currentConversationRef.current = conversationId;
     if (!hasUnread || hasMarkedCurrentUnreadRef.current) return;
     const enableLeaveTimer = setTimeout(() => { canMarkOnLeaveRef.current = true; }, 500);
     const timer = setTimeout(() => {
-      markAsReadMutation.mutate(partnerId);
+      markAsReadMutation.mutate(conversationId);
       hasMarkedCurrentUnreadRef.current = true;
       canMarkOnLeaveRef.current = false;
     }, 1000);
     return () => {
       clearTimeout(timer);
       clearTimeout(enableLeaveTimer);
-      if (canMarkOnLeaveRef.current && currentPartnerRef.current && !hasMarkedCurrentUnreadRef.current) {
-        markAsReadMutation.mutate(currentPartnerRef.current);
+      if (canMarkOnLeaveRef.current && currentConversationRef.current && !hasMarkedCurrentUnreadRef.current) {
+        markAsReadMutation.mutate(currentConversationRef.current);
         hasMarkedCurrentUnreadRef.current = true;
       }
       canMarkOnLeaveRef.current = false;
     };
-  }, [partnerId, hasUnread, markAsReadMutation]);
+  }, [conversationId, hasUnread, markAsReadMutation]);
 
   useEffect(() => {
     hasMarkedCurrentUnreadRef.current = false;
     prevHasUnreadRef.current = false;
     canMarkOnLeaveRef.current = false;
-  }, [partnerId]);
+  }, [conversationId]);
 
   const handleSendMessage = () => {
     if (!messageInput.trim() || !user) return;
     markJustSentMessage();
     setSendError(null);
     sendMessageMutation.mutate(
-      { senderId: user.id, receiverId: partnerId, content: messageInput.trim() },
+      { conversationId, content: messageInput.trim() },
       {
         onError: (error) => {
           const msg = error.message || "Failed to send message";
@@ -162,7 +175,7 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
         <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full flex-shrink-0" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        {chatPartner && (
+        {!isGroupConversation && chatPartner ? (
           <button
             onClick={() => navigate(`/profile/${chatPartner.username}`)}
             className="flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity cursor-pointer"
@@ -177,6 +190,10 @@ export default function DMConversation({ partnerId, onBack }: DMConversationProp
               <div className="text-sm font-semibold truncate">{chatPartner.username}</div>
             </div>
           </button>
+        ) : (
+          <div className="min-w-0">
+            <div className="text-sm font-semibold truncate">{conversationTitle}</div>
+          </div>
         )}
       </div>
 
