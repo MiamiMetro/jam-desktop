@@ -3,6 +3,7 @@ export interface ElectronAPI {
     openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
     onNavigate: (callback: (path: string) => void) => void;
     onToggleTheme: (callback: () => void) => void;
+    saveTheme: (theme: 'dark' | 'light') => void;
 }
 
 declare global {

@@ -6,6 +6,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>jam-desktop</title>
   <link rel="icon" type="image/svg+xml" href="./logo-sidebar-dark.svg" />
+  <script>
+    // Apply theme class BEFORE CSS paints to prevent flash (FOUC)
+    (function() {
+      var theme = localStorage.getItem('theme') || 'system';
+      if (theme === 'system') {
+        var isLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+        document.documentElement.classList.add(isLight ? 'light' : 'dark');
+      } else {
+        document.documentElement.classList.add(theme);
+      }
+    })();
+  </script>
 </head>
 
 <body>

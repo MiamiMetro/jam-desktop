@@ -17,6 +17,10 @@ export const useUIStore = create<UIState>((set) => ({
   })(),
   setTheme: (theme) => {
     localStorage.setItem('theme', theme);
+    const resolved = theme === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : theme;
+    window.electron?.saveTheme?.(resolved);
     set({ theme });
   },
   rightPanelOpen: (() => {

@@ -3,11 +3,23 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { spawn, ChildProcess } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { isDev } from './util.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Theme background colors (read at startup to prevent native window flash)
+const THEME_BG = { dark: '#05070D', light: '#f5f0e8' } as const;
+
+function getSavedTheme(): 'dark' | 'light' {
+    try {
+        const data = JSON.parse(readFileSync(path.join(app.getPath('userData'), 'theme.json'), 'utf-8'));
+        return data.theme === 'light' ? 'light' : 'dark';
+    } catch {
+        return 'dark';
+    }
+}
 
 // Track the spawned client process
 let clientProcess: ChildProcess | null = null;
@@ -176,6 +188,13 @@ if (!gotTheLock) {
         }
     });
 
+    // Save theme preference so next launch uses correct background color
+    ipcMain.handle('save-theme', (_event, theme: 'dark' | 'light') => {
+        try {
+            writeFileSync(path.join(app.getPath('userData'), 'theme.json'), JSON.stringify({ theme }));
+        } catch { /* non-critical */ }
+    });
+
     app.on('ready', () => {
         const preloadPath = isDev()
             ? path.join(process.cwd(), 'dist-electron', 'preload.js')
@@ -209,7 +228,7 @@ if (!gotTheLock) {
             minWidth: 384,
             minHeight: 216,
             show: false, // Don't show until ready
-            backgroundColor: '#ffffff', // Match your app background
+            backgroundColor: THEME_BG[getSavedTheme()],
             autoHideMenuBar: process.platform !== 'darwin', // Hide menu on Windows/Linux, keep on macOS
             webPreferences: {
                 preload: preloadPath,

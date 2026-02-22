@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.removeAllListeners('toggle-theme');
         ipcRenderer.on('toggle-theme', () => callback());
     },
+    saveTheme: (theme: 'dark' | 'light') => {
+        ipcRenderer.invoke('save-theme', theme);
+    },
 });
 
 
