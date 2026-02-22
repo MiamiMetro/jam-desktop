@@ -139,6 +139,15 @@ export async function requireAuth(ctx: QueryCtx | MutationCtx) {
 }
 
 /**
+ * Normalize username for canonical storage and case-insensitive uniqueness.
+ */
+export function normalizeUsername(username: string | undefined): string | undefined {
+  const trimmed = username?.trim();
+  if (!trimmed) return trimmed;
+  return trimmed.toLowerCase();
+}
+
+/**
  * Check if there's a block between two users (in either direction)
  */
 export async function isBlocked(
@@ -185,6 +194,74 @@ export async function areFriends(
     .first();
 
   return friendship?.status === "accepted";
+}
+
+export type UniqueLockScope =
+  | "username"
+  | "dm_pair"
+  | "post_like"
+  | "comment_like";
+
+export async function getUniqueLock(
+  ctx: QueryCtx | MutationCtx,
+  scope: UniqueLockScope,
+  value: string
+) {
+  return await ctx.db
+    .query("unique_locks")
+    .withIndex("by_scope_value", (q) => q.eq("scope", scope).eq("value", value))
+    .first();
+}
+
+export async function acquireUniqueLock(
+  ctx: MutationCtx,
+  scope: UniqueLockScope,
+  value: string,
+  ownerId: string
+) {
+  const existing = await getUniqueLock(ctx, scope, value);
+  if (existing) {
+    return { acquired: false as const, lock: existing };
+  }
+
+  const lockId = await ctx.db.insert("unique_locks", {
+    scope,
+    value,
+    ownerId,
+    createdAt: Date.now(),
+  });
+
+  const lock = await ctx.db.get(lockId);
+  if (!lock) {
+    throw new Error("UNIQUE_LOCK_CREATE_FAILED");
+  }
+
+  return { acquired: true as const, lock };
+}
+
+export async function setUniqueLockOwner(
+  ctx: MutationCtx,
+  scope: UniqueLockScope,
+  value: string,
+  ownerId: string
+): Promise<boolean> {
+  const lock = await getUniqueLock(ctx, scope, value);
+  if (!lock) return false;
+  await ctx.db.patch(lock._id, { ownerId });
+  return true;
+}
+
+export async function releaseUniqueLock(
+  ctx: MutationCtx,
+  scope: UniqueLockScope,
+  value: string,
+  ownerId?: string
+): Promise<boolean> {
+  const lock = await getUniqueLock(ctx, scope, value);
+  if (!lock) return false;
+  if (ownerId && lock.ownerId !== ownerId) return false;
+  await ctx.db.delete(lock._id);
+  return true;
 }
 
 /**

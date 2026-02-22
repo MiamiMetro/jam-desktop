@@ -79,12 +79,13 @@ function convertMessage(message: {
   };
 }
 
-interface UIConversation {
+export interface UIConversation {
   id: string;
   userId: string;
   hasUnread: boolean;
   isGroup: boolean;
   name?: string;
+  participantCount?: number;
   otherUser?: User;
   lastMessage?: {
     id: string;
@@ -99,6 +100,7 @@ function convertConversation(conv: {
   id: string;
   isGroup: boolean;
   name?: string;
+  participant_count?: number;
   hasUnread: boolean;
   other_user?: { id: string; username: string; display_name: string; avatar_url: string } | null;
   last_message?: { id: string; sender_id: string; text?: string; audio_url?: string; created_at: string } | null;
@@ -108,6 +110,7 @@ function convertConversation(conv: {
     userId: conv.other_user?.id || "",
     isGroup: conv.isGroup,
     name: conv.name,
+    participantCount: conv.participant_count,
     otherUser: conv.other_user
       ? {
           id: conv.other_user.id as Id<"profiles">,

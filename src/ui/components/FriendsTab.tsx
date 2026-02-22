@@ -325,6 +325,9 @@ function FriendsTab() {
         {activeDmConversationId ? (
           <DMConversation
             conversationId={activeDmConversationId}
+            conversation={
+              conversations.find((c) => String(c.id) === String(activeDmConversationId)) ?? null
+            }
             onBack={() => setActiveDmConversationId(null)}
           />
         ) : (

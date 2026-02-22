@@ -11,8 +11,8 @@ import {
   useMessages,
   useSendMessage,
   useMarkAsRead,
-  useConversations,
   useConversationParticipants,
+  type UIConversation,
 } from "@/hooks/useUsers";
 import { useConversationScroll } from "@/hooks/useConversationScroll";
 
@@ -61,17 +61,20 @@ function formatTime(date: Date | string) {
 
 interface DMConversationProps {
   conversationId: string;
+  conversation?: UIConversation | null;
   onBack: () => void;
 }
 
-export default function DMConversation({ conversationId, onBack }: DMConversationProps) {
+export default function DMConversation({
+  conversationId,
+  conversation,
+  onBack,
+}: DMConversationProps) {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const [messageInput, setMessageInput] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
-  const MAX_MESSAGE_LENGTH = 500;
-
-  const { data: conversations = [] } = useConversations(user?.id || "");
+  const MAX_MESSAGE_LENGTH = 300;
   const { data: participants = [] } = useConversationParticipants(conversationId);
   const {
     data: messages = [],
@@ -85,9 +88,7 @@ export default function DMConversation({ conversationId, onBack }: DMConversatio
   const sendMessageMutation = useSendMessage();
   const markAsReadMutation = useMarkAsRead();
 
-  const currentConversation = conversations.find(
-    (c) => String(c.id) === String(conversationId)
-  );
+  const currentConversation = conversation ?? null;
   const chatPartner =
     participants.find((participant) => participant.id !== user?.id) ?? null;
   const isGroupConversation = currentConversation?.isGroup ?? false;

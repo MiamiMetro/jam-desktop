@@ -8,6 +8,10 @@ import {
   validateUsername,
   validateUrl,
   sanitizeText,
+  normalizeUsername,
+  acquireUniqueLock,
+  setUniqueLockOwner,
+  releaseUniqueLock,
   MAX_LENGTHS,
 } from "./helpers";
 import { checkRateLimit } from "./rateLimiter";
@@ -44,10 +48,11 @@ export const updateMe = mutation({
     await checkRateLimit(ctx, "updateProfile", profile._id);
 
     // Sanitize and validate inputs
-    const username = sanitizeText(args.username);
+    const username = normalizeUsername(sanitizeText(args.username));
     const displayName = sanitizeText(args.display_name);
     const avatarUrl = args.avatar_url;
     const bio = sanitizeText(args.bio);
+    const authIdentityKey = `${profile.authIssuer}:${profile.authSubject}`;
 
     // Validate username if provided
     if (username !== undefined) {
@@ -57,41 +62,73 @@ export const updateMe = mutation({
     validateTextLength(bio, MAX_LENGTHS.BIO, "Bio");
     validateUrl(avatarUrl);
 
-    // If username is being changed, check uniqueness
+    // If username is being changed, check uniqueness against legacy rows too.
     if (username && username !== profile.username) {
       const existing = await ctx.db
         .query("profiles")
         .withIndex("by_username", (q) => q.eq("username", username))
         .first();
 
-      if (existing) {
+      if (existing && existing._id !== profile._id) {
         throw new Error("USERNAME_TAKEN: Username already taken");
       }
     }
 
-    // Build update object
-    const updates: Partial<{
-      username: string;
-      displayName: string;
-      avatarUrl: string;
-      bio: string;
-      dmPrivacy: "friends" | "everyone";
-    }> = {};
+    const usernameChanged = username !== undefined && username !== profile.username;
+    const previousUsername = normalizeUsername(profile.username) ?? profile.username;
+    let acquiredNewUsernameLock = false;
+    let newUsernameLockValue: string | null = null;
 
-    if (username !== undefined) updates.username = username;
-    if (displayName !== undefined) updates.displayName = displayName;
-    if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
-    if (bio !== undefined) updates.bio = bio;
-    if (args.dm_privacy !== undefined) updates.dmPrivacy = args.dm_privacy;
+    try {
+      if (usernameChanged) {
+        newUsernameLockValue = username!;
+        const usernameLock = await acquireUniqueLock(
+          ctx,
+          "username",
+          newUsernameLockValue,
+          authIdentityKey
+        );
+        if (!usernameLock.acquired && usernameLock.lock.ownerId !== authIdentityKey) {
+          throw new Error("USERNAME_TAKEN: Username already taken");
+        }
+        acquiredNewUsernameLock = usernameLock.acquired;
+      }
 
-    await ctx.db.patch(profile._id, updates);
+      // Build update object
+      const updates: Partial<{
+        username: string;
+        displayName: string;
+        avatarUrl: string;
+        bio: string;
+        dmPrivacy: "friends" | "everyone";
+      }> = {};
 
-    // Return updated profile
-    const updated = await ctx.db.get(profile._id);
-    if (!updated) {
-      throw new Error("Failed to update profile");
+      if (username !== undefined) updates.username = username;
+      if (displayName !== undefined) updates.displayName = displayName;
+      if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
+      if (bio !== undefined) updates.bio = bio;
+      if (args.dm_privacy !== undefined) updates.dmPrivacy = args.dm_privacy;
+
+      await ctx.db.patch(profile._id, updates);
+
+      if (usernameChanged && newUsernameLockValue) {
+        // Move username lock ownership from auth identity -> profile id for consistency.
+        await setUniqueLockOwner(ctx, "username", newUsernameLockValue, profile._id);
+        await releaseUniqueLock(ctx, "username", previousUsername, profile._id);
+      }
+
+      // Return updated profile
+      const updated = await ctx.db.get(profile._id);
+      if (!updated) {
+        throw new Error("Failed to update profile");
+      }
+      return formatProfile(updated);
+    } catch (error) {
+      if (acquiredNewUsernameLock && newUsernameLockValue) {
+        await releaseUniqueLock(ctx, "username", newUsernameLockValue, authIdentityKey);
+      }
+      throw error;
     }
-    return formatProfile(updated);
   },
 });
 
@@ -104,9 +141,10 @@ export const getByUsername = query({
     username: v.string(),
   },
   handler: async (ctx, args) => {
+    const normalizedUsername = normalizeUsername(args.username);
     const profile = await ctx.db
       .query("profiles")
-      .withIndex("by_username", (q) => q.eq("username", args.username))
+      .withIndex("by_username", (q) => q.eq("username", normalizedUsername ?? args.username))
       .first();
 
     if (!profile) {
@@ -138,9 +176,10 @@ export const createProfile = mutation({
     await checkRateLimit(ctx, "createProfile", `${identity.issuer}:${identity.subject}`);
 
     // Sanitize and validate inputs
-    const usernameInput = sanitizeText(args.username);
+    const usernameInput = normalizeUsername(sanitizeText(args.username));
     const displayName = sanitizeText(args.displayName);
     const avatarUrl = args.avatarUrl;
+    const authIdentityKey = `${identity.issuer}:${identity.subject}`;
 
     // Validate username (checks both min and max length, throws if invalid)
     validateUsername(usernameInput);
@@ -172,23 +211,44 @@ export const createProfile = mutation({
       throw new Error("USERNAME_TAKEN: Username already taken");
     }
 
-    // Create the profile
-    const profileId = await ctx.db.insert("profiles", {
-      authIssuer: identity.issuer,
-      authSubject: identity.subject,
-      username: username,
-      displayName: displayName ?? username,
-      avatarUrl: avatarUrl ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
-      bio: "",
-      dmPrivacy: "friends",
-    });
+    let acquiredUsernameLock = false;
+    try {
+      const usernameLock = await acquireUniqueLock(
+        ctx,
+        "username",
+        username,
+        authIdentityKey
+      );
+      if (!usernameLock.acquired && usernameLock.lock.ownerId !== authIdentityKey) {
+        throw new Error("USERNAME_TAKEN: Username already taken");
+      }
+      acquiredUsernameLock = usernameLock.acquired;
 
-    const profile = await ctx.db.get(profileId);
-    if (!profile) {
-      throw new Error("PROFILE_CREATE_FAILED: Failed to create profile");
+      // Create the profile
+      const profileId = await ctx.db.insert("profiles", {
+        authIssuer: identity.issuer,
+        authSubject: identity.subject,
+        username: username,
+        displayName: displayName ?? username,
+        avatarUrl: avatarUrl ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
+        bio: "",
+        dmPrivacy: "friends",
+      });
+
+      await setUniqueLockOwner(ctx, "username", username, profileId);
+
+      const profile = await ctx.db.get(profileId);
+      if (!profile) {
+        throw new Error("PROFILE_CREATE_FAILED: Failed to create profile");
+      }
+
+      return formatProfile(profile);
+    } catch (error) {
+      if (acquiredUsernameLock) {
+        await releaseUniqueLock(ctx, "username", username, authIdentityKey);
+      }
+      throw error;
     }
-
-    return formatProfile(profile);
   },
 });
 

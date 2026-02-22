@@ -54,14 +54,9 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
   };
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
 
-  const handleCreatePost = async (content: string) => {
+  const handleCreatePost = async (content: string, audioFile: File | null) => {
     if (isGuest) return;
-
-    try {
-      await createPostMutation.mutateAsync({ content });
-    } catch (error) {
-      console.error('Error creating post:', error);
-    }
+    await createPostMutation.mutateAsync({ content, audioFile });
   };
 
   const handleLikePost = async (postId: string) => {

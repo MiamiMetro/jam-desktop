@@ -8,6 +8,8 @@ import {
   requireAuth,
   isBlocked,
   areFriends,
+  getUniqueLock,
+  acquireUniqueLock,
   validateTextLength,
   validateUrl,
   sanitizeText,
@@ -56,64 +58,111 @@ async function findOrCreateDM(
   profileA: Id<"profiles">,
   profileB: Id<"profiles">
 ): Promise<{ conversationId: Id<"conversations"> }> {
-  // Build deterministic key (lexicographic sort)
-  const dmKey = profileA < profileB 
-    ? `${profileA}:${profileB}` 
-    : `${profileB}:${profileA}`;
+  const dmKey = profileA < profileB ? `${profileA}:${profileB}` : `${profileB}:${profileA}`;
+  const now = Date.now();
 
-  // Get dm_keys for this pair
-  // Cap at 10: duplicates are extremely rare; prevents pathological scans
-  const locks = await ctx.db
-    .query("dm_keys")
-    .withIndex("by_dmKey", (q) => q.eq("dmKey", dmKey))
-    .take(10);
+  const ensureParticipant = async (
+    conversationId: Id<"conversations">,
+    profileId: Id<"profiles">
+  ) => {
+    const participant = await ctx.db
+      .query("conversation_participants")
+      .withIndex("by_conversation_and_profile", (q) =>
+        q.eq("conversationId", conversationId).eq("profileId", profileId)
+      )
+      .first();
 
-  let conversationId: Id<"conversations">;
-
-  if (locks.length > 0) {
-    // Pick canonical: earliest by _creationTime (deterministic across all clients)
-    const canonical = locks.sort((a: Doc<"dm_keys">, b: Doc<"dm_keys">) => 
-      a._creationTime - b._creationTime
-    )[0];
-    
-    // Check if canonical conversation is itself merged (edge case)
-    const conv = await ctx.db.get(canonical.conversationId);
-    if (conv?.mergedIntoConversationId) {
-      conversationId = conv.mergedIntoConversationId;
-    } else {
-      conversationId = canonical.conversationId;
+    if (!participant) {
+      await ctx.db.insert("conversation_participants", {
+        conversationId,
+        profileId,
+        joinedAt: now,
+        isActive: true,
+        lastActivityAt: now,
+      });
+      return;
     }
-  } else {
-    // Create new conversation
-    const now = Date.now();
-    conversationId = await ctx.db.insert("conversations", {
-      isGroup: false,
-    });
 
-    // Create dm_keys entry (uses _creationTime for canonical selection)
-    await ctx.db.insert("dm_keys", {
-      dmKey,
-      conversationId,
-    });
+    if (participant.isActive === false) {
+      await ctx.db.patch(participant._id, {
+        isActive: true,
+        lastActivityAt: participant.lastActivityAt ?? now,
+      });
+    }
+  };
 
-    // Create participants (isActive defaults to true when undefined for backwards compat)
-    await ctx.db.insert("conversation_participants", {
-      conversationId,
-      profileId: profileA,
-      joinedAt: now,
-      isActive: true,
-      lastActivityAt: now,
-    });
-    await ctx.db.insert("conversation_participants", {
-      conversationId,
-      profileId: profileB,
-      joinedAt: now,
-      isActive: true,
-      lastActivityAt: now,
-    });
+  const existingLock = await getUniqueLock(ctx, "dm_pair", dmKey);
+  if (existingLock) {
+    const lockedConversationId = existingLock.ownerId as Id<"conversations">;
+    const lockedConversation = await ctx.db.get(lockedConversationId);
+    const canonicalConversationId =
+      lockedConversation?.mergedIntoConversationId ?? lockedConversation?._id;
+
+    if (canonicalConversationId) {
+      await ensureParticipant(canonicalConversationId, profileA);
+      await ensureParticipant(canonicalConversationId, profileB);
+      return { conversationId: canonicalConversationId };
+    }
+
+    await ctx.db.delete(existingLock._id);
   }
 
-  return { conversationId };
+  // Create conversation first, then claim uniqueness lock.
+  // If we lose the lock race, this tentative conversation is cleaned up.
+  const createdConversationId = await ctx.db.insert("conversations", {
+    isGroup: false,
+  });
+
+  await ctx.db.insert("conversation_participants", {
+    conversationId: createdConversationId,
+    profileId: profileA,
+    joinedAt: now,
+    isActive: true,
+    lastActivityAt: now,
+  });
+  await ctx.db.insert("conversation_participants", {
+    conversationId: createdConversationId,
+    profileId: profileB,
+    joinedAt: now,
+    isActive: true,
+    lastActivityAt: now,
+  });
+
+  const lockResult = await acquireUniqueLock(
+    ctx,
+    "dm_pair",
+    dmKey,
+    createdConversationId
+  );
+
+  if (lockResult.acquired) {
+    return { conversationId: createdConversationId };
+  }
+
+  // Lost lock race; remove tentative records and use winning conversation.
+  const createdParticipants = await ctx.db
+    .query("conversation_participants")
+    .withIndex("by_conversation", (q) =>
+      q.eq("conversationId", createdConversationId)
+    )
+    .take(10);
+  for (const participant of createdParticipants) {
+    await ctx.db.delete(participant._id);
+  }
+  await ctx.db.delete(createdConversationId);
+
+  const winningConversationId = lockResult.lock.ownerId as Id<"conversations">;
+  const winningConversation = await ctx.db.get(winningConversationId);
+  const canonicalConversationId =
+    winningConversation?.mergedIntoConversationId ?? winningConversation?._id;
+
+  if (!canonicalConversationId) {
+    throw new Error("DM_CREATE_FAILED: Could not resolve conversation");
+  }
+
+  await ensureParticipant(canonicalConversationId, profileA);
+  await ensureParticipant(canonicalConversationId, profileB);
+  return { conversationId: canonicalConversationId };
 }
 
 /**
@@ -197,6 +246,27 @@ export const send = mutation({
       .first();
     if (!senderParticipant || senderParticipant.isActive === false) {
       throw new Error("You are not a participant in this conversation");
+    }
+
+    if (!conversation.isGroup) {
+      const participants = await ctx.db
+        .query("conversation_participants")
+        .withIndex("by_conversation", (q) =>
+          q.eq("conversationId", args.conversationId)
+        )
+        .take(50);
+
+      const otherParticipants = participants.filter(
+        (participant) =>
+          participant.profileId !== profile._id && participant.isActive !== false
+      );
+
+      for (const other of otherParticipants) {
+        const blocked = await isBlocked(ctx, profile._id, other.profileId);
+        if (blocked) {
+          throw new Error("BLOCKED_CANNOT_MESSAGE: Cannot send messages to this user");
+        }
+      }
     }
 
     // Insert message
@@ -283,69 +353,122 @@ export const getConversationsPaginated = query({
       .filter((q) => q.neq(q.field("isActive"), false))
       .paginate(args.paginationOpts);
 
-    const conversations = await Promise.all(
-      result.page.map(async (p) => {
-        const conv = await ctx.db.get(p.conversationId);
-        if (!conv || conv.mergedIntoConversationId != null) return null;
-
-        const hasUnread =
-          conv.lastMessageAt != null &&
-          (p.lastReadMessageAt ?? 0) < conv.lastMessageAt;
-
-        let otherUser = null;
-        if (!conv.isGroup) {
-          const participantRows = await ctx.db
-            .query("conversation_participants")
-            .withIndex("by_conversation", (q) =>
-              q.eq("conversationId", conv._id)
-            )
-            .take(10);
-          const otherParticipant = participantRows.find(
-            (participant) =>
-              participant.profileId !== profile._id &&
-              participant.isActive !== false
-          );
-
-          if (otherParticipant) {
-            const otherProfile = await ctx.db.get(otherParticipant.profileId);
-            if (otherProfile) {
-              otherUser = {
-                id: otherProfile._id,
-                username: otherProfile.username,
-                display_name: otherProfile.displayName ?? "",
-                avatar_url: otherProfile.avatarUrl ?? "",
-              };
-            }
+    const entries = (
+      await Promise.all(
+        result.page.map(async (participantRow) => {
+          const conversation = await ctx.db.get(participantRow.conversationId);
+          if (!conversation || conversation.mergedIntoConversationId != null) {
+            return null;
           }
-        }
+          return { participantRow, conversation };
+        })
+      )
+    ).filter(
+      (
+        entry
+      ): entry is {
+        participantRow: Doc<"conversation_participants">;
+        conversation: Doc<"conversations">;
+      } => entry !== null
+    );
 
-        const lastMessage =
-          conv.lastMessageId &&
-          conv.lastMessageSenderId &&
-          conv.lastMessageCreatedAt != null
-            ? {
-                id: conv.lastMessageId,
-                conversation_id: conv._id,
-                sender_id: conv.lastMessageSenderId,
-                text: conv.lastMessageText ?? "",
-                audio_url: conv.lastMessageAudioUrl ?? "",
-                created_at: new Date(conv.lastMessageCreatedAt).toISOString(),
-              }
-            : null;
+    const participantRowsByConversation = new Map<
+      Id<"conversations">,
+      Doc<"conversation_participants">[]
+    >();
+    await Promise.all(
+      entries.map(async ({ conversation }) => {
+        // Convex allows only one paginated query per function. Since this query
+        // already uses pagination for the outer list, load conversation
+        // participants with a bounded non-paginated read.
+        const rows = await ctx.db
+          .query("conversation_participants")
+          .withIndex("by_conversation", (q) =>
+            q.eq("conversationId", conversation._id)
+          )
+          .take(200);
 
-        return {
-          id: conv._id,
-          isGroup: conv.isGroup,
-          name: conv.name,
-          hasUnread,
-          other_user: otherUser,
-          last_message: lastMessage,
-          updated_at: new Date(
-            p.lastActivityAt ?? conv.lastMessageAt ?? p._creationTime
-          ).toISOString(),
-        };
+        participantRowsByConversation.set(
+          conversation._id,
+          rows.filter((row) => row.isActive !== false)
+        );
       })
     );
+
+    const otherProfileIds = new Set<Id<"profiles">>();
+    for (const { conversation } of entries) {
+      if (conversation.isGroup) continue;
+      const participants = participantRowsByConversation.get(conversation._id) ?? [];
+      const other = participants.find((row) => row.profileId !== profile._id);
+      if (other) {
+        otherProfileIds.add(other.profileId);
+      }
+    }
+
+    const otherProfiles = await Promise.all(
+      [...otherProfileIds].map(async (profileId) => [profileId, await ctx.db.get(profileId)] as const)
+    );
+    const otherProfileMap = new Map(otherProfiles);
+
+    const conversations = entries.map(({ participantRow, conversation }) => {
+      const hasUnread =
+        conversation.lastMessageAt != null &&
+        (participantRow.lastReadMessageAt ?? 0) < conversation.lastMessageAt;
+
+      const activeParticipants =
+        participantRowsByConversation.get(conversation._id) ?? [];
+
+      let otherUser: {
+        id: Id<"profiles">;
+        username: string;
+        display_name: string;
+        avatar_url: string;
+      } | null = null;
+
+      if (!conversation.isGroup) {
+        const otherParticipant = activeParticipants.find(
+          (row) => row.profileId !== profile._id
+        );
+        if (otherParticipant) {
+          const otherProfile = otherProfileMap.get(otherParticipant.profileId);
+          if (otherProfile) {
+            otherUser = {
+              id: otherProfile._id,
+              username: otherProfile.username,
+              display_name: otherProfile.displayName ?? "",
+              avatar_url: otherProfile.avatarUrl ?? "",
+            };
+          }
+        }
+      }
+
+      const lastMessage =
+        conversation.lastMessageId &&
+        conversation.lastMessageSenderId &&
+        conversation.lastMessageCreatedAt != null
+          ? {
+              id: conversation.lastMessageId,
+              conversation_id: conversation._id,
+              sender_id: conversation.lastMessageSenderId,
+              text: conversation.lastMessageText ?? "",
+              audio_url: conversation.lastMessageAudioUrl ?? "",
+              created_at: new Date(conversation.lastMessageCreatedAt).toISOString(),
+            }
+          : null;
+
+      return {
+        id: conversation._id,
+        isGroup: conversation.isGroup,
+        name: conversation.name,
+        participant_count: activeParticipants.length,
+        hasUnread,
+        other_user: conversation.isGroup ? null : otherUser,
+        last_message: lastMessage,
+        updated_at: new Date(
+          participantRow.lastActivityAt ?? conversation.lastMessageAt ?? participantRow._creationTime
+        ).toISOString(),
+      };
+    });
 
     return {
       ...result,
@@ -558,7 +681,39 @@ export const remove = mutation({
       throw new Error("You can only delete your own messages");
     }
 
+    const conversationId = message.conversationId;
     await ctx.db.delete(args.messageId);
+
+    const conversation = await ctx.db.get(conversationId);
+    if (conversation && conversation.lastMessageId === args.messageId) {
+      const latestRemainingMessage = await ctx.db
+        .query("messages")
+        .withIndex("by_conversation_time", (q) =>
+          q.eq("conversationId", conversationId)
+        )
+        .order("desc")
+        .first();
+
+      if (latestRemainingMessage) {
+        await ctx.db.patch(conversationId, {
+          lastMessageAt: latestRemainingMessage._creationTime,
+          lastMessageId: latestRemainingMessage._id,
+          lastMessageSenderId: latestRemainingMessage.senderId,
+          lastMessageText: latestRemainingMessage.text,
+          lastMessageAudioUrl: latestRemainingMessage.audioUrl,
+          lastMessageCreatedAt: latestRemainingMessage._creationTime,
+        });
+      } else {
+        await ctx.db.patch(conversationId, {
+          lastMessageAt: undefined,
+          lastMessageId: undefined,
+          lastMessageSenderId: undefined,
+          lastMessageText: undefined,
+          lastMessageAudioUrl: undefined,
+          lastMessageCreatedAt: undefined,
+        });
+      }
+    }
 
     return { message: "Message deleted successfully" };
   },

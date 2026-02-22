@@ -6,6 +6,9 @@ import type { QueryCtx, MutationCtx } from "./_generated/server";
 import {
   getCurrentProfile,
   requireAuth,
+  getUniqueLock,
+  acquireUniqueLock,
+  releaseUniqueLock,
   validateTextLength,
   validateUrl,
   sanitizeText,
@@ -42,13 +45,12 @@ async function formatComment(
   // Check if current user liked this comment
   let isLiked = false;
   if (currentUserId) {
-    const like = await ctx.db
-      .query("comment_likes")
-      .withIndex("by_comment_and_user", (q) =>
-        q.eq("commentId", comment._id).eq("userId", currentUserId)
-      )
-      .first();
-    isLiked = !!like;
+    const likeLock = await getUniqueLock(
+      ctx,
+      "comment_like",
+      `${comment._id}:${currentUserId}`
+    );
+    isLiked = !!likeLock;
   }
 
   return {
@@ -89,6 +91,11 @@ async function deleteCommentLikesInBatches(
       .paginate({ cursor, numItems: 100 });
 
     for (const like of page.page) {
+      await releaseUniqueLock(
+        ctx,
+        "comment_like",
+        `${like.commentId}:${like.userId}`
+      );
       await ctx.db.delete(like._id);
     }
 
@@ -355,28 +362,55 @@ export const toggleLike = mutation({
       throw new Error("Comment not found");
     }
 
-    // Check if already liked
-    const existingLike = await ctx.db
-      .query("comment_likes")
-      .withIndex("by_comment_and_user", (q) =>
-        q.eq("commentId", args.commentId).eq("userId", profile._id)
-      )
-      .first();
+    const lockValue = `${args.commentId}:${profile._id}`;
+    const existingLock = await getUniqueLock(ctx, "comment_like", lockValue);
 
-    if (existingLike) {
+    if (existingLock) {
       // Unlike
-      await ctx.db.delete(existingLike._id);
-      // Decrement counter
+      const existingLike = await ctx.db
+        .query("comment_likes")
+        .withIndex("by_comment_and_user", (q) =>
+          q.eq("commentId", args.commentId).eq("userId", profile._id)
+        )
+        .first();
+      if (existingLike) {
+        await ctx.db.delete(existingLike._id);
+      }
+      await releaseUniqueLock(ctx, "comment_like", lockValue);
+
       await ctx.db.patch(args.commentId, {
         likesCount: Math.max(0, (comment.likesCount ?? 0) - 1),
       });
     } else {
-      // Like
-      await ctx.db.insert("comment_likes", {
-        commentId: args.commentId,
-        userId: profile._id,
-      });
-      // Increment counter
+      const lockResult = await acquireUniqueLock(
+        ctx,
+        "comment_like",
+        lockValue,
+        profile._id
+      );
+
+      // A racing like already acquired the lock; return current state.
+      if (!lockResult.acquired) {
+        const latest = await ctx.db.get(args.commentId);
+        if (!latest) {
+          throw new Error("Comment not found");
+        }
+        return await formatComment(ctx, latest, profile._id);
+      }
+
+      const existingLike = await ctx.db
+        .query("comment_likes")
+        .withIndex("by_comment_and_user", (q) =>
+          q.eq("commentId", args.commentId).eq("userId", profile._id)
+        )
+        .first();
+      if (!existingLike) {
+        await ctx.db.insert("comment_likes", {
+          commentId: args.commentId,
+          userId: profile._id,
+        });
+      }
+
       await ctx.db.patch(args.commentId, {
         likesCount: (comment.likesCount ?? 0) + 1,
       });

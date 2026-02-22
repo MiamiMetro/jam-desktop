@@ -193,6 +193,9 @@ export const useCreateComment = () => {
 
   const run = async (variables: { postId: string; content: string; audioFile?: File }) => {
     if (!user) throw new Error("User not authenticated");
+    if (variables.audioFile) {
+      throw new Error("AUDIO_NOT_IMPLEMENTED_YET: Audio comments are not implemented yet.");
+    }
     setIsPending(true);
     try {
       const result = await createComment({
@@ -221,6 +224,9 @@ export const useCreatePost = () => {
   const [isPending, setIsPending] = useState(false);
 
   const run = async (variables: { content: string; audioFile?: File | null }) => {
+    if (variables.audioFile) {
+      throw new Error("AUDIO_NOT_IMPLEMENTED_YET: Audio posts are not implemented yet.");
+    }
     setIsPending(true);
     try {
       const result = await createPost({ text: variables.content || undefined });

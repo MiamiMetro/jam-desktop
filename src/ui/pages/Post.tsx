@@ -80,12 +80,13 @@ function Post() {
     }
   };
 
-  const handleSubmitComment = (content: string, audioFile: File | null) => {
+  const handleSubmitComment = async (content: string, audioFile: File | null) => {
     if (!id || (!content.trim() && !audioFile) || isGuest) return;
-    createCommentMutation.mutate(
-      { postId: id, content: content.trim() || "", audioFile: audioFile || undefined },
-      { onSuccess: () => {} }
-    );
+    await createCommentMutation.mutateAsync({
+      postId: id,
+      content: content.trim() || "",
+      audioFile: audioFile || undefined,
+    });
   };
 
   const getCommunityName = (communityId?: string) => {

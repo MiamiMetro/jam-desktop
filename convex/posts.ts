@@ -6,6 +6,9 @@ import type { QueryCtx, MutationCtx } from "./_generated/server";
 import { 
   getCurrentProfile, 
   requireAuth,
+  getUniqueLock,
+  acquireUniqueLock,
+  releaseUniqueLock,
   validateTextLength,
   validateUrl,
   sanitizeText,
@@ -32,13 +35,12 @@ async function formatPost(
   // Check if current user liked this post
   let isLiked = false;
   if (currentUserId) {
-    const like = await ctx.db
-      .query("post_likes")
-      .withIndex("by_post_and_user", (q) =>
-        q.eq("postId", post._id).eq("userId", currentUserId)
-      )
-      .first();
-    isLiked = !!like;
+    const likeLock = await getUniqueLock(
+      ctx,
+      "post_like",
+      `${post._id}:${currentUserId}`
+    );
+    isLiked = !!likeLock;
   }
 
   return {
@@ -75,6 +77,11 @@ async function deletePostLikesInBatches(
       .paginate({ cursor, numItems: 100 });
 
     for (const like of page.page) {
+      await releaseUniqueLock(
+        ctx,
+        "post_like",
+        `${like.postId}:${like.userId}`
+      );
       await ctx.db.delete(like._id);
     }
 
@@ -97,6 +104,11 @@ async function deleteCommentLikesInBatches(
       .paginate({ cursor, numItems: 100 });
 
     for (const like of page.page) {
+      await releaseUniqueLock(
+        ctx,
+        "comment_like",
+        `${like.commentId}:${like.userId}`
+      );
       await ctx.db.delete(like._id);
     }
 
@@ -319,28 +331,55 @@ export const toggleLike = mutation({
       throw new Error("Post not found");
     }
 
-    // Check if already liked
-    const existingLike = await ctx.db
-      .query("post_likes")
-      .withIndex("by_post_and_user", (q) =>
-        q.eq("postId", args.postId).eq("userId", profile._id)
-      )
-      .first();
+    const lockValue = `${args.postId}:${profile._id}`;
+    const existingLock = await getUniqueLock(ctx, "post_like", lockValue);
 
-    if (existingLike) {
+    if (existingLock) {
       // Unlike
-      await ctx.db.delete(existingLike._id);
-      // Decrement counter
+      const existingLike = await ctx.db
+        .query("post_likes")
+        .withIndex("by_post_and_user", (q) =>
+          q.eq("postId", args.postId).eq("userId", profile._id)
+        )
+        .first();
+      if (existingLike) {
+        await ctx.db.delete(existingLike._id);
+      }
+      await releaseUniqueLock(ctx, "post_like", lockValue);
+
       await ctx.db.patch(args.postId, {
         likesCount: Math.max(0, (post.likesCount ?? 0) - 1),
       });
     } else {
-      // Like
-      await ctx.db.insert("post_likes", {
-        postId: args.postId,
-        userId: profile._id,
-      });
-      // Increment counter
+      const lockResult = await acquireUniqueLock(
+        ctx,
+        "post_like",
+        lockValue,
+        profile._id
+      );
+
+      // A racing like already acquired the lock; return current state.
+      if (!lockResult.acquired) {
+        const latest = await ctx.db.get(args.postId);
+        if (!latest) {
+          throw new Error("Post not found");
+        }
+        return await formatPost(ctx, latest, profile._id);
+      }
+
+      const existingLike = await ctx.db
+        .query("post_likes")
+        .withIndex("by_post_and_user", (q) =>
+          q.eq("postId", args.postId).eq("userId", profile._id)
+        )
+        .first();
+      if (!existingLike) {
+        await ctx.db.insert("post_likes", {
+          postId: args.postId,
+          userId: profile._id,
+        });
+      }
+
       await ctx.db.patch(args.postId, {
         likesCount: (post.likesCount ?? 0) + 1,
       });

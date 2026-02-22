@@ -18,7 +18,7 @@ import { formatDuration } from "@/lib/postUtils";
 
 interface ComposePostProps {
   placeholder?: string;
-  onSubmit: (content: string, audioFile: File | null) => void;
+  onSubmit: (content: string, audioFile: File | null) => void | Promise<void>;
   onGuestAction?: () => void;
   submitButtonText?: string;
   textareaRows?: number;
@@ -49,6 +49,7 @@ export function ComposePost({
     content: "",
     audioFile: null as File | null,
   });
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const {
     isRecording,
     recordedAudio,
@@ -62,7 +63,7 @@ export function ComposePost({
   // Audio player for recorded audio preview
   const recordedAudioPlayer = useAudioPlayer(recordedAudio?.url);
 
-  const handleCreatePost = () => {
+  const handleCreatePost = async () => {
     if (isGuest) {
       onGuestAction?.();
       return;
@@ -72,16 +73,27 @@ export function ComposePost({
     const audioFile = recordedAudio ? getAudioFile() : newPost.audioFile;
     
     if (!newPost.content.trim() && !audioFile) return;
-    
-    onSubmit(newPost.content, audioFile);
-    
-    // Reset state
-    setNewPost({
-      content: "",
-      audioFile: null,
-    });
-    if (recordedAudio) {
-      deleteRecording();
+
+    try {
+      setSubmitError(null);
+      await onSubmit(newPost.content, audioFile);
+
+      // Reset state on success only.
+      setNewPost({
+        content: "",
+        audioFile: null,
+      });
+      if (recordedAudio) {
+        deleteRecording();
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("AUDIO_NOT_IMPLEMENTED_YET")) {
+        setSubmitError("Audio posting is not implemented yet.");
+      } else if (error instanceof Error && error.message) {
+        setSubmitError(error.message);
+      } else {
+        setSubmitError("Failed to submit. Please try again.");
+      }
     }
   };
 
@@ -90,10 +102,12 @@ export function ComposePost({
     if (recordedAudio) {
       deleteRecording();
     }
+    setSubmitError(null);
     setNewPost({ ...newPost, audioFile: file });
   };
 
   const handleDeleteUploadedAudio = () => {
+    setSubmitError(null);
     setNewPost({ ...newPost, audioFile: null });
   };
 
@@ -102,6 +116,7 @@ export function ComposePost({
     if (newPost.audioFile) {
       setNewPost({ ...newPost, audioFile: null });
     }
+    setSubmitError(null);
     startRecording();
   };
 
@@ -110,6 +125,7 @@ export function ComposePost({
   };
 
   const handleDeleteRecording = () => {
+    setSubmitError(null);
     deleteRecording();
   };
 
@@ -136,13 +152,21 @@ export function ComposePost({
           <Textarea
             placeholder={placeholder}
             value={newPost.content}
-            onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
+            onChange={(e) => {
+              setSubmitError(null);
+              setNewPost({ ...newPost, content: e.target.value });
+            }}
             className="resize-none border-border w-full overflow-wrap-anywhere transition-all duration-200 focus:min-h-[120px]"
             style={{ minHeight: newPost.content ? textareaMinHeight : "60px" }}
             rows={newPost.content ? textareaRows : 2}
             maxLength={maxLength}
             wrap="soft"
           />
+          {submitError && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {submitError}
+            </div>
+          )}
           {/* Recorded Audio Preview */}
           {recordedAudio && (
             <div className="flex items-center gap-3 p-3 glass-solid rounded-xl">
@@ -261,7 +285,9 @@ export function ComposePost({
               )}
             </div>
             <Button
-              onClick={handleCreatePost}
+              onClick={() => {
+                void handleCreatePost();
+              }}
               disabled={(!newPost.content.trim() && !newPost.audioFile && !recordedAudio) || isRecording || isSubmitting}
               size="sm"
               className={(newPost.content.trim() || newPost.audioFile || recordedAudio) && !isRecording && !isSubmitting ? "glow-primary" : ""}

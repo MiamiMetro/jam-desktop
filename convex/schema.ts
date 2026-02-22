@@ -74,6 +74,15 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_comment_and_user", ["commentId", "userId"]),
 
+  // Generic uniqueness locks used to prevent duplicate rows under concurrency.
+  // scope examples: username, dm_pair, post_like, comment_like
+  unique_locks: defineTable({
+    scope: v.string(),
+    value: v.string(),
+    ownerId: v.string(),
+    createdAt: v.number(),
+  }).index("by_scope_value", ["scope", "value"]),
+
   // Friends table - for friend requests and friendships
   // BIDIRECTIONAL MODEL:
   // - Pending requests: ONE record (userId = requester, friendId = recipient)
