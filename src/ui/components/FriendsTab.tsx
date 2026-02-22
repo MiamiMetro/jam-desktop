@@ -299,7 +299,7 @@ function FriendsTab() {
               <Button
                 variant="outline"
                 size="sm"
-                className="glass"
+                className="glass-solid"
                 onClick={() => setLeftView("search")}
               >
                 <Search className="h-3.5 w-3.5 mr-1.5" />
@@ -308,7 +308,7 @@ function FriendsTab() {
               <Button
                 variant="outline"
                 size="sm"
-                className="glass relative"
+                className="glass-solid relative"
                 onClick={() => setLeftView("requests")}
               >
                 <UserCheck className="h-3.5 w-3.5 mr-1.5" />

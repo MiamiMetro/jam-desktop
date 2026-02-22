@@ -152,7 +152,7 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
       {!isGuest && user && (
         <div className="mb-6">
           {myRoomLoading ? (
-            <div className="p-4 rounded-lg glass">
+            <div className="p-4 rounded-lg glass-solid">
               <p className="text-sm text-muted-foreground">Loading your room...</p>
             </div>
           ) : myRoom ? (
@@ -246,7 +246,7 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-4 p-4 rounded-xl glass border border-dashed border-border/50">
+            <div className="flex items-center gap-4 p-4 rounded-xl glass-solid border border-dashed border-border/50">
               <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                 <Music className="h-5 w-5 text-primary" />
               </div>
@@ -300,7 +300,7 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
                   <button
                     key={friend.id}
                     onClick={() => navigate(`/jam/${friendRoom.id}`)}
-                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl glass hover:glass-strong transition-all duration-200 cursor-pointer min-w-[80px] hover:ring-1 hover:ring-primary/20"
+                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl glass-solid hover:glass-strong transition-all duration-200 cursor-pointer min-w-[80px] hover:ring-1 hover:ring-primary/20"
                   >
                     <Avatar size="default" className="ring-2 ring-green-500/30">
                       <AvatarImage src={friend.avatar_url || ""} alt={friend.username} />

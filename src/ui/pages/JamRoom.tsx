@@ -211,19 +211,19 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                 Start Jamming
               </Button>
               {isHost && (
-                <Button variant="outline" size="sm" className="glass border-border/50" onClick={() => navigate("/jams")}>
+                <Button variant="outline" size="sm" className="glass-solid border-border/50" onClick={() => navigate("/jams")}>
                   <Settings className="h-3.5 w-3.5 mr-1.5" />
                   Manage
                 </Button>
               )}
-              <Button variant="outline" size="sm" className="glass border-border/50 text-muted-foreground hover:text-red-400 hover:border-red-500/30" onClick={handleLeaveRoom}>
+              <Button variant="outline" size="sm" className="glass-solid border-border/50 text-muted-foreground hover:text-red-400 hover:border-red-500/30" onClick={handleLeaveRoom}>
                 <LogOut className="h-3.5 w-3.5 mr-1.5" />
                 Leave
               </Button>
             </div>
           </div>
           {clientError && (
-            <div className="glass rounded-lg px-3 py-1.5 flex items-center gap-2 text-xs text-destructive mt-2">
+            <div className="glass-solid rounded-lg px-3 py-1.5 flex items-center gap-2 text-xs text-destructive mt-2">
               <AlertTriangle className="h-3 w-3 flex-shrink-0" />
               <span className="truncate">{clientError}</span>
             </div>
@@ -241,7 +241,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-14 w-14 rounded-full glass hover:bg-foreground/[0.06] flex-shrink-0"
+                      className="h-14 w-14 rounded-full glass-solid hover:bg-foreground/[0.06] flex-shrink-0"
                       onClick={() => hlsPlayer.togglePlayPause()}
                       disabled={hlsPlayer.isLoading}
                     >
@@ -268,7 +268,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                       {hlsPlayer.error ? (
                         <div className="flex items-center gap-2">
                           <p className="text-xs text-red-500 flex-1">{hlsPlayer.error}</p>
-                          <Button variant="outline" size="sm" onClick={() => { hlsPlayer.retry(); setTimeout(() => hlsPlayer.play(), 200); }} className="h-7 text-xs glass border-border/50" disabled={hlsPlayer.isLoading}>
+                          <Button variant="outline" size="sm" onClick={() => { hlsPlayer.retry(); setTimeout(() => hlsPlayer.play(), 200); }} className="h-7 text-xs glass-solid border-border/50" disabled={hlsPlayer.isLoading}>
                             <RefreshCw className="h-3 w-3 mr-1" />Retry
                           </Button>
                         </div>

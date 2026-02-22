@@ -151,7 +151,7 @@ function Profile() {
         <Button
           variant="ghost"
           size="icon"
-          className="absolute top-3 left-3 z-10 glass hover:glass-strong"
+          className="absolute top-3 left-3 z-10 glass-solid hover:glass-strong"
           onClick={() => navigate(-1)}
         >
           <ArrowLeft className="h-4 w-4" />

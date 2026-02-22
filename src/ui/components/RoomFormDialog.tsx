@@ -119,7 +119,7 @@ function RoomFormBody({
             className={`flex items-center gap-2.5 px-4 py-3 rounded-lg transition-all duration-200 cursor-pointer ${
               !form.isPrivate
                 ? "glass-strong ring-1 ring-primary/30 text-foreground"
-                : "glass text-muted-foreground hover:text-foreground hover:ring-1 hover:ring-border"
+                : "glass-solid text-muted-foreground hover:text-foreground hover:ring-1 hover:ring-border"
             }`}
           >
             <Globe className={`h-4 w-4 flex-shrink-0 ${!form.isPrivate ? "text-primary" : ""}`} />
@@ -134,7 +134,7 @@ function RoomFormBody({
             className={`flex items-center gap-2.5 px-4 py-3 rounded-lg transition-all duration-200 cursor-pointer ${
               form.isPrivate
                 ? "glass-strong ring-1 ring-primary/30 text-foreground"
-                : "glass text-muted-foreground hover:text-foreground hover:ring-1 hover:ring-border"
+                : "glass-solid text-muted-foreground hover:text-foreground hover:ring-1 hover:ring-border"
             }`}
           >
             <Lock className={`h-4 w-4 flex-shrink-0 ${form.isPrivate ? "text-primary" : ""}`} />

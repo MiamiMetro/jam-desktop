@@ -221,7 +221,7 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
                   <button
                     key={room.id}
                     onClick={() => navigate(`/jam/${room.id}`)}
-                    className="w-full flex items-center gap-3 p-2.5 rounded-lg glass hover:glass-strong transition-all duration-200 cursor-pointer text-left hover:ring-1 hover:ring-primary/20"
+                    className="w-full flex items-center gap-3 p-2.5 rounded-lg glass-solid hover:glass-strong transition-all duration-200 cursor-pointer text-left hover:ring-1 hover:ring-primary/20"
                   >
                     <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                       <Hash className="h-4 w-4 text-primary" />

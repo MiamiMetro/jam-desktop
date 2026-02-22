@@ -306,7 +306,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
                 className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 cursor-pointer ${
                   isActive
                     ? `${genreColor.bg} ${genreColor.text} ring-1 ring-current/20`
-                    : "glass text-muted-foreground hover:text-foreground hover:ring-1 hover:ring-primary/20"
+                    : "glass-solid text-muted-foreground hover:text-foreground hover:ring-1 hover:ring-primary/20"
                 }`}
               >
                 {category}

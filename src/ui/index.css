@@ -235,6 +235,12 @@ body::-webkit-scrollbar {
   box-shadow: inset 0 1px 0 oklch(1 0 0 / 5%);
 }
 
+/* Glass-solid — same look as .glass but no backdrop-filter (GPU-friendly) */
+.glass-solid {
+  background: oklch(0.17 0.015 260 / 85%);
+  border: 1px solid oklch(1 0 0 / 8%);
+}
+
 .surface-elevated {
   background: oklch(0.17 0.015 260);
   border: 1px solid oklch(1 0 0 / 6%);
@@ -264,6 +270,12 @@ body::-webkit-scrollbar {
   backdrop-filter: blur(20px) saturate(1.3);
   border: 1px solid oklch(0.3 0.04 55 / 12%);
   box-shadow: inset 0 1px 0 oklch(1 0 0 / 40%), 0 2px 8px oklch(0.3 0.04 55 / 8%), 0 1px 2px oklch(0.3 0.04 55 / 5%);
+}
+
+.light .glass-solid {
+  background: oklch(0.98 0.006 70 / 85%);
+  border: 1px solid oklch(0.3 0.04 55 / 10%);
+  box-shadow: 0 1px 3px oklch(0.3 0.04 55 / 6%);
 }
 
 .light .surface-elevated {
@@ -324,23 +336,29 @@ body::-webkit-scrollbar {
   animation: float 6s ease-in-out infinite;
 }
 
-/* Breathing glow pulse — for CTAs and active indicators (subtle) */
-@keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 6px oklch(0.78 0.16 70 / 15%), 0 0 2px oklch(0.78 0.16 70 / 8%); }
-  50% { box-shadow: 0 0 14px oklch(0.78 0.16 70 / 25%), 0 0 4px oklch(0.78 0.16 70 / 14%); }
+/* Breathing glow pulse — GPU-composited via opacity on pseudo-element */
+@keyframes glow-pulse-opacity {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
 }
 
 .animate-glow-pulse {
-  animation: glow-pulse 2.5s ease-in-out infinite;
+  position: relative;
 }
 
-.light .animate-glow-pulse {
-  animation-name: glow-pulse-light;
+.animate-glow-pulse::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 14px oklch(0.78 0.16 70 / 25%), 0 0 4px oklch(0.78 0.16 70 / 14%);
+  animation: glow-pulse-opacity 2.5s ease-in-out infinite;
+  pointer-events: none;
+  will-change: opacity;
 }
 
-@keyframes glow-pulse-light {
-  0%, 100% { box-shadow: 0 0 6px oklch(0.646 0.222 41.116 / 12%), 0 0 2px oklch(0.646 0.222 41.116 / 6%); }
-  50% { box-shadow: 0 0 14px oklch(0.646 0.222 41.116 / 22%), 0 0 4px oklch(0.646 0.222 41.116 / 10%); }
+.light .animate-glow-pulse::after {
+  box-shadow: 0 0 14px oklch(0.646 0.222 41.116 / 22%), 0 0 4px oklch(0.646 0.222 41.116 / 10%);
 }
 
 /* Fade in — opacity only, no slide */
@@ -353,25 +371,25 @@ body::-webkit-scrollbar {
   animation: fade-in 0.3s ease-out both;
 }
 
-/* Mini equalizer bars — playing state indicator */
+/* Mini equalizer bars — playing state indicator (GPU-composited via scaleY) */
 @keyframes eq-bar-1 {
-  0%, 100% { height: 30%; }
-  50% { height: 100%; }
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
 }
 @keyframes eq-bar-2 {
-  0%, 100% { height: 60%; }
-  50% { height: 20%; }
+  0%, 100% { transform: scaleY(0.6); }
+  50% { transform: scaleY(0.2); }
 }
 @keyframes eq-bar-3 {
-  0%, 100% { height: 40%; }
-  50% { height: 90%; }
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(0.9); }
 }
 @keyframes eq-bar-4 {
-  0%, 100% { height: 80%; }
-  50% { height: 30%; }
+  0%, 100% { transform: scaleY(0.8); }
+  50% { transform: scaleY(0.3); }
 }
 
-.eq-bar { display: inline-block; width: 3px; border-radius: 9999px; background: currentColor; }
+.eq-bar { display: inline-block; width: 3px; height: 100%; border-radius: 9999px; background: currentColor; transform-origin: bottom; will-change: transform; }
 .eq-bar-1 { animation: eq-bar-1 0.8s ease-in-out infinite; }
 .eq-bar-2 { animation: eq-bar-2 0.6s ease-in-out infinite; }
 .eq-bar-3 { animation: eq-bar-3 0.9s ease-in-out infinite; }
@@ -388,6 +406,7 @@ body::-webkit-scrollbar {
   inset: 0;
   pointer-events: none;
   z-index: 0;
+  will-change: transform;
   background:
     radial-gradient(ellipse 60% 50% at 20% 20%, oklch(0.78 0.16 70 / 4%) 0%, transparent 70%),
     radial-gradient(ellipse 40% 60% at 80% 80%, oklch(0.78 0.16 70 / 3%) 0%, transparent 70%);
@@ -399,6 +418,7 @@ body::-webkit-scrollbar {
   inset: 0;
   pointer-events: none;
   z-index: 0;
+  will-change: transform;
   opacity: 0.025;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-repeat: repeat;
@@ -415,29 +435,42 @@ body::-webkit-scrollbar {
   opacity: 0.03;
 }
 
-/* Shimmer loading skeleton — left-to-right sweep */
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+/* Shimmer loading skeleton — GPU-composited via translateX on pseudo-element */
+@keyframes shimmer-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 .animate-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: oklch(1 0 0 / 4%);
+}
+
+.animate-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
   background: linear-gradient(
     90deg,
-    oklch(1 0 0 / 4%) 25%,
-    oklch(1 0 0 / 10%) 50%,
-    oklch(1 0 0 / 4%) 75%
+    transparent 25%,
+    oklch(1 0 0 / 8%) 50%,
+    transparent 75%
   );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
+  animation: shimmer-slide 1.5s ease-in-out infinite;
+  will-change: transform;
+  pointer-events: none;
 }
 
 .light .animate-shimmer {
+  background: oklch(0.5 0.02 55 / 6%);
+}
+
+.light .animate-shimmer::after {
   background: linear-gradient(
     90deg,
-    oklch(0.5 0.02 55 / 6%) 25%,
-    oklch(0.5 0.02 55 / 14%) 50%,
-    oklch(0.5 0.02 55 / 6%) 75%
+    transparent 25%,
+    oklch(0.5 0.02 55 / 10%) 50%,
+    transparent 75%
   );
-  background-size: 200% 100%;
 }

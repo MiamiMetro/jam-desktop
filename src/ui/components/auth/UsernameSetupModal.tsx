@@ -117,7 +117,7 @@ export default function UsernameSetupModal() {
               disabled={isSubmitting}
               minLength={3}
               maxLength={15}
-              className="h-10 glass border-border/50 focus:ring-primary/30"
+              className="h-10 glass-solid border-border/50 focus:ring-primary/30"
             />
             <p className="text-xs text-muted-foreground">
               3-15 characters · Letters, numbers, underscores · Must start with letter or number
@@ -133,7 +133,7 @@ export default function UsernameSetupModal() {
               onChange={(e) => { setDisplayName(e.target.value); setError(null); }}
               disabled={isSubmitting}
               maxLength={50}
-              className="h-10 glass border-border/50 focus:ring-primary/30"
+              className="h-10 glass-solid border-border/50 focus:ring-primary/30"
             />
             <p className="text-xs text-muted-foreground">
               Your display name shown to others

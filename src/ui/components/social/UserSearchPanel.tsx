@@ -72,7 +72,7 @@ export default function UserSearchPanel({ searchQuery }: UserSearchPanelProps) {
           <button
             onClick={() => fetchMoreUsers()}
             disabled={isLoadingMoreUsers}
-            className="w-full py-2 text-xs text-primary hover:text-primary/80 transition-colors text-center disabled:opacity-50 glass rounded-lg"
+            className="w-full py-2 text-xs text-primary hover:text-primary/80 transition-colors text-center disabled:opacity-50 glass-solid rounded-lg"
           >
             {isLoadingMoreUsers ? 'Loading more...' : 'Load more users'}
           </button>

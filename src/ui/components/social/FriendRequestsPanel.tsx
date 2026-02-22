@@ -98,7 +98,7 @@ export default function FriendRequestsPanel() {
                 <button
                   onClick={() => fetchMoreRequests()}
                   disabled={isLoadingMoreRequests}
-                  className="w-full py-2 text-xs text-primary hover:text-primary/80 transition-colors text-center disabled:opacity-50 glass rounded-lg"
+                  className="w-full py-2 text-xs text-primary hover:text-primary/80 transition-colors text-center disabled:opacity-50 glass-solid rounded-lg"
                 >
                   {isLoadingMoreRequests ? 'Loading more...' : 'Load more'}
                 </button>
@@ -166,7 +166,7 @@ export default function FriendRequestsPanel() {
                 <button
                   onClick={() => fetchMoreSent()}
                   disabled={isLoadingMoreSent}
-                  className="w-full py-2 text-xs text-primary hover:text-primary/80 transition-colors text-center disabled:opacity-50 glass rounded-lg"
+                  className="w-full py-2 text-xs text-primary hover:text-primary/80 transition-colors text-center disabled:opacity-50 glass-solid rounded-lg"
                 >
                   {isLoadingMoreSent ? 'Loading more...' : 'Load more'}
                 </button>

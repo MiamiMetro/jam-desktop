@@ -145,7 +145,7 @@ export function ComposePost({
           />
           {/* Recorded Audio Preview */}
           {recordedAudio && (
-            <div className="flex items-center gap-3 p-3 glass rounded-xl">
+            <div className="flex items-center gap-3 p-3 glass-solid rounded-xl">
               <Button
                 variant="ghost"
                 size="icon"
@@ -196,7 +196,7 @@ export function ComposePost({
 
           {/* Uploaded Audio Preview */}
           {newPost.audioFile && !recordedAudio && (
-            <div className="flex items-center gap-2 p-3 glass rounded-xl">
+            <div className="flex items-center gap-2 p-3 glass-solid rounded-xl">
               <Music className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm flex-1 truncate">{newPost.audioFile.name}</span>
               <Button

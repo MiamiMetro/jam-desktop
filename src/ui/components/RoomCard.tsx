@@ -12,7 +12,7 @@ export function RoomCard({ room, onClick }: RoomCardProps) {
   return (
     <div
       onClick={() => onClick?.(room.id)}
-      className="p-4 rounded-xl glass hover:glass-strong cursor-pointer transition-all duration-200 group hover:ring-1 hover:ring-primary/20 relative overflow-hidden"
+      className="p-4 rounded-xl glass-solid hover:glass-strong cursor-pointer transition-all duration-200 group hover:ring-1 hover:ring-primary/20 relative overflow-hidden"
     >
       {/* Active pulse indicator */}
       {room.isEnabled && (

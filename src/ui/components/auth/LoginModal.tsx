@@ -72,7 +72,7 @@ export default function LoginModal() {
           onChange={(e) => { setEmail(e.target.value); setError(null); }}
           required
           disabled={isSubmitting}
-          className="h-10 glass border-border/50 focus:ring-primary/30"
+          className="h-10 glass-solid border-border/50 focus:ring-primary/30"
         />
       </div>
       <div className="space-y-1.5">
@@ -86,7 +86,7 @@ export default function LoginModal() {
             onChange={(e) => { setPassword(e.target.value); setError(null); }}
             required
             disabled={isSubmitting}
-            className="h-10 glass border-border/50 focus:ring-primary/30 pr-10"
+            className="h-10 glass-solid border-border/50 focus:ring-primary/30 pr-10"
           />
           <button
             type="button"

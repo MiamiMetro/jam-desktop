@@ -163,7 +163,7 @@ function Post() {
                 ) : communityName ? (
                   <button
                     onClick={() => post.community && handleCommunityClick(post.community)}
-                    className="text-xs px-2 py-0.5 rounded-full glass hover:bg-foreground/[0.06] transition-colors flex items-center gap-1"
+                    className="text-xs px-2 py-0.5 rounded-full glass-solid hover:bg-foreground/[0.06] transition-colors flex items-center gap-1"
                   >
                     <HashIcon className="h-3 w-3" />
                     {communityName}
@@ -189,7 +189,7 @@ function Post() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-12 w-12 rounded-full glass hover:bg-foreground/[0.06] transition-colors flex-shrink-0"
+                  className="h-12 w-12 rounded-full glass-solid hover:bg-foreground/[0.06] transition-colors flex-shrink-0"
                   onClick={() => {
                     if (isGuest) return;
                     postAudioPlayer.togglePlayPause();
@@ -279,7 +279,7 @@ function Post() {
                 textareaRows={2}
                 textareaMinHeight="60px"
                 maxLength={1000}
-                wrapperClassName="glass rounded-xl p-3"
+                wrapperClassName="glass-solid rounded-xl p-3"
                 inputId="comment-audio-upload"
                 isSubmitting={createCommentMutation.isPending}
               />
