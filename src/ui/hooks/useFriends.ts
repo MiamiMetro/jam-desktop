@@ -1,14 +1,12 @@
-import { useMutation, useConvex } from "convex/react";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, usePaginatedQuery } from "convex/react";
+import { useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { useAuthStore } from '@/stores/authStore';
-import { useProfileStore } from './useEnsureProfile';
-import { useConvexAuthStore } from './useConvexAuth';
-import type { User } from '@/lib/api/types';
+import { useAuthStore } from "@/stores/authStore";
+import { useProfileStore } from "./useEnsureProfile";
+import { useConvexAuthStore } from "./useConvexAuth";
+import type { User } from "@/lib/api/types";
 
-// Convert Convex profile/friend data to User type
-// Friends list returns a slightly different structure than profile, so we adapt it
 function convertUser(profile: {
   id: string | Id<"profiles">;
   username: string;
@@ -21,7 +19,7 @@ function convertUser(profile: {
   if (!profile) return null;
 
   return {
-    id: (typeof profile.id === 'string' ? profile.id : profile.id) as Id<"profiles">, // Keep as Id<"profiles"> to match User type
+    id: (typeof profile.id === "string" ? profile.id : profile.id) as Id<"profiles">,
     username: profile.username,
     display_name: profile.display_name ?? "",
     avatar_url: profile.avatar_url ?? "",
@@ -30,248 +28,219 @@ function convertUser(profile: {
   };
 }
 
-/**
- * Get friends list with cursor-based pagination and server-side search
- * Uses TanStack Query's useInfiniteQuery for optimal caching and performance
- */
+function getPaginatedStatusFlags(status: string) {
+  return {
+    isLoading: status === "LoadingFirstPage",
+    hasNextPage: status === "CanLoadMore",
+    isFetchingNextPage: status === "LoadingMore",
+  };
+}
+
+type MutationOptions = { onSuccess?: () => void; onError?: (error: Error) => void };
+
 export const useFriends = (searchQuery?: string, userId?: Id<"profiles"> | string) => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
   const { isAuthSet } = useConvexAuthStore();
-  const convex = useConvex();
 
-  // Only query when fully authenticated AND profile is ready (unless fetching another user's friends)
-  const canQuery = userId ? true : (!isGuest && isAuthSet && isProfileReady);
+  const canQuery = userId ? true : !isGuest && isAuthSet && isProfileReady;
+  const trimmedSearch = searchQuery?.trim();
 
-  const query = useInfiniteQuery({
-    queryKey: ['friends', 'list', searchQuery, userId],
-    queryFn: async ({ pageParam }) => {
-      const result = await convex.query(api.friends.list, {
-        limit: 50,
-        search: searchQuery,
-        userId: userId as Id<"profiles"> | undefined,
-        ...(pageParam ? { cursor: pageParam } : {}),
-      });
-      return result;
-    },
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    initialPageParam: null as Id<"friends"> | null,
-    enabled: canQuery,
-  });
+  const paginated = usePaginatedQuery(
+    api.friends.listPaginated,
+    canQuery
+      ? {
+          userId: userId as Id<"profiles"> | undefined,
+          search: trimmedSearch || undefined,
+        }
+      : "skip",
+    { initialNumItems: 50 }
+  );
 
-  // Flatten all pages into a single array
-  const allFriends = query.data?.pages.flatMap(page =>
-    page.data.map(convertUser).filter((f): f is User => f !== null)
-  ) ?? [];
+  const flags = getPaginatedStatusFlags(paginated.status);
+  const allFriends = paginated.results
+    .map(convertUser)
+    .filter((f): f is User => f !== null);
 
   return {
     data: allFriends,
-    isLoading: query.isLoading,
-    hasNextPage: query.hasNextPage,
-    isFetchingNextPage: query.isFetchingNextPage,
-    fetchNextPage: query.fetchNextPage,
-    refetch: query.refetch,
+    ...flags,
+    fetchNextPage: () => paginated.loadMore(50),
+    refetch: () => {},
     error: null,
   };
 };
 
-/**
- * Get friend requests with cursor-based pagination
- * Uses TanStack Query's useInfiniteQuery for optimal caching and performance
- */
 export const useFriendRequests = () => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
   const { isAuthSet } = useConvexAuthStore();
-  const convex = useConvex();
-
-  // Only query when fully authenticated AND profile is ready
   const canQuery = !isGuest && isAuthSet && isProfileReady;
 
-  const query = useInfiniteQuery({
-    queryKey: ['friends', 'requests'],
-    queryFn: async ({ pageParam }) => {
-      const result = await convex.query(api.friends.getRequests, {
-        limit: 20,
-        ...(pageParam ? { cursor: pageParam } : {}),
-      });
-      return result;
-    },
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    initialPageParam: null as Id<"friends"> | null,
-    enabled: canQuery,
-  });
-
-  // Flatten all pages into a single array
-  const allRequests = query.data?.pages.flatMap(page =>
-    page.data.map(convertUser).filter((r): r is User => r !== null)
-  ) ?? [];
+  const paginated = usePaginatedQuery(
+    api.friends.getRequestsPaginated,
+    canQuery ? {} : "skip",
+    { initialNumItems: 20 }
+  );
+  const flags = getPaginatedStatusFlags(paginated.status);
 
   return {
-    data: allRequests,
-    isLoading: query.isLoading,
-    hasNextPage: query.hasNextPage,
-    isFetchingNextPage: query.isFetchingNextPage,
-    fetchNextPage: query.fetchNextPage,
-    refetch: query.refetch,
+    data: paginated.results
+      .map(convertUser)
+      .filter((r): r is User => r !== null),
+    ...flags,
+    fetchNextPage: () => paginated.loadMore(20),
+    refetch: () => {},
     error: null,
   };
 };
 
 export const useRequestFriend = () => {
   const sendRequest = useMutation(api.friends.sendRequest);
-  const queryClient = useQueryClient();
+  const [isPending, setIsPending] = useState(false);
 
-  const invalidateFriendQueries = () => {
-    queryClient.invalidateQueries({ queryKey: ['friends'] });
+  const run = async (userId: string) => {
+    setIsPending(true);
+    try {
+      await sendRequest({ friendId: userId as Id<"profiles"> });
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return {
-    mutate: (userId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
-      sendRequest({ friendId: userId as Id<"profiles"> })
-        .then(() => { invalidateFriendQueries(); options?.onSuccess?.(); })
-        .catch((error) => options?.onError?.(error));
+    mutate: (userId: string, options?: MutationOptions) => {
+      run(userId)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
     },
-    mutateAsync: async (userId: string) => {
-      await sendRequest({ friendId: userId as Id<"profiles"> });
-      invalidateFriendQueries();
-    },
-    isPending: false,
+    mutateAsync: run,
+    isPending,
   };
 };
 
 export const useAcceptFriend = () => {
   const acceptRequest = useMutation(api.friends.acceptRequest);
-  const queryClient = useQueryClient();
+  const [isPending, setIsPending] = useState(false);
 
-  const invalidateFriendQueries = () => {
-    queryClient.invalidateQueries({ queryKey: ['friends'] });
+  const run = async (userId: string) => {
+    setIsPending(true);
+    try {
+      await acceptRequest({ userId: userId as Id<"profiles"> });
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return {
-    mutate: (userId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
-      acceptRequest({ userId: userId as Id<"profiles"> })
-        .then(() => { invalidateFriendQueries(); options?.onSuccess?.(); })
-        .catch((error) => options?.onError?.(error));
+    mutate: (userId: string, options?: MutationOptions) => {
+      run(userId)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
     },
-    mutateAsync: async (userId: string) => {
-      await acceptRequest({ userId: userId as Id<"profiles"> });
-      invalidateFriendQueries();
-    },
-    isPending: false,
+    mutateAsync: run,
+    isPending,
   };
 };
 
 export const useDeclineFriend = () => {
   const removeFriend = useMutation(api.friends.remove);
-  const queryClient = useQueryClient();
+  const [isPending, setIsPending] = useState(false);
 
-  const invalidateFriendQueries = () => {
-    queryClient.invalidateQueries({ queryKey: ['friends'] });
+  const run = async (userId: string) => {
+    setIsPending(true);
+    try {
+      await removeFriend({ userId: userId as Id<"profiles"> });
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return {
-    mutate: (userId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
-      removeFriend({ userId: userId as Id<"profiles"> })
-        .then(() => { invalidateFriendQueries(); options?.onSuccess?.(); })
-        .catch((error) => options?.onError?.(error));
+    mutate: (userId: string, options?: MutationOptions) => {
+      run(userId)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
     },
-    mutateAsync: async (userId: string) => {
-      await removeFriend({ userId: userId as Id<"profiles"> });
-      invalidateFriendQueries();
-    },
-    isPending: false,
+    mutateAsync: run,
+    isPending,
   };
 };
 
 export const useDeleteFriend = () => {
   const removeFriend = useMutation(api.friends.remove);
-  const queryClient = useQueryClient();
+  const [isPending, setIsPending] = useState(false);
 
-  const invalidateFriendQueries = () => {
-    queryClient.invalidateQueries({ queryKey: ['friends'] });
+  const run = async (userId: string) => {
+    setIsPending(true);
+    try {
+      await removeFriend({ userId: userId as Id<"profiles"> });
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return {
-    mutate: (userId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
-      removeFriend({ userId: userId as Id<"profiles"> })
-        .then(() => { invalidateFriendQueries(); options?.onSuccess?.(); })
-        .catch((error) => options?.onError?.(error));
+    mutate: (userId: string, options?: MutationOptions) => {
+      run(userId)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
     },
-    mutateAsync: async (userId: string) => {
-      await removeFriend({ userId: userId as Id<"profiles"> });
-      invalidateFriendQueries();
-    },
-    isPending: false,
+    mutateAsync: run,
+    isPending,
   };
 };
 
 export const useCancelFriendRequest = () => {
   const removeFriend = useMutation(api.friends.remove);
-  const queryClient = useQueryClient();
+  const [isPending, setIsPending] = useState(false);
 
-  const invalidateFriendQueries = () => {
-    queryClient.invalidateQueries({ queryKey: ['friends'] });
+  const run = async (userId: string) => {
+    setIsPending(true);
+    try {
+      await removeFriend({ userId: userId as Id<"profiles"> });
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return {
-    mutate: (userId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
-      removeFriend({ userId: userId as Id<"profiles"> })
-        .then(() => { invalidateFriendQueries(); options?.onSuccess?.(); })
-        .catch((error) => options?.onError?.(error));
+    mutate: (userId: string, options?: MutationOptions) => {
+      run(userId)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
     },
-    mutateAsync: async (userId: string) => {
-      await removeFriend({ userId: userId as Id<"profiles"> });
-      invalidateFriendQueries();
-    },
-    isPending: false,
+    mutateAsync: run,
+    isPending,
   };
 };
 
-/**
- * Get pending friend requests sent by the current user with full user data
- * Uses TanStack Query's useInfiniteQuery for optimal caching and performance
- */
 export const useSentFriendRequests = () => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
   const { isAuthSet } = useConvexAuthStore();
-  const convex = useConvex();
-
-  // Only query when fully authenticated AND profile is ready
   const canQuery = !isGuest && isAuthSet && isProfileReady;
 
-  const query = useInfiniteQuery({
-    queryKey: ['friends', 'sent-requests'],
-    queryFn: async ({ pageParam }) => {
-      const result = await convex.query(api.friends.getSentRequestsWithData, {
-        limit: 20,
-        ...(pageParam ? { cursor: pageParam } : {}),
-      });
-      return result;
-    },
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    initialPageParam: null as Id<"friends"> | null,
-    enabled: canQuery,
-  });
+  const paginated = usePaginatedQuery(
+    api.friends.getSentRequestsWithDataPaginated,
+    canQuery ? {} : "skip",
+    { initialNumItems: 20 }
+  );
+  const flags = getPaginatedStatusFlags(paginated.status);
 
-  // Flatten all pages into a single array
-  const allSentRequests = query.data?.pages.flatMap(page =>
-    page.data.map(convertUser).filter((r): r is User => r !== null)
-  ) ?? [];
+  const allSentRequests = paginated.results
+    .map(convertUser)
+    .filter((r): r is User => r !== null);
 
-  // Helper function to check if a request was sent to a specific user
   const hasPendingRequest = (userId: Id<"profiles"> | string) => {
-    return allSentRequests.some(req => req.id === userId);
+    return allSentRequests.some((req) => req.id === userId);
   };
 
   return {
     data: allSentRequests,
-    isLoading: query.isLoading,
-    hasNextPage: query.hasNextPage,
-    isFetchingNextPage: query.isFetchingNextPage,
-    fetchNextPage: query.fetchNextPage,
-    refetch: query.refetch,
+    ...flags,
+    fetchNextPage: () => paginated.loadMore(20),
+    refetch: () => {},
     error: null,
     hasPendingRequest,
   };

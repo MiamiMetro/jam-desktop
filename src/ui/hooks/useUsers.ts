@@ -1,14 +1,12 @@
 import { useQuery, useMutation, useConvex, usePaginatedQuery } from "convex/react";
-import { useInfiniteQuery } from "@tanstack/react-query";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import type { User } from '@/lib/api/types';
-import { useAuthStore } from '@/stores/authStore';
-import { useProfileStore } from './useEnsureProfile';
-import { useConvexAuthStore } from './useConvexAuth';
+import type { User } from "@/lib/api/types";
+import { useAuthStore } from "@/stores/authStore";
+import { useProfileStore } from "./useEnsureProfile";
+import { useConvexAuthStore } from "./useConvexAuth";
 
-// Convert Convex profile to User type (handles Id<"profiles"> to string conversion)
 function convertUser(profile: {
   id: string | Id<"profiles">;
   username: string;
@@ -18,7 +16,7 @@ function convertUser(profile: {
   created_at?: string;
 }): User {
   return {
-    id: (typeof profile.id === 'string' ? profile.id : profile.id) as Id<"profiles">,
+    id: (typeof profile.id === "string" ? profile.id : profile.id) as Id<"profiles">,
     username: profile.username,
     display_name: profile.display_name ?? "",
     avatar_url: profile.avatar_url ?? "",
@@ -27,16 +25,18 @@ function convertUser(profile: {
   };
 }
 
-/**
- * Merges and deduplicates message arrays, sorting by creation time.
- * Used when loading older messages to combine with existing messages.
- */
+function getPaginatedStatusFlags(status: string) {
+  return {
+    isLoading: status === "LoadingFirstPage",
+    hasNextPage: status === "CanLoadMore",
+    isFetchingNextPage: status === "LoadingMore",
+  };
+}
+
 function mergeAndDeduplicateMessages<T extends { id: string; _creationTime?: number }>(
   ...messageArrays: T[][]
 ): T[] {
   const allMessages = messageArrays.flat();
-  
-  // Dedupe by ID, keeping earliest occurrence (preserves order)
   const seen = new Set<string>();
   const deduped: T[] = [];
   for (const msg of allMessages) {
@@ -46,14 +46,10 @@ function mergeAndDeduplicateMessages<T extends { id: string; _creationTime?: num
       deduped.push(msg);
     }
   }
-  
-  // Sort by _creationTime to ensure correct order (oldest first)
   deduped.sort((a, b) => (a._creationTime ?? 0) - (b._creationTime ?? 0));
-  
   return deduped;
 }
 
-// UI-friendly message type
 interface UIMessage {
   id: string;
   senderId?: string;
@@ -64,7 +60,6 @@ interface UIMessage {
   _creationTime?: number;
 }
 
-// Convert Convex message to UI-friendly format
 function convertMessage(message: {
   id: string;
   sender_id: string;
@@ -77,14 +72,13 @@ function convertMessage(message: {
     id: message.id,
     senderId: message.sender_id,
     receiverId: undefined,
-    content: message.text || '',
+    content: message.text || "",
     audio_url: message.audio_url || null,
     timestamp: message.created_at,
     _creationTime: message._creationTime,
   };
 }
 
-// UI-friendly conversation type with hasUnread
 interface UIConversation {
   id: string;
   userId: string;
@@ -98,7 +92,6 @@ interface UIConversation {
   };
 }
 
-// Convert new conversation format (with hasUnread) to UI type
 function convertConversation(conv: {
   id: string;
   hasUnread: boolean;
@@ -107,43 +100,34 @@ function convertConversation(conv: {
 }): UIConversation {
   return {
     id: conv.id,
-    userId: conv.other_user?.id || '',
+    userId: conv.other_user?.id || "",
     hasUnread: conv.hasUnread,
-    lastMessage: conv.last_message ? {
-      id: conv.last_message.id,
-      senderId: conv.last_message.sender_id,
-      content: conv.last_message.text || '',
-      audio_url: conv.last_message.audio_url || null,
-      timestamp: conv.last_message.created_at,
-    } : undefined,
+    lastMessage: conv.last_message
+      ? {
+          id: conv.last_message.id,
+          senderId: conv.last_message.sender_id,
+          content: conv.last_message.text || "",
+          audio_url: conv.last_message.audio_url || null,
+          timestamp: conv.last_message.created_at,
+        }
+      : undefined,
   };
 }
 
 export const useOnlineUsers = () => {
-  const { results, status, loadMore } = usePaginatedQuery(
-    api.users.getOnline,
-    {},
-    { initialNumItems: 50 }
-  );
-
-  const users = results.map(convertUser);
+  const paginated = usePaginatedQuery(api.users.getOnline, {}, { initialNumItems: 50 });
+  const flags = getPaginatedStatusFlags(paginated.status);
 
   return {
-    data: users,
-    isLoading: status === "LoadingFirstPage",
-    hasNextPage: status === "CanLoadMore",
-    isFetchingNextPage: status === "LoadingMore",
-    fetchNextPage: loadMore,
+    data: paginated.results.map(convertUser),
+    ...flags,
+    fetchNextPage: () => paginated.loadMore(50),
     error: null,
   };
 };
 
 export const useUser = (username: string) => {
-  const result = useQuery(
-    api.profiles.getByUsername,
-    username ? { username } : "skip"
-  );
-  
+  const result = useQuery(api.profiles.getByUsername, username ? { username } : "skip");
   return {
     data: result ? convertUser(result) : null,
     isLoading: result === undefined && !!username,
@@ -151,125 +135,77 @@ export const useUser = (username: string) => {
   };
 };
 
-/**
- * Get all users with search and cursor-based pagination
- * Uses TanStack Query's useInfiniteQuery for optimal caching and performance
- * Fixes the setState-in-render anti-pattern by using query key dependencies
- */
-export const useAllUsers = (search?: string, enabled: boolean = true) => {
-  const convex = useConvex();
-
-  const query = useInfiniteQuery({
-    queryKey: ['users', 'search', search],
-    queryFn: async ({ pageParam }) => {
-      const result = await convex.query(api.users.search, {
-        search: search || undefined,
-        limit: 20,
-        ...(pageParam ? { cursor: pageParam } : {}),
-      });
-      return result;
-    },
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    initialPageParam: null as Id<"profiles"> | null,
-    enabled,
-  });
-
-  // Flatten all pages into a single array
-  const allUsers = query.data?.pages.flatMap(page =>
-    page.data.map(convertUser)
-  ) ?? [];
-
-  return {
-    data: allUsers,
-    isLoading: query.isLoading,
-    hasNextPage: query.hasNextPage,
-    isFetchingNextPage: query.isFetchingNextPage,
-    fetchNextPage: query.fetchNextPage,
-    refetch: query.refetch,
-    error: null,
-  };
-};
-
-/**
- * Get conversations list with hasUnread status
- * Uses reactive Convex query - auto-updates when data changes
- */
-export const useConversations = (userId: string) => {
-  const { isGuest } = useAuthStore();
-  const { isProfileReady } = useProfileStore();
-  const { isAuthSet } = useConvexAuthStore();
-  
-  // Only query when fully authenticated AND profile is ready
-  const canQuery = !isGuest && isAuthSet && isProfileReady && userId;
-  
-  // Reactive query - auto-updates when conversations change
-  const result = useQuery(
-    api.messages.getConversations,
-    canQuery ? { limit: 50 } : "skip"
+export const useAllUsers = (search?: string, enabled = true) => {
+  const paginated = usePaginatedQuery(
+    api.users.searchPaginated,
+    enabled ? { search: search || undefined } : "skip",
+    { initialNumItems: 20 }
   );
-  
-  // Convert to UI format
-  const conversations = result?.data?.map(convertConversation) || [];
-  
+  const flags = getPaginatedStatusFlags(paginated.status);
+
   return {
-    data: conversations,
-    isLoading: result === undefined && canQuery,
-    hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: false,
-    fetchNextPage: () => {}, // Not needed for now - reactive query handles updates
+    data: paginated.results.map(convertUser),
+    ...flags,
+    fetchNextPage: () => paginated.loadMore(20),
     refetch: () => {},
     error: null,
   };
 };
 
-/**
- * Get messages with a user (reverse infinite scroll for loading older messages)
- * 
- * Architecture:
- * - Always subscribe to the FIRST page (newest 50 messages) for real-time updates
- * - When "Load more" is clicked, fetch older pages and accumulate them client-side
- * - Merge older messages at the front, keeping the reactive first page at the end
- * 
- * Cursor Implementation:
- * - Uses `_creationTime` (number) as cursor instead of `Id<"messages">`
- * - `_creationTime` provides stable, chronological ordering for pagination
- * - More efficient for time-based queries and sorting older messages
- * - Allows the backend to use indexed queries on creation time for better performance
- */
+export const useConversations = (userId: string) => {
+  const { isGuest } = useAuthStore();
+  const { isProfileReady } = useProfileStore();
+  const { isAuthSet } = useConvexAuthStore();
+  const canQuery = !isGuest && isAuthSet && isProfileReady && userId;
+
+  const paginated = usePaginatedQuery(
+    api.messages.getConversationsPaginated,
+    canQuery ? {} : "skip",
+    { initialNumItems: 50 }
+  );
+  const flags = getPaginatedStatusFlags(paginated.status);
+  const conversations = paginated.results.map(convertConversation);
+
+  return {
+    data: conversations,
+    isLoading: canQuery ? flags.isLoading : false,
+    hasNextPage: canQuery ? flags.hasNextPage : false,
+    isFetchingNextPage: canQuery ? flags.isFetchingNextPage : false,
+    fetchNextPage: () => paginated.loadMore(50),
+    refetch: () => {},
+    error: null,
+  };
+};
+
 export const useMessages = (userId: string, partnerId: string) => {
   const { isGuest } = useAuthStore();
   const { isProfileReady } = useProfileStore();
   const { isAuthSet } = useConvexAuthStore();
-  
-  // Only query when fully authenticated AND profile is ready
   const canQuery = !isGuest && isAuthSet && isProfileReady && userId && partnerId;
-  
-  type UIMessage = ReturnType<typeof convertMessage>;
-  
-  // Older messages loaded via "Load more" (accumulated client-side)
-  const [olderMessages, setOlderMessages] = useState<UIMessage[]>([]);
-  // Track the cursor for the next "Load more" click
+
+  type LocalUIMessage = ReturnType<typeof convertMessage>;
+  const [olderMessages, setOlderMessages] = useState<LocalUIMessage[]>([]);
   const [nextCursor, setNextCursor] = useState<number | null>(null);
-  // Track if we have more pages to load
   const [hasMore, setHasMore] = useState(false);
-  // Track if we're currently loading older messages
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  
-  // Tracks which partnerId we last reset state for (prevents duplicate resets)
-  const [lastResetPartnerId, setLastResetPartnerId] = useState<string | null>(null);
-  
-  // Initial lastReadMessageAt - captured once when conversation opens
   const [initialLastReadMessageAt, setInitialLastReadMessageAt] = useState<number | null>(null);
   const [hasInitializedLastRead, setHasInitializedLastRead] = useState(false);
-  // Track when conversation was opened (ref since it's a side-effect timestamp, not derived state)
-  // Note: This is intentionally non-reactive - it captures a moment in time
-  // and is only used for comparison, not for triggering re-renders
+  const previousPartnerIdRef = useRef<string | null>(null);
   const conversationOpenedAtRef = useRef<number>(Date.now());
-  
-  // Reset state when partner changes during render (before DOM commit)
-  // Safe: only updates state when prop actually changes, avoiding infinite loops
-  if (partnerId && partnerId !== lastResetPartnerId) {
-    setLastResetPartnerId(partnerId);
+
+  useEffect(() => {
+    if (!partnerId) {
+      previousPartnerIdRef.current = null;
+      setOlderMessages([]);
+      setNextCursor(null);
+      setHasMore(false);
+      setIsLoadingMore(false);
+      setInitialLastReadMessageAt(null);
+      setHasInitializedLastRead(false);
+      return;
+    }
+    if (previousPartnerIdRef.current === partnerId) return;
+    previousPartnerIdRef.current = partnerId;
     setOlderMessages([]);
     setNextCursor(null);
     setHasMore(false);
@@ -277,39 +213,29 @@ export const useMessages = (userId: string, partnerId: string) => {
     setInitialLastReadMessageAt(null);
     setHasInitializedLastRead(false);
     conversationOpenedAtRef.current = Date.now();
-  }
-  
-  // ALWAYS subscribe to the first page (newest messages) - this stays reactive
+  }, [partnerId]);
+
   const firstPageResult = useQuery(
     api.messages.getWithUser,
     canQuery ? { userId: partnerId as Id<"profiles">, limit: 50 } : "skip"
   );
-  
-  // Capture initial metadata from first page
+
   useEffect(() => {
     if (firstPageResult?.data && !hasInitializedLastRead) {
       setInitialLastReadMessageAt(firstPageResult.lastReadMessageAt ?? null);
       setHasInitializedLastRead(true);
     }
-    // Update cursor and hasMore from first page result
-    if (firstPageResult) {
-      // Only set nextCursor if we haven't loaded any older messages yet
-      if (olderMessages.length === 0) {
-        setNextCursor(firstPageResult.nextCursor ?? null);
-      }
-      // Has more is true if first page says so AND we haven't loaded everything
-      if (olderMessages.length === 0) {
-        setHasMore(firstPageResult.hasMore ?? false);
-      }
+    if (firstPageResult && olderMessages.length === 0) {
+      setNextCursor(firstPageResult.nextCursor ?? null);
+      setHasMore(firstPageResult.hasMore ?? false);
     }
   }, [firstPageResult, hasInitializedLastRead, olderMessages.length]);
-  
-  // Convex fetchQuery for loading older pages (non-reactive, one-time fetch)
+
   const convex = useConvex();
-  
+
   const fetchNextPage = async () => {
     if (!nextCursor || isLoadingMore || !canQuery) return;
-    
+
     setIsLoadingMore(true);
     try {
       const olderResult = await convex.query(api.messages.getWithUser, {
@@ -317,15 +243,12 @@ export const useMessages = (userId: string, partnerId: string) => {
         limit: 50,
         cursor: nextCursor,
       });
-      
+
       if (olderResult?.data) {
         const newOlderMessages = olderResult.data.map(convertMessage);
-        
-        // Also capture current first page messages to prevent them from disappearing
-        // when new messages arrive and shift the first page
         const currentFirstPage = firstPageResult?.data?.map(convertMessage) ?? [];
-        
-        setOlderMessages((prev: UIMessage[]) =>
+
+        setOlderMessages((prev) =>
           mergeAndDeduplicateMessages(newOlderMessages, prev, currentFirstPage)
         );
         setNextCursor(olderResult.nextCursor ?? null);
@@ -337,22 +260,15 @@ export const useMessages = (userId: string, partnerId: string) => {
       setIsLoadingMore(false);
     }
   };
-  
-  // Combine older messages + first page (reactive)
-  // Older messages come first, then first page messages
+
   const allMessages = useMemo(() => {
     if (!firstPageResult?.data) return olderMessages;
-    
     const firstPageMessages = firstPageResult.data.map(convertMessage);
-    
-    // Dedupe: remove from olderMessages any that appear in firstPage
-    const firstPageIds = new Set(firstPageMessages.map((m: UIMessage) => String(m.id)));
-    const dedupedOlder = olderMessages.filter((m: UIMessage) => !firstPageIds.has(String(m.id)));
-    
-    // Combine: older messages first, then first page
+    const firstPageIds = new Set(firstPageMessages.map((m) => String(m.id)));
+    const dedupedOlder = olderMessages.filter((m) => !firstPageIds.has(String(m.id)));
     return [...dedupedOlder, ...firstPageMessages];
   }, [olderMessages, firstPageResult?.data]);
-  
+
   const reset = () => {
     setOlderMessages([]);
     setNextCursor(null);
@@ -361,9 +277,9 @@ export const useMessages = (userId: string, partnerId: string) => {
     setInitialLastReadMessageAt(null);
     setHasInitializedLastRead(false);
   };
-  
+
   const isInitialLoad = firstPageResult === undefined && canQuery;
-  
+
   return {
     data: allMessages,
     isLoading: isInitialLoad,
@@ -373,60 +289,60 @@ export const useMessages = (userId: string, partnerId: string) => {
     refetch: reset,
     lastReadMessageAt: initialLastReadMessageAt,
     conversationOpenedAt: conversationOpenedAtRef.current,
-    // For read indicators: reactive - updates when other person reads
     otherParticipantLastRead: firstPageResult?.otherParticipantLastRead ?? null,
-    redirect: firstPageResult && 'redirect' in firstPageResult ? firstPageResult.redirect : false,
-    canonicalConversationId: firstPageResult && 'canonicalConversationId' in firstPageResult 
-      ? (firstPageResult.canonicalConversationId as string) 
-      : null,
+    redirect: firstPageResult && "redirect" in firstPageResult ? firstPageResult.redirect : false,
+    canonicalConversationId:
+      firstPageResult && "canonicalConversationId" in firstPageResult
+        ? (firstPageResult.canonicalConversationId as string)
+        : null,
     error: null,
   };
 };
 
 export const useSendMessage = () => {
   const sendMessage = useMutation(api.messages.send);
-  
+  const [isPending, setIsPending] = useState(false);
+
+  const run = async (variables: { senderId: string; receiverId: string; content: string }) => {
+    setIsPending(true);
+    try {
+      const result = await sendMessage({
+        recipient_id: variables.receiverId as Id<"profiles">,
+        text: variables.content || undefined,
+      });
+      return {
+        id: result.id,
+        senderId: result.sender_id,
+        content: result.text || "",
+        audio_url: result.audio_url || null,
+        timestamp: result.created_at,
+      };
+    } finally {
+      setIsPending(false);
+    }
+  };
+
   return {
     mutate: (
       variables: { senderId: string; receiverId: string; content: string },
       options?: { onSuccess?: () => void; onError?: (error: Error) => void }
     ) => {
-      sendMessage({
-        recipient_id: variables.receiverId as Id<"profiles">,
-        text: variables.content || undefined,
-      })
+      run(variables)
         .then(() => options?.onSuccess?.())
-        .catch((error) => options?.onError?.(error));
+        .catch((error) => options?.onError?.(error as Error));
     },
-    mutateAsync: async (variables: { senderId: string; receiverId: string; content: string }) => {
-      const result = await sendMessage({
-        recipient_id: variables.receiverId as Id<"profiles">,
-        text: variables.content || undefined,
-      });
-      // Convert to UI format
-      return {
-        id: result.id,
-        senderId: result.sender_id,
-        content: result.text || '',
-        audio_url: result.audio_url || null,
-        timestamp: result.created_at,
-      };
-    },
-    isPending: false,
+    mutateAsync: run,
+    isPending,
   };
 };
 
-/**
- * Mark conversation as read
- * Only patches if there's something NEW to mark as read (saves writes)
- */
 export const useMarkAsRead = () => {
   const markAsRead = useMutation(api.messages.markAsRead);
-  
   return {
     mutate: (recipientId: string) => {
-      markAsRead({ recipientId: recipientId as Id<"profiles"> })
-        .catch((error) => console.error('Failed to mark as read:', error));
+      markAsRead({ recipientId: recipientId as Id<"profiles"> }).catch((error) =>
+        console.error("Failed to mark as read:", error)
+      );
     },
     mutateAsync: async (recipientId: string) => {
       return await markAsRead({ recipientId: recipientId as Id<"profiles"> });

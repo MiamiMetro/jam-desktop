@@ -1,5 +1,6 @@
 import { RateLimiter, MINUTE } from "@convex-dev/rate-limiter";
 import { components } from "./_generated/api";
+import type { MutationCtx } from "./_generated/server";
 
 /**
  * Server-side rate limiter for Convex mutations
@@ -7,7 +8,7 @@ import { components } from "./_generated/api";
  * 
  * Rate limits are enforced per-user (by profile ID) or per-IP for unauthenticated requests.
  */
-export const rateLimiter = new RateLimiter(components.rateLimiter as any, {
+export const rateLimiter = new RateLimiter(components.rateLimiter, {
   // Posts: 5 per minute with burst of 2
   createPost: { 
     kind: "token bucket", 
@@ -117,7 +118,7 @@ export type RateLimitName =
  * Helper to check rate limit and throw a user-friendly error
  */
 export async function checkRateLimit(
-  ctx: any,
+  ctx: MutationCtx,
   name: RateLimitName,
   key: string
 ): Promise<void> {

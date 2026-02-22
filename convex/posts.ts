@@ -2,6 +2,7 @@ import { query, mutation } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Id, Doc } from "./_generated/dataModel";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
 import { 
   getCurrentProfile, 
   requireAuth,
@@ -14,8 +15,8 @@ import { checkRateLimit } from "./rateLimiter";
 
 // Helper to format a post for API response
 async function formatPost(
-  ctx: any,
-  post: any,
+  ctx: QueryCtx | MutationCtx,
+  post: Doc<"posts">,
   currentUserId?: Id<"profiles">
 ) {
   const author = await ctx.db.get(post.authorId);
@@ -29,7 +30,7 @@ async function formatPost(
   if (currentUserId) {
     const like = await ctx.db
       .query("post_likes")
-      .withIndex("by_post_and_user", (q: any) =>
+      .withIndex("by_post_and_user", (q) =>
         q.eq("postId", post._id).eq("userId", currentUserId)
       )
       .first();
@@ -54,6 +55,50 @@ async function formatPost(
     comments_count: commentsCount,
     is_liked: isLiked,
   };
+}
+
+async function deletePostLikesInBatches(
+  ctx: MutationCtx,
+  postId: Id<"posts">
+): Promise<void> {
+  let cursor: string | null = null;
+  let isDone = false;
+
+  while (!isDone) {
+    const page = await ctx.db
+      .query("post_likes")
+      .withIndex("by_post", (q) => q.eq("postId", postId))
+      .paginate({ cursor, numItems: 100 });
+
+    for (const like of page.page) {
+      await ctx.db.delete(like._id);
+    }
+
+    cursor = page.continueCursor;
+    isDone = page.isDone;
+  }
+}
+
+async function deleteCommentLikesInBatches(
+  ctx: MutationCtx,
+  commentId: Id<"comments">
+): Promise<void> {
+  let cursor: string | null = null;
+  let isDone = false;
+
+  while (!isDone) {
+    const page = await ctx.db
+      .query("comment_likes")
+      .withIndex("by_comment", (q) => q.eq("commentId", commentId))
+      .paginate({ cursor, numItems: 100 });
+
+    for (const like of page.page) {
+      await ctx.db.delete(like._id);
+    }
+
+    cursor = page.continueCursor;
+    isDone = page.isDone;
+  }
 }
 
 /**
@@ -121,112 +166,64 @@ export const getById = query({
 });
 
 /**
- * Get feed (all top-level posts)
- * Equivalent to GET /posts/feed
- * Supports cursor-based pagination
+ * Get feed using native Convex pagination.
+ * This is the preferred endpoint for Convex-first frontend pagination.
  */
-export const getFeed = query({
+export const getFeedPaginated = query({
   args: {
-    limit: v.optional(v.number()),
-    cursor: v.optional(v.id("posts")),
+    paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
-    const limit = args.limit ?? 20;
     const currentProfile = await getCurrentProfile(ctx);
+    const result = await ctx.db
+      .query("posts")
+      .order("desc")
+      .paginate(args.paginationOpts);
 
-    // Get all posts (all posts are top-level), ordered by creation time desc
-    let posts: Doc<"posts">[] = [];
-    
-    if (args.cursor) {
-      // Get the cursor post to find its creation time
-      const cursorPost = await ctx.db.get(args.cursor);
-      if (cursorPost) {
-        // Get posts older than the cursor (all posts are top-level now)
-        posts = await ctx.db
-          .query("posts")
-          .order("desc")
-          .filter((q) => q.lt(q.field("_creationTime"), cursorPost._creationTime))
-          .take(limit + 1);
-      }
-    } else {
-      // First page - no cursor (all posts are top-level now)
-      posts = await ctx.db
-        .query("posts")
-        .order("desc")
-        .take(limit + 1);
-    }
-
-    const hasMore = posts.length > limit;
-    const data = posts.slice(0, limit);
-
-    const formattedPosts = await Promise.all(
-      data.map((post) => formatPost(ctx, post, currentProfile?._id))
+    const page = await Promise.all(
+      result.page.map((post) => formatPost(ctx, post, currentProfile?._id))
     );
 
     return {
-      data: formattedPosts,
-      hasMore,
-      nextCursor: hasMore ? data[data.length - 1]._id : null,
+      ...result,
+      page,
     };
   },
 });
 
 /**
- * Get posts by username
- * Equivalent to GET /profiles/:username/posts
- * Supports cursor-based pagination
+ * Get posts by username using native Convex pagination.
+ * This is the preferred endpoint for Convex-first frontend pagination.
  */
-export const getByUsername = query({
+export const getByUsernamePaginated = query({
   args: {
     username: v.string(),
-    limit: v.optional(v.number()),
-    cursor: v.optional(v.id("posts")),
+    paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
-    const limit = args.limit ?? 20;
     const currentProfile = await getCurrentProfile(ctx);
-
-    // Find the user
     const author = await ctx.db
       .query("profiles")
       .withIndex("by_username", (q) => q.eq("username", args.username))
       .first();
 
     if (!author) {
-      return { data: [], hasMore: false, nextCursor: null };
+      return { page: [], isDone: true, continueCursor: "" };
     }
 
-    let posts: Doc<"posts">[] = [];
-    
-    if (args.cursor) {
-      const cursorPost = await ctx.db.get(args.cursor);
-      if (cursorPost) {
-        posts = await ctx.db
-          .query("posts")
-          .withIndex("by_author", (q) => q.eq("authorId", author._id))
-          .order("desc")
-          .filter((q) => q.lt(q.field("_creationTime"), cursorPost._creationTime))
-          .take(limit + 1);
-      }
-    } else {
-      posts = await ctx.db
-        .query("posts")
-        .withIndex("by_author", (q) => q.eq("authorId", author._id))
-        .order("desc")
-        .take(limit + 1);
-    }
+    const result = await ctx.db
+      .query("posts")
+      .withIndex("by_author", (q) => q.eq("authorId", author._id))
+      .order("desc")
+      .paginate(args.paginationOpts);
 
-    const hasMore = posts.length > limit;
-    const data = posts.slice(0, limit);
-
-    const formattedPosts = await Promise.all(
-      data.map((post) => formatPost(ctx, post, currentProfile?._id))
+    const page = await Promise.all(
+      result.page.map((post) => formatPost(ctx, post, currentProfile?._id))
     );
 
     return {
-      data: formattedPosts,
-      hasMore,
-      nextCursor: hasMore ? data[data.length - 1]._id : null,
+      ...result,
+      page,
     };
   },
 });
@@ -254,50 +251,25 @@ export const remove = mutation({
       throw new Error("You can only delete your own posts");
     }
 
-    // Delete all likes for this post in batches to avoid memory issues
-    let hasMoreLikes = true;
-    while (hasMoreLikes) {
-      const likes = await ctx.db
-        .query("post_likes")
-        .withIndex("by_post", (q) => q.eq("postId", args.postId))
-        .take(100);
-      if (likes.length === 0) break;
-      for (const like of likes) {
-        await ctx.db.delete(like._id);
-      }
-      hasMoreLikes = likes.length === 100;
-    }
+    await deletePostLikesInBatches(ctx, args.postId);
 
-    // Delete all comments from the new comments table in batches
-    let hasMoreComments = true;
-    while (hasMoreComments) {
-      const comments = await ctx.db
+    let cursor: string | null = null;
+    let isDone = false;
+    while (!isDone) {
+      const page = await ctx.db
         .query("comments")
         .withIndex("by_post", (q) => q.eq("postId", args.postId))
-        .take(100);
-      if (comments.length === 0) break;
-      for (const comment of comments) {
-        // Delete likes on comments in batches
-        let hasMoreCommentLikes = true;
-        while (hasMoreCommentLikes) {
-          const commentLikes = await ctx.db
-            .query("comment_likes")
-            .withIndex("by_comment", (q) => q.eq("commentId", comment._id))
-            .take(100);
-          if (commentLikes.length === 0) break;
-          for (const like of commentLikes) {
-            await ctx.db.delete(like._id);
-          }
-          hasMoreCommentLikes = commentLikes.length === 100;
-        }
+        .paginate({ cursor, numItems: 100 });
+
+      for (const comment of page.page) {
+        await deleteCommentLikesInBatches(ctx, comment._id);
         await ctx.db.delete(comment._id);
       }
-      hasMoreComments = comments.length === 100;
+
+      cursor = page.continueCursor;
+      isDone = page.isDone;
     }
 
-    // Comments are now in the separate comments table, handled above
-
-    // Delete the post
     await ctx.db.delete(args.postId);
 
     return { message: "Post deleted successfully" };

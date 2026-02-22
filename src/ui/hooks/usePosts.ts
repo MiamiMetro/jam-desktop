@@ -1,11 +1,10 @@
-import { useQuery, useMutation, useConvex } from "convex/react";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
+import { useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { useAuthStore } from '@/stores/authStore';
-import type { Post, Comment } from '@/lib/api/types';
+import { useAuthStore } from "@/stores/authStore";
+import type { Comment, Post } from "@/lib/api/types";
 
-// UI-friendly Post type adapted from Convex Post
 export interface FrontendPost {
   id: string;
   author: {
@@ -29,7 +28,6 @@ export interface FrontendPost {
   isGlobal?: boolean;
 }
 
-// UI-friendly Comment type adapted from Convex Comment
 export interface FrontendComment {
   id: string;
   postId: string;
@@ -53,22 +51,25 @@ export interface FrontendComment {
   repliesCount?: number;
 }
 
-// Convert Convex Post to UI-friendly FrontendPost format
+type FriendMutationOptions = { onSuccess?: () => void; onError?: (error: Error) => void };
+
 function convertPost(post: Post): FrontendPost {
   return {
     id: post.id,
     author: {
-      username: post.author?.username || 'unknown',
+      username: post.author?.username || "unknown",
       avatar: post.author?.avatar_url || undefined,
     },
-    content: post.text || '',
+    content: post.text || "",
     text: post.text,
     audio_url: post.audio_url || null,
-    audioFile: post.audio_url ? {
-      url: post.audio_url,
-      title: 'Audio',
-      duration: 0,
-    } : undefined,
+    audioFile: post.audio_url
+      ? {
+          url: post.audio_url,
+          title: "Audio",
+          duration: 0,
+        }
+      : undefined,
     timestamp: new Date(post.created_at),
     likes: post.likes_count || 0,
     isLiked: post.is_liked || false,
@@ -79,69 +80,60 @@ function convertPost(post: Post): FrontendPost {
   };
 }
 
-// Convert Convex Comment to UI-friendly FrontendComment format
 function convertComment(comment: Comment): FrontendComment {
   return {
     id: comment.id,
-    postId: String((comment as any).post_id || comment.id), // Comment from posts.getComments has post_id
+    postId: comment.post_id,
     parentId: comment.parent_id ?? null,
     path: comment.path,
     depth: comment.depth ?? 0,
     author: {
-      username: comment.author?.username || 'unknown',
+      username: comment.author?.username || "unknown",
       avatar: comment.author?.avatar_url || undefined,
     },
-    content: comment.text || '',
+    content: comment.text || "",
     audio_url: comment.audio_url || null,
-    audioFile: comment.audio_url ? {
-      url: comment.audio_url,
-      title: 'Audio',
-      duration: 0,
-    } : undefined,
+    audioFile: comment.audio_url
+      ? {
+          url: comment.audio_url,
+          title: "Audio",
+          duration: 0,
+        }
+      : undefined,
     timestamp: new Date(comment.created_at),
     isLiked: comment.is_liked || false,
     likes: comment.likes_count || 0,
-    repliesCount: (comment as any).replies_count || 0, // May not be present in all comment types
+    repliesCount: comment.replies_count || 0,
   };
 }
 
-/**
- * Get posts feed with cursor-based pagination
- * Uses TanStack Query's useInfiniteQuery for optimal caching and performance
- */
+function getPaginatedStatusFlags(status: string) {
+  return {
+    isLoading: status === "LoadingFirstPage",
+    hasNextPage: status === "CanLoadMore",
+    isFetchingNextPage: status === "LoadingMore",
+  };
+}
+
 export const usePosts = () => {
-  const convex = useConvex();
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.posts.getFeedPaginated,
+    {},
+    { initialNumItems: 20 }
+  );
 
-  const query = useInfiniteQuery({
-    queryKey: ['posts', 'feed'],
-    queryFn: async ({ pageParam }) => {
-      const result = await convex.query(api.posts.getFeed, {
-        limit: 20,
-        ...(pageParam ? { cursor: pageParam } : {}),
-      });
-      return result;
-    },
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    initialPageParam: null as Id<"posts"> | null,
-  });
-
-  // Flatten all pages into a single array
-  const allPosts = query.data?.pages.flatMap(page =>
-    page.data.map(convertPost)
-  ) ?? [];
+  const flags = getPaginatedStatusFlags(status);
 
   return {
-    data: allPosts,
-    isLoading: query.isLoading,
-    hasNextPage: query.hasNextPage,
-    isFetchingNextPage: query.isFetchingNextPage,
-    fetchNextPage: query.fetchNextPage,
-    refetch: query.refetch,
+    data: results.map(convertPost),
+    ...flags,
+    fetchNextPage: () => loadMore(20),
+    refetch: () => {},
   };
 };
 
-export const useCommunityPosts = (_communityId: string) => {
-  // Community posts are not implemented in Convex backend yet
+export const useCommunityPosts = (communityId: string) => {
+  void communityId;
   return {
     data: [] as FrontendPost[],
     isLoading: false,
@@ -150,34 +142,25 @@ export const useCommunityPosts = (_communityId: string) => {
   };
 };
 
-/**
- * Get global posts feed
- */
 export const useGlobalPosts = () => {
-  const result = useQuery(api.posts.getFeed, { limit: 20 });
-  
-  const posts = result?.data?.map(convertPost).filter((post: FrontendPost) => post.isGlobal === true) || [];
-  const isLoading = result === undefined;
-  
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.posts.getFeedPaginated,
+    {},
+    { initialNumItems: 20 }
+  );
+  const flags = getPaginatedStatusFlags(status);
+
   return {
-    data: posts,
-    isLoading,
-    hasNextPage: result?.hasMore || false,
-    isFetchingNextPage: false,
-    fetchNextPage: () => {},
+    data: results.map(convertPost).filter((post) => post.isGlobal === true),
+    ...flags,
+    fetchNextPage: () => loadMore(20),
     refetch: () => {},
   };
 };
 
-/**
- * Get a single post
- */
 export const usePost = (postId: string) => {
-  const result = useQuery(
-    api.posts.getById, 
-    postId ? { postId: postId as Id<"posts"> } : "skip"
-  );
-  
+  const result = useQuery(api.posts.getById, postId ? { postId: postId as Id<"posts"> } : "skip");
+
   return {
     data: result ? convertPost(result) : null,
     isLoading: result === undefined && !!postId,
@@ -186,215 +169,165 @@ export const usePost = (postId: string) => {
   };
 };
 
-/**
- * Get comments for a post with cursor-based pagination
- * Uses TanStack Query's useInfiniteQuery for optimal caching and performance
- */
 export const useComments = (postId: string) => {
-  const convex = useConvex();
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.comments.getByPostPaginated,
+    postId ? { postId: postId as Id<"posts"> } : "skip",
+    { initialNumItems: 20 }
+  );
 
-  const query = useInfiniteQuery({
-    queryKey: ['comments', postId],
-    queryFn: async ({ pageParam }) => {
-      const result = await convex.query(api.comments.getByPost, {
-        postId: postId as Id<"posts">,
-        limit: 20,
-        ...(pageParam ? { cursor: pageParam } : {}),
-      });
-      return result;
-    },
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    initialPageParam: null as string | null,
-    enabled: !!postId,
-  });
-
-  // Flatten all pages into a single array
-  const allComments = query.data?.pages.flatMap(page =>
-    page.data.map(convertComment)
-  ) ?? [];
+  const flags = getPaginatedStatusFlags(status);
 
   return {
-    data: allComments,
-    isLoading: query.isLoading,
-    hasNextPage: query.hasNextPage,
-    isFetchingNextPage: query.isFetchingNextPage,
-    fetchNextPage: query.fetchNextPage,
-    refetch: query.refetch,
+    data: results.map(convertComment),
+    ...flags,
+    fetchNextPage: () => loadMore(20),
+    refetch: () => {},
   };
 };
 
 export const useCreateComment = () => {
   const createComment = useMutation(api.comments.create);
-  const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const [isPending, setIsPending] = useState(false);
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['comments'] });
-    queryClient.invalidateQueries({ queryKey: ['posts'] });
-  };
-
-  return {
-    mutate: (
-      variables: { postId: string; content: string; audioFile?: File },
-      options?: { onSuccess?: () => void; onError?: (error: Error) => void }
-    ) => {
-      if (!user) {
-        options?.onError?.(new Error('User not authenticated'));
-        return;
-      }
-
-      createComment({
-        postId: variables.postId as Id<"posts">,
-        text: variables.content || undefined,
-      })
-        .then(() => { invalidate(); options?.onSuccess?.(); })
-        .catch((error) => options?.onError?.(error));
-    },
-    mutateAsync: async (variables: { postId: string; content: string; audioFile?: File }) => {
-      if (!user) throw new Error('User not authenticated');
-
+  const run = async (variables: { postId: string; content: string; audioFile?: File }) => {
+    if (!user) throw new Error("User not authenticated");
+    setIsPending(true);
+    try {
       const result = await createComment({
         postId: variables.postId as Id<"posts">,
         text: variables.content || undefined,
       });
-      invalidate();
       return convertComment(result);
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return {
+    mutate: (variables: { postId: string; content: string; audioFile?: File }, options?: FriendMutationOptions) => {
+      run(variables)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
     },
-    isPending: false,
+    mutateAsync: run,
+    isPending,
   };
 };
 
 export const useCreatePost = () => {
   const createPost = useMutation(api.posts.create);
-  const queryClient = useQueryClient();
+  const [isPending, setIsPending] = useState(false);
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['posts'] });
+  const run = async (variables: { content: string; audioFile?: File | null }) => {
+    setIsPending(true);
+    try {
+      const result = await createPost({ text: variables.content || undefined });
+      return convertPost(result);
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return {
-    mutate: (
-      variables: { content: string; audioFile?: File | null },
-      options?: { onSuccess?: () => void; onError?: (error: Error) => void }
-    ) => {
-      createPost({ text: variables.content || undefined })
-        .then(() => { invalidate(); options?.onSuccess?.(); })
-        .catch((error) => options?.onError?.(error));
+    mutate: (variables: { content: string; audioFile?: File | null }, options?: FriendMutationOptions) => {
+      run(variables)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
     },
-    mutateAsync: async (variables: { content: string; audioFile?: File | null }) => {
-      const result = await createPost({ text: variables.content || undefined });
-      invalidate();
-      return convertPost(result);
-    },
-    isPending: false,
+    mutateAsync: run,
+    isPending,
   };
 };
 
 export const useDeletePost = () => {
   const deletePost = useMutation(api.posts.remove);
-  const queryClient = useQueryClient();
+  const [isPending, setIsPending] = useState(false);
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['posts'] });
+  const run = async (postId: string) => {
+    setIsPending(true);
+    try {
+      await deletePost({ postId: postId as Id<"posts"> });
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return {
-    mutate: (postId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
-      deletePost({ postId: postId as Id<"posts"> })
-        .then(() => { invalidate(); options?.onSuccess?.(); })
-        .catch((error) => options?.onError?.(error));
+    mutate: (postId: string, options?: FriendMutationOptions) => {
+      run(postId)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
     },
-    mutateAsync: async (postId: string) => {
-      await deletePost({ postId: postId as Id<"posts"> });
-      invalidate();
-    },
-    isPending: false,
+    mutateAsync: run,
+    isPending,
   };
 };
 
 export const useToggleLike = () => {
   const toggleLike = useMutation(api.posts.toggleLike);
-  const queryClient = useQueryClient();
+  const [isPending, setIsPending] = useState(false);
 
-  const invalidatePostQueries = () => {
-    queryClient.invalidateQueries({ queryKey: ['posts'] });
+  const run = async (postId: string) => {
+    setIsPending(true);
+    try {
+      const result = await toggleLike({ postId: postId as Id<"posts"> });
+      return convertPost(result);
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return {
-    mutate: (postId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
-      toggleLike({ postId: postId as Id<"posts"> })
-        .then(() => { invalidatePostQueries(); options?.onSuccess?.(); })
-        .catch((error) => options?.onError?.(error));
+    mutate: (postId: string, options?: FriendMutationOptions) => {
+      run(postId)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
     },
-    mutateAsync: async (postId: string) => {
-      const result = await toggleLike({ postId: postId as Id<"posts"> });
-      invalidatePostQueries();
-      return convertPost(result);
-    },
-    isPending: false,
+    mutateAsync: run,
+    isPending,
   };
 };
 
-/**
- * Hook to toggle like on a comment
- * Uses the comments.toggleLike mutation (separate from post likes)
- */
 export const useToggleCommentLike = () => {
   const toggleLike = useMutation(api.comments.toggleLike);
-  const queryClient = useQueryClient();
+  const [isPending, setIsPending] = useState(false);
 
-  const invalidateCommentQueries = () => {
-    queryClient.invalidateQueries({ queryKey: ['comments'] });
+  const run = async (commentId: string) => {
+    setIsPending(true);
+    try {
+      const result = await toggleLike({ commentId: commentId as Id<"comments"> });
+      return convertComment(result);
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return {
-    mutate: (commentId: string, options?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
-      toggleLike({ commentId: commentId as Id<"comments"> })
-        .then(() => { invalidateCommentQueries(); options?.onSuccess?.(); })
-        .catch((error) => options?.onError?.(error));
+    mutate: (commentId: string, options?: FriendMutationOptions) => {
+      run(commentId)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
     },
-    mutateAsync: async (commentId: string) => {
-      const result = await toggleLike({ commentId: commentId as Id<"comments"> });
-      invalidateCommentQueries();
-      return convertComment(result);
-    },
-    isPending: false,
+    mutateAsync: run,
+    isPending,
   };
 };
 
-/**
- * Get posts by username with cursor-based pagination
- * Uses TanStack Query's useInfiniteQuery for optimal caching and performance
- */
 export const useUserPosts = (username: string) => {
-  const convex = useConvex();
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.posts.getByUsernamePaginated,
+    username ? { username } : "skip",
+    { initialNumItems: 20 }
+  );
 
-  const query = useInfiniteQuery({
-    queryKey: ['posts', 'user', username],
-    queryFn: async ({ pageParam }) => {
-      const result = await convex.query(api.posts.getByUsername, {
-        username,
-        limit: 20,
-        ...(pageParam ? { cursor: pageParam } : {}),
-      });
-      return result;
-    },
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    initialPageParam: null as Id<"posts"> | null,
-    enabled: !!username,
-  });
-
-  // Flatten all pages into a single array
-  const allPosts = query.data?.pages.flatMap(page =>
-    page.data.map(convertPost)
-  ) ?? [];
+  const flags = getPaginatedStatusFlags(status);
 
   return {
-    data: allPosts,
-    isLoading: query.isLoading,
-    hasNextPage: query.hasNextPage,
-    isFetchingNextPage: query.isFetchingNextPage,
-    fetchNextPage: query.fetchNextPage,
-    refetch: query.refetch,
+    data: results.map(convertPost),
+    ...flags,
+    fetchNextPage: () => loadMore(20),
+    refetch: () => {},
   };
 };

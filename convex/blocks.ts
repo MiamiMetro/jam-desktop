@@ -1,7 +1,8 @@
 import { query, mutation } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
 import { requireAuth } from "./helpers";
+import { checkRateLimit } from "./rateLimiter";
 
 /**
  * Block a user
@@ -13,6 +14,7 @@ export const block = mutation({
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
+    await checkRateLimit(ctx, "blockAction", profile._id);
 
     // Cannot block self
     if (profile._id === args.userId) {
@@ -64,6 +66,7 @@ export const unblock = mutation({
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
+    await checkRateLimit(ctx, "blockAction", profile._id);
 
     // Find the block
     const block = await ctx.db
@@ -84,48 +87,25 @@ export const unblock = mutation({
 });
 
 /**
- * Get list of blocked users
- * Equivalent to GET /blocks
- * Supports cursor-based pagination
+ * Get list of blocked users using native Convex pagination.
+ * This is the preferred endpoint for Convex-first frontend pagination.
  */
-export const list = query({
+export const listPaginated = query({
   args: {
-    limit: v.optional(v.number()),
-    cursor: v.optional(v.id("blocks")),
+    paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
-    const limit = args.limit ?? 50;
+    const result = await ctx.db
+      .query("blocks")
+      .withIndex("by_blocker", (q) => q.eq("blockerId", profile._id))
+      .order("desc")
+      .paginate(args.paginationOpts);
 
-    // Get blocks where current user is the blocker
-    let blocks: Doc<"blocks">[] = [];
-    
-    if (args.cursor) {
-      const cursorBlock = await ctx.db.get(args.cursor);
-      if (cursorBlock) {
-        blocks = await ctx.db
-          .query("blocks")
-          .withIndex("by_blocker", (q) => q.eq("blockerId", profile._id))
-          .order("desc")
-          .filter((q) => q.lt(q.field("_creationTime"), cursorBlock._creationTime))
-          .take(limit + 1);
-      }
-    } else {
-      blocks = await ctx.db
-        .query("blocks")
-        .withIndex("by_blocker", (q) => q.eq("blockerId", profile._id))
-        .order("desc")
-        .take(limit + 1);
-    }
-
-    const hasMore = blocks.length > limit;
-    const data = blocks.slice(0, limit);
-
-    const formattedBlocks = await Promise.all(
-      data.map(async (block) => {
+    const page = await Promise.all(
+      result.page.map(async (block) => {
         const blocked = await ctx.db.get(block.blockedId);
         if (!blocked) return null;
-
         return {
           id: blocked._id,
           username: blocked.username,
@@ -137,9 +117,8 @@ export const list = query({
     );
 
     return {
-      data: formattedBlocks.filter(Boolean),
-      hasMore,
-      nextCursor: hasMore && data.length > 0 ? data[data.length - 1]._id : null,
+      ...result,
+      page: page.filter(Boolean),
     };
   },
 });

@@ -1,7 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Id } from "./_generated/dataModel";
 import { getCurrentProfile, requireAuth } from "./helpers";
 import { checkRateLimit } from "./rateLimiter";
 
@@ -56,8 +56,28 @@ export const sendRequest = mutation({
       if (existing2.status === "accepted") {
         throw new Error("Users are already friends");
       }
-      // The other user sent a request, accept it instead
+      // The other user sent a request, accept it and ensure bidirectional records
       await ctx.db.patch(existing2._id, { status: "accepted" });
+
+      const mirror = await ctx.db
+        .query("friends")
+        .withIndex("by_user_and_friend", (q) =>
+          q.eq("userId", profile._id).eq("friendId", args.friendId)
+        )
+        .first();
+
+      if (mirror) {
+        if (mirror.status !== "accepted") {
+          await ctx.db.patch(mirror._id, { status: "accepted" });
+        }
+      } else {
+        await ctx.db.insert("friends", {
+          userId: profile._id,
+          friendId: args.friendId,
+          status: "accepted",
+        });
+      }
+
       return { message: "Friend request accepted", status: "accepted" };
     }
 
@@ -121,6 +141,8 @@ export const acceptRequest = mutation({
         friendId: args.userId,
         status: "accepted",
       });
+    } else if (existingMirror.status !== "accepted") {
+      await ctx.db.patch(existingMirror._id, { status: "accepted" });
     }
     return { message: "Friend request accepted", status: "accepted" };
   },
@@ -174,308 +196,89 @@ export const remove = mutation({
 });
 
 /**
- * Get friends list for current user or a specific user
- * Equivalent to GET /friends
- * Supports cursor-based pagination and search
+ * Get friends list using native Convex pagination.
+ * This is the preferred endpoint for Convex-first frontend pagination.
  */
-export const list = query({
+export const listPaginated = query({
   args: {
     userId: v.optional(v.id("profiles")),
-    limit: v.optional(v.number()),
-    cursor: v.optional(v.id("friends")),
     search: v.optional(v.string()),
+    paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
-    // Determine which user's friends to fetch
-    let targetUserId: string;
-    if (args.userId) {
-      // Fetch specified user's friends (public view)
-      targetUserId = args.userId;
-    } else {
-      // Fetch current user's friends
+    let targetUserId: Id<"profiles"> | null = args.userId ?? null;
+    if (!targetUserId) {
       const profile = await getCurrentProfile(ctx);
       if (!profile) {
-        return { data: [], hasMore: false, nextCursor: null };
+        return { page: [], isDone: true, continueCursor: "" };
       }
       targetUserId = profile._id;
     }
-    
-    const limit = args.limit ?? 50;
 
-    // Apply cursor at query level for efficiency
-    let cursorTime: number | undefined;
-    let cursorFriendshipId: string | undefined;
-    if (args.cursor) {
-      const cursorFriendship = await ctx.db.get(args.cursor);
-      if (!cursorFriendship) {
-        // Invalid cursor: return empty results
-        return { data: [], hasMore: false, nextCursor: null };
-      }
-      cursorTime = cursorFriendship._creationTime;
-      cursorFriendshipId = args.cursor;
-    }
+    const result = await ctx.db
+      .query("friends")
+      .withIndex("by_user_and_status", (q) =>
+        q.eq("userId", targetUserId).eq("status", "accepted")
+      )
+      .order("desc")
+      .paginate(args.paginationOpts);
 
-    if (args.search) {
-      // For search: fetch until we have enough matches after filtering
-      const pageSize = 100;
-      const targetCount = limit + 1; // Need one extra to determine hasMore
-      const matchedFriends: Array<{ friendship: Doc<"friends">, profile: Doc<"profiles"> }> = [];
-
-      let paginationCursor: string | null = null;
-      let done = false;
-      let skippedCursor = false;
-
-      while (!done && matchedFriends.length < targetCount) {
-        // Use compound index for efficient filtering by user + status
-        const query = ctx.db
-          .query("friends")
-          .withIndex("by_user_and_status", (q) =>
-            q.eq("userId", targetUserId as Id<"profiles">).eq("status", "accepted")
-          )
-          .order("desc");
-
-        const page = await query.paginate({ cursor: paginationCursor, numItems: pageSize });
-        
-        // Filter out results before the cursor point
-        let pageFriendships = page.page;
-        if (cursorTime !== undefined && !skippedCursor) {
-          const filtered: typeof pageFriendships = [];
-          
-          for (const f of pageFriendships) {
-            if (skippedCursor) {
-              // Already passed cursor in this page, include all remaining items
-              filtered.push(f);
-            } else if (f._creationTime < cursorTime) {
-              // Passed the cursor point (older item in desc order)
-              skippedCursor = true;
-              filtered.push(f);
-            } else if (f._creationTime === cursorTime) {
-              if (f._id === cursorFriendshipId) {
-                // This is the cursor item itself - skip it but mark as passed
-                skippedCursor = true;
-              } else {
-                // Same time, different ID - include it
-                filtered.push(f);
-              }
-            }
-            // else: newer than cursor, skip it
-          }
-          
-          pageFriendships = filtered;
+    const searchLower = args.search?.trim().toLowerCase();
+    const page = await Promise.all(
+      result.page.map(async (friendship) => {
+        const friend = await ctx.db.get(friendship.friendId);
+        if (!friend) return null;
+        if (
+          searchLower &&
+          !friend.username.toLowerCase().includes(searchLower) &&
+          !(friend.displayName ?? "").toLowerCase().includes(searchLower)
+        ) {
+          return null;
         }
-        
-        // Fetch profiles for this page and filter by search immediately
-        const searchLower = args.search!.toLowerCase();
-        for (const friendship of pageFriendships) {
-          if (matchedFriends.length >= targetCount) break;
-          
-          const friend = await ctx.db.get(friendship.friendId);
-          if (!friend) continue;
-          
-          // Check if this friend matches the search query
-          const matchesSearch = 
-            friend.username.toLowerCase().includes(searchLower) ||
-            (friend.displayName ?? "").toLowerCase().includes(searchLower);
-            
-          if (matchesSearch) {
-            matchedFriends.push({ friendship, profile: friend });
-          }
-        }
-        
-        done = page.isDone;
-        paginationCursor = page.continueCursor;
-      }
-      
-      // Build the response from matched friends
-      const hasMore = matchedFriends.length > limit;
-      const resultFriends = matchedFriends.slice(0, limit);
-      
-      return {
-        data: resultFriends.map(({ friendship, profile }) => ({
-          id: profile._id,
-          username: profile.username,
-          display_name: profile.displayName ?? "",
-          avatar_url: profile.avatarUrl ?? "",
-          friends_since: new Date(friendship._creationTime).toISOString(),
-        })),
-        hasMore,
-        nextCursor: hasMore && resultFriends.length > 0
-          ? resultFriends[resultFriends.length - 1].friendship._id
-          : null,
-      };
-    } else {
-      // Non-search: efficient single-batch query
-      const fetchSize = limit + 1;
-
-      // Use compound index for efficient filtering by user + status
-      let query = ctx.db
-        .query("friends")
-        .withIndex("by_user_and_status", (q) =>
-          q.eq("userId", targetUserId as Id<"profiles">).eq("status", "accepted")
-        )
-        .order("desc");
-
-      // Apply cursor filter if provided
-      if (cursorTime !== undefined) {
-        query = query.filter((q) => q.lt(q.field("_creationTime"), cursorTime));
-      }
-
-      const friendships = await query.take(fetchSize);
-      
-      // Fetch friend profiles
-      const friends = await Promise.all(
-        friendships.map(async (friendship) => {
-          const friend = await ctx.db.get(friendship.friendId);
-          if (!friend) return null;
-
-          return {
-            id: friend._id,
-            username: friend.username,
-            display_name: friend.displayName ?? "",
-            avatar_url: friend.avatarUrl ?? "",
-            friends_since: new Date(friendship._creationTime).toISOString(),
-            _friendshipId: friendship._id, // For cursor
-          };
-        })
-      );
-
-      const validFriends = friends.filter((f): f is NonNullable<typeof f> => f !== null);
-
-      // Check if there are more results
-      const hasMore = validFriends.length > limit;
-      const dataFriends = validFriends.slice(0, limit);
-
-      return {
-        data: dataFriends.map((friend) => ({
-          id: friend.id,
-          username: friend.username,
-          display_name: friend.display_name,
-          avatar_url: friend.avatar_url,
-          friends_since: friend.friends_since,
-        })),
-        hasMore,
-        nextCursor: hasMore && dataFriends.length > 0
-          ? dataFriends[dataFriends.length - 1]._friendshipId
-          : null,
-      };
-    }
-  },
-});
-
-/**
- * Get pending friend requests (requests sent to me)
- * Equivalent to GET /friends/requests
- * Supports cursor-based pagination
- */
-export const getRequests = query({
-  args: {
-    limit: v.optional(v.number()),
-    cursor: v.optional(v.id("friends")),
-  },
-  handler: async (ctx, args) => {
-    const profile = await getCurrentProfile(ctx);
-    if (!profile) {
-      return { data: [], hasMore: false, nextCursor: null };
-    }
-    const limit = args.limit ?? 20;
-
-    // Get pending requests where current user is the friendId (recipient)
-    let requests: Doc<"friends">[] = [];
-
-    if (args.cursor) {
-      const cursorRequest = await ctx.db.get(args.cursor);
-      if (cursorRequest) {
-        requests = await ctx.db
-          .query("friends")
-          .withIndex("by_friend", (q) => q.eq("friendId", profile._id))
-          .filter((q) => q.eq(q.field("status"), "pending"))
-          .order("desc")
-          .filter((q) => q.lt(q.field("_creationTime"), cursorRequest._creationTime))
-          .take(limit + 1);
-      }
-    } else {
-      requests = await ctx.db
-        .query("friends")
-        .withIndex("by_friend", (q) => q.eq("friendId", profile._id))
-        .filter((q) => q.eq(q.field("status"), "pending"))
-        .order("desc")
-        .take(limit + 1);
-    }
-
-    const hasMore = requests.length > limit;
-    const data = requests.slice(0, limit);
-
-    const formattedRequests = await Promise.all(
-      data.map(async (request) => {
-        const user = await ctx.db.get(request.userId);
-        if (!user) return null;
 
         return {
-          id: user._id,
-          username: user.username,
-          display_name: user.displayName ?? "",
-          avatar_url: user.avatarUrl ?? "",
-          requested_at: new Date(request._creationTime).toISOString(),
+          id: friend._id,
+          username: friend.username,
+          display_name: friend.displayName ?? "",
+          avatar_url: friend.avatarUrl ?? "",
+          friends_since: new Date(friendship._creationTime).toISOString(),
         };
       })
     );
 
     return {
-      data: formattedRequests.filter(Boolean),
-      hasMore,
-      nextCursor: hasMore && data.length > 0 ? data[data.length - 1]._id : null,
+      ...result,
+      page: page.filter(Boolean),
     };
   },
 });
 
 /**
- * Get sent friend requests with full user data
- * Returns pending requests where the current user is the sender (userId)
- * Returns full profile data of the recipients (friendId)
+ * Get pending friend requests using native Convex pagination.
+ * This is the preferred endpoint for Convex-first frontend pagination.
  */
-export const getSentRequestsWithData = query({
+export const getRequestsPaginated = query({
   args: {
-    limit: v.optional(v.number()),
-    cursor: v.optional(v.id("friends")),
+    paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
     const profile = await getCurrentProfile(ctx);
     if (!profile) {
-      return { data: [], hasMore: false, nextCursor: null };
-    }
-    const limit = args.limit ?? 20;
-
-    // Get pending requests where current user is the userId (sender)
-    let requests: Doc<"friends">[] = [];
-
-    if (args.cursor) {
-      const cursorRequest = await ctx.db.get(args.cursor);
-      if (cursorRequest) {
-        requests = await ctx.db
-          .query("friends")
-          .withIndex("by_user", (q) => q.eq("userId", profile._id))
-          .filter((q) => q.eq(q.field("status"), "pending"))
-          .order("desc")
-          .filter((q) => q.lt(q.field("_creationTime"), cursorRequest._creationTime))
-          .take(limit + 1);
-      }
-    } else {
-      requests = await ctx.db
-        .query("friends")
-        .withIndex("by_user", (q) => q.eq("userId", profile._id))
-        .filter((q) => q.eq(q.field("status"), "pending"))
-        .order("desc")
-        .take(limit + 1);
+      return { page: [], isDone: true, continueCursor: "" };
     }
 
-    const hasMore = requests.length > limit;
-    const data = requests.slice(0, limit);
+    const result = await ctx.db
+      .query("friends")
+      .withIndex("by_friend_and_status", (q) =>
+        q.eq("friendId", profile._id).eq("status", "pending")
+      )
+      .order("desc")
+      .paginate(args.paginationOpts);
 
-    const formattedRequests = await Promise.all(
-      data.map(async (request) => {
-        const user = await ctx.db.get(request.friendId);
+    const page = await Promise.all(
+      result.page.map(async (request) => {
+        const user = await ctx.db.get(request.userId);
         if (!user) return null;
-
         return {
           id: user._id,
           username: user.username,
@@ -487,9 +290,51 @@ export const getSentRequestsWithData = query({
     );
 
     return {
-      data: formattedRequests.filter(Boolean),
-      hasMore,
-      nextCursor: hasMore && data.length > 0 ? data[data.length - 1]._id : null,
+      ...result,
+      page: page.filter(Boolean),
+    };
+  },
+});
+
+/**
+ * Get sent pending requests with recipient user data using native Convex pagination.
+ * This is the preferred endpoint for Convex-first frontend pagination.
+ */
+export const getSentRequestsWithDataPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const profile = await getCurrentProfile(ctx);
+    if (!profile) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
+    const result = await ctx.db
+      .query("friends")
+      .withIndex("by_user_and_status", (q) =>
+        q.eq("userId", profile._id).eq("status", "pending")
+      )
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    const page = await Promise.all(
+      result.page.map(async (request) => {
+        const user = await ctx.db.get(request.friendId);
+        if (!user) return null;
+        return {
+          id: user._id,
+          username: user.username,
+          display_name: user.displayName ?? "",
+          avatar_url: user.avatarUrl ?? "",
+          requested_at: new Date(request._creationTime).toISOString(),
+        };
+      })
+    );
+
+    return {
+      ...result,
+      page: page.filter(Boolean),
     };
   },
 });

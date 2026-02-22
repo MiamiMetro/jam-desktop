@@ -41,6 +41,7 @@ export const updateMe = mutation({
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
+    await checkRateLimit(ctx, "updateProfile", profile._id);
 
     // Sanitize and validate inputs
     const username = sanitizeText(args.username);

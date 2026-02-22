@@ -115,14 +115,14 @@ export default function FriendsList({ onSelectFriend }: FriendsListProps) {
               <div className="text-center py-4 text-xs text-muted-foreground">No friends yet</div>
             )}
           </div>
-          {!showSearch && hasMoreFriends && (
+          {hasMoreFriends && (
             <div className="pt-2 pb-2 border-t border-border">
               <button
                 onClick={() => fetchMoreFriends()}
                 disabled={isLoadingMoreFriends}
                 className="w-full py-2 text-xs text-muted-foreground hover:text-foreground transition-colors text-center disabled:opacity-50"
               >
-                {isLoadingMoreFriends ? 'Loading more...' : 'Load more friends'}
+                {isLoadingMoreFriends ? "Loading more..." : "Load more friends"}
               </button>
             </div>
           )}

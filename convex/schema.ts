@@ -87,6 +87,7 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_user_and_status", ["userId", "status"]) // Optimized for filtering accepted friends
     .index("by_friend", ["friendId"])
+    .index("by_friend_and_status", ["friendId", "status"])
     .index("by_user_and_friend", ["userId", "friendId"]),
 
   // Blocks table
@@ -123,6 +124,8 @@ export default defineSchema({
     profileId: v.id("profiles"),
     // Uses message _creationTime (not wall clock) - prevents clock skew
     lastReadMessageAt: v.optional(v.number()),
+    // Denormalized activity timestamp for conversation list ordering
+    lastActivityAt: v.optional(v.number()),
     joinedAt: v.number(),
     // Track if conversation is active (false when merged into another conversation)
     isActive: v.optional(v.boolean()),
@@ -130,6 +133,7 @@ export default defineSchema({
     .index("by_conversation", ["conversationId"])
     .index("by_profile", ["profileId"])
     .index("by_profile_active", ["profileId", "isActive"])
+    .index("by_profile_and_last_activity", ["profileId", "lastActivityAt"])
     .index("by_conversation_and_profile", ["conversationId", "profileId"]),
 
   // Messages table - DM messages with index for cursor pagination

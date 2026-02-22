@@ -1,5 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Id, Doc } from "./_generated/dataModel";
 import {
@@ -25,22 +26,24 @@ export async function markConversationAsInactive(
   ctx: MutationCtx,
   conversationId: Id<"conversations">
 ): Promise<void> {
-  // Process in batches of 100 to prevent OOM on large groups
-  let hasMore = true;
+  // Process in cursor-based batches to avoid re-reading the same first page.
+  let cursor: string | null = null;
+  let isDone = false;
 
-  while (hasMore) {
-    const batch = await ctx.db
+  while (!isDone) {
+    const page = await ctx.db
       .query("conversation_participants")
-      .withIndex("by_conversation", (q: any) => q.eq("conversationId", conversationId))
-      .take(100);
+      .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId))
+      .paginate({ cursor, numItems: 100 });
 
-    if (batch.length === 0) break;
-
-    for (const participant of batch) {
-      await ctx.db.patch(participant._id, { isActive: false });
+    for (const participant of page.page) {
+      if (participant.isActive !== false) {
+        await ctx.db.patch(participant._id, { isActive: false });
+      }
     }
 
-    hasMore = batch.length === 100;
+    cursor = page.continueCursor;
+    isDone = page.isDone;
   }
 }
 
@@ -62,7 +65,7 @@ async function findOrCreateDM(
   // Cap at 10: duplicates are extremely rare; prevents pathological scans
   const locks = await ctx.db
     .query("dm_keys")
-    .withIndex("by_dmKey", (q: any) => q.eq("dmKey", dmKey))
+    .withIndex("by_dmKey", (q) => q.eq("dmKey", dmKey))
     .take(10);
 
   let conversationId: Id<"conversations">;
@@ -99,19 +102,21 @@ async function findOrCreateDM(
       profileId: profileA,
       joinedAt: now,
       isActive: true,
+      lastActivityAt: now,
     });
     await ctx.db.insert("conversation_participants", {
       conversationId,
       profileId: profileB,
       joinedAt: now,
       isActive: true,
+      lastActivityAt: now,
     });
   }
 
   // Get or find the sender's participant record
   const senderParticipant = await ctx.db
     .query("conversation_participants")
-    .withIndex("by_conversation_and_profile", (q: any) => 
+    .withIndex("by_conversation_and_profile", (q) => 
       q.eq("conversationId", conversationId).eq("profileId", profileA)
     )
     .first();
@@ -196,10 +201,25 @@ export const send = mutation({
       lastMessageAt: message!._creationTime,
     });
 
-    // Update sender's lastReadMessageAt (so they don't see their own message as unread)
-    await ctx.db.patch(participantId, {
-      lastReadMessageAt: message!._creationTime,
-    });
+    // Update participant activity timestamps for stable conversation ordering.
+    const participants = await ctx.db
+      .query("conversation_participants")
+      .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId))
+      .take(10);
+
+    for (const participant of participants) {
+      if (participant._id === participantId) {
+        // Sender should not see their own new message as unread.
+        await ctx.db.patch(participant._id, {
+          lastReadMessageAt: message!._creationTime,
+          lastActivityAt: message!._creationTime,
+        });
+      } else {
+        await ctx.db.patch(participant._id, {
+          lastActivityAt: message!._creationTime,
+        });
+      }
+    }
 
     return {
       id: message!._id,
@@ -213,73 +233,37 @@ export const send = mutation({
 });
 
 /**
- * Get list of conversations with unread status
- * Uses participant-based model with O(1) unread check per conversation
+ * Get list of conversations with unread status using native Convex pagination.
+ * Preferred for Convex-first frontend pagination.
  */
-export const getConversations = query({
+export const getConversationsPaginated = query({
   args: {
-    limit: v.optional(v.number()),
-    cursor: v.optional(v.id("conversation_participants")),
+    paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
     const profile = await getCurrentProfile(ctx);
     if (!profile) {
-      return { data: [], hasMore: false, nextCursor: null };
-    }
-    const limit = args.limit ?? 50;
-
-    // Get participant records for current user with cursor-based pagination
-    // Use isActive filter to avoid fetching merged conversations
-    const fetchSize = limit + 1; // No multiplier needed - we filter at query level!
-
-    let participations: Doc<"conversation_participants">[] = [];
-
-    // Apply cursor filter at query level
-    let cursorTime: number | undefined;
-    if (args.cursor) {
-      const cursorParticipation = await ctx.db.get(args.cursor);
-      if (!cursorParticipation) {
-        // Invalid cursor: return empty results
-        return { data: [], hasMore: false, nextCursor: null };
-      }
-      cursorTime = cursorParticipation._creationTime;
+      return { page: [], isDone: true, continueCursor: "" };
     }
 
-    // Use by_profile index and filter isActive in-memory
-    // Cannot use by_profile_active because older records have isActive: undefined
-    // (field was added later), and eq("isActive", true) skips undefined values
-    let query = ctx.db
+    const result = await ctx.db
       .query("conversation_participants")
-      .withIndex("by_profile", (q) =>
+      .withIndex("by_profile_and_last_activity", (q) =>
         q.eq("profileId", profile._id)
       )
+      .order("desc")
       .filter((q) => q.neq(q.field("isActive"), false))
-      .order("desc");
+      .paginate(args.paginationOpts);
 
-    // Apply cursor filter if provided
-    if (cursorTime !== undefined) {
-      query = query.filter((q) => q.lt(q.field("_creationTime"), cursorTime));
-    }
-
-    participations = await query.take(fetchSize);
-
-    // For each participation, get conversation and compute hasUnread
     const conversations = await Promise.all(
-      participations.map(async (p) => {
+      result.page.map(async (p) => {
         const conv = await ctx.db.get(p.conversationId);
+        if (!conv || conv.mergedIntoConversationId != null) return null;
 
-        // Skip if conversation doesn't exist (shouldn't happen with isActive filter)
-        if (!conv) return null;
-
-        // Double-check: Skip merged conversations (defense in depth)
-        if (conv.mergedIntoConversationId != null) return null;
-
-        // O(1) unread check using denormalized lastMessageAt
         const hasUnread =
           conv.lastMessageAt != null &&
           (p.lastReadMessageAt ?? 0) < conv.lastMessageAt;
 
-        // For 1:1 DMs, get the other participant directly without fetching a list
         let otherUser = null;
         if (!conv.isGroup) {
           const otherParticipant = await ctx.db
@@ -303,56 +287,45 @@ export const getConversations = query({
           }
         }
 
-        // Get last message for preview
         const lastMessage = await ctx.db
           .query("messages")
-          .withIndex("by_conversation_time", (q) => q.eq("conversationId", conv._id))
+          .withIndex("by_conversation_time", (q) =>
+            q.eq("conversationId", conv._id)
+          )
           .order("desc")
           .first();
 
         return {
-          conversation: {
-            id: conv._id,
-            isGroup: conv.isGroup,
-            name: conv.name,
-            hasUnread,
-            other_user: otherUser,
-            last_message: lastMessage
-              ? {
-                  id: lastMessage._id,
-                  conversation_id: lastMessage.conversationId,
-                  sender_id: lastMessage.senderId,
-                  text: lastMessage.text ?? "",
-                  audio_url: lastMessage.audioUrl ?? "",
-                  created_at: new Date(lastMessage._creationTime).toISOString(),
-                }
-              : null,
-            updated_at: conv.lastMessageAt
-              ? new Date(conv.lastMessageAt).toISOString()
-              : new Date(conv._creationTime).toISOString(),
-          },
-          participation: p,
+          id: conv._id,
+          isGroup: conv.isGroup,
+          name: conv.name,
+          hasUnread,
+          other_user: otherUser,
+          last_message: lastMessage
+            ? {
+                id: lastMessage._id,
+                conversation_id: lastMessage.conversationId,
+                sender_id: lastMessage.senderId,
+                text: lastMessage.text ?? "",
+                audio_url: lastMessage.audioUrl ?? "",
+                created_at: new Date(lastMessage._creationTime).toISOString(),
+              }
+            : null,
+          updated_at: new Date(
+            p.lastActivityAt ?? conv.lastMessageAt ?? p._creationTime
+          ).toISOString(),
         };
       })
     );
 
-    // Filter out nulls (merged convos) and sort by last message time
-    const validConversations = conversations
-      .filter((c): c is NonNullable<typeof c> => c !== null)
-      .sort((a, b) =>
-        new Date(b.conversation.updated_at).getTime() - new Date(a.conversation.updated_at).getTime()
-      );
-
-    // Apply limit
-    const hasMore = validConversations.length > limit;
-    const dataConversations = validConversations.slice(0, limit);
-
     return {
-      data: dataConversations.map(c => c.conversation),
-      hasMore,
-      nextCursor: hasMore && dataConversations.length > 0
-        ? dataConversations[dataConversations.length - 1].participation._id
-        : null,
+      ...result,
+      page: conversations.filter(
+        (
+          conversation
+        ): conversation is NonNullable<(typeof conversations)[number]> =>
+          conversation !== null
+      ),
     };
   },
 });

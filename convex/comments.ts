@@ -1,6 +1,8 @@
 import { query, mutation } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Id, Doc } from "./_generated/dataModel";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
 import {
   getCurrentProfile,
   requireAuth,
@@ -23,7 +25,7 @@ function generateNextSegment(existingCount: number): string {
  * Format a comment for API response
  */
 async function formatComment(
-  ctx: any,
+  ctx: QueryCtx | MutationCtx,
   comment: Doc<"comments">,
   currentUserId?: Id<"profiles">
 ) {
@@ -38,7 +40,7 @@ async function formatComment(
   if (currentUserId) {
     const like = await ctx.db
       .query("comment_likes")
-      .withIndex("by_comment_and_user", (q: any) =>
+      .withIndex("by_comment_and_user", (q) =>
         q.eq("commentId", comment._id).eq("userId", currentUserId)
       )
       .first();
@@ -67,6 +69,28 @@ async function formatComment(
     replies_count: repliesCount,
     is_liked: isLiked,
   };
+}
+
+async function deleteCommentLikesInBatches(
+  ctx: MutationCtx,
+  commentId: Id<"comments">
+): Promise<void> {
+  let cursor: string | null = null;
+  let isDone = false;
+
+  while (!isDone) {
+    const page = await ctx.db
+      .query("comment_likes")
+      .withIndex("by_comment", (q) => q.eq("commentId", commentId))
+      .paginate({ cursor, numItems: 100 });
+
+    for (const like of page.page) {
+      await ctx.db.delete(like._id);
+    }
+
+    cursor = page.continueCursor;
+    isDone = page.isDone;
+  }
 }
 
 /**
@@ -207,156 +231,66 @@ export const reply = mutation({
 });
 
 /**
- * Get all comments for a post, ordered by path (tree order)
- * Supports cursor-based pagination
+ * Get post comments ordered by path using native Convex pagination.
+ * This is the preferred endpoint for Convex-first frontend pagination.
+ * Note: `maxDepth` filtering is intentionally not supported in this endpoint.
  */
-export const getByPost = query({
+export const getByPostPaginated = query({
   args: {
     postId: v.id("posts"),
-    limit: v.optional(v.number()),
-    cursor: v.optional(v.string()), // Path-based cursor
-    maxDepth: v.optional(v.number()), // Optional: limit nesting depth
+    paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
-    const limit = args.limit ?? 50;
     const currentProfile = await getCurrentProfile(ctx);
-
     const post = await ctx.db.get(args.postId);
     if (!post) {
-      return { data: [], hasMore: false, nextCursor: null };
+      return { page: [], isDone: true, continueCursor: "" };
     }
 
-    let comments: Doc<"comments">[] = [];
-    let hasMore = false;
+    const result = await ctx.db
+      .query("comments")
+      .withIndex("by_post_and_path", (q) => q.eq("postId", args.postId))
+      .paginate(args.paginationOpts);
 
-    if (args.maxDepth !== undefined) {
-      // When maxDepth is specified, fetch in batches until we have enough
-      // comments after filtering by depth (prevents returning fewer than limit)
-      const batchSize = 100;
-      let lastPath = args.cursor ?? null;
-      const matchingComments: Doc<"comments">[] = [];
-
-      // Fetch batches until we have enough matching comments or run out of data
-      while (matchingComments.length <= limit) {
-        let query = ctx.db
-          .query("comments")
-          .withIndex("by_post_and_path", (q) => q.eq("postId", args.postId));
-
-        if (lastPath !== null) {
-          query = query.filter((q) => q.gt(q.field("path"), lastPath!));
-        }
-
-        const batch = await query.take(batchSize);
-
-        if (batch.length === 0) {
-          // No more data
-          hasMore = false;
-          break;
-        }
-
-        // Filter by maxDepth
-        const filtered = batch.filter((c) => c.depth <= args.maxDepth!);
-        matchingComments.push(...filtered);
-
-        // Update lastPath for next iteration
-        lastPath = batch[batch.length - 1].path;
-
-        // Check if we have enough results
-        if (matchingComments.length > limit) {
-          hasMore = true;
-          break;
-        }
-
-        // If batch was smaller than batchSize, we've exhausted the data
-        if (batch.length < batchSize) {
-          hasMore = false;
-          break;
-        }
-      }
-
-      comments = matchingComments.slice(0, limit + 1);
-      hasMore = comments.length > limit;
-      comments = comments.slice(0, limit);
-    } else {
-      // No maxDepth filter: use efficient single-batch pagination
-      const commentsQuery = ctx.db
-        .query("comments")
-        .withIndex("by_post_and_path", (q) => q.eq("postId", args.postId));
-
-      if (args.cursor) {
-        // Get comments after the cursor path
-        comments = await commentsQuery
-          .filter((q) => q.gt(q.field("path"), args.cursor!))
-          .take(limit + 1);
-      } else {
-        comments = await commentsQuery.take(limit + 1);
-      }
-
-      hasMore = comments.length > limit;
-      comments = comments.slice(0, limit);
-    }
-
-    const formattedComments = await Promise.all(
-      comments.map((comment) => formatComment(ctx, comment, currentProfile?._id))
+    const page = await Promise.all(
+      result.page.map((comment) => formatComment(ctx, comment, currentProfile?._id))
     );
 
     return {
-      data: formattedComments,
-      hasMore,
-      nextCursor: hasMore && comments.length > 0 ? comments[comments.length - 1].path : null,
+      ...result,
+      page,
     };
   },
 });
 
 /**
- * Get replies to a specific comment
+ * Get replies to a specific comment using native Convex pagination.
+ * This is the preferred endpoint for Convex-first frontend pagination.
  */
-export const getReplies = query({
+export const getRepliesPaginated = query({
   args: {
     parentId: v.id("comments"),
-    limit: v.optional(v.number()),
-    cursor: v.optional(v.id("comments")),
+    paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
-    const limit = args.limit ?? 20;
     const currentProfile = await getCurrentProfile(ctx);
-
     const parent = await ctx.db.get(args.parentId);
     if (!parent) {
-      return { data: [], hasMore: false, nextCursor: null };
+      return { page: [], isDone: true, continueCursor: "" };
     }
 
-    let replies: Doc<"comments">[] = [];
+    const result = await ctx.db
+      .query("comments")
+      .withIndex("by_parent", (q) => q.eq("parentId", args.parentId))
+      .paginate(args.paginationOpts);
 
-    if (args.cursor) {
-      const cursorComment = await ctx.db.get(args.cursor);
-      if (cursorComment) {
-        replies = await ctx.db
-          .query("comments")
-          .withIndex("by_parent", (q) => q.eq("parentId", args.parentId))
-          .filter((q) =>
-            q.gt(q.field("_creationTime"), cursorComment._creationTime)
-          )
-          .take(limit + 1);
-      }
-    } else {
-      replies = await ctx.db
-        .query("comments")
-        .withIndex("by_parent", (q) => q.eq("parentId", args.parentId))
-        .take(limit + 1);
-    }
-
-    const hasMore = replies.length > limit;
-    const data = replies.slice(0, limit);
-
-    const formattedReplies = await Promise.all(
-      data.map((comment) => formatComment(ctx, comment, currentProfile?._id))
+    const page = await Promise.all(
+      result.page.map((comment) => formatComment(ctx, comment, currentProfile?._id))
     );
 
     return {
-      data: formattedReplies,
-      hasMore,
-      nextCursor: hasMore && data.length > 0 ? data[data.length - 1]._id : null,
+      ...result,
+      page,
     };
   },
 });
@@ -454,74 +388,32 @@ export const remove = mutation({
       throw new Error("You can only delete your own comments");
     }
 
-    // Delete likes on this comment in batches
-    let hasMoreLikes = true;
-    while (hasMoreLikes) {
-      const likes = await ctx.db
-        .query("comment_likes")
-        .withIndex("by_comment", (q) => q.eq("commentId", args.commentId))
-        .take(100);
-      if (likes.length === 0) break;
-      for (const like of likes) {
-        await ctx.db.delete(like._id);
-      }
-      hasMoreLikes = likes.length === 100;
-    }
+    await deleteCommentLikesInBatches(ctx, args.commentId);
 
     if (args.cascade) {
-      // Get all comments in batches and filter by path prefix to find descendants
-      let hasMoreComments = true;
-      let lastCreationTime: number | null = null;
-      let totalDescendantsDeleted = 0;
+      const descendantPrefix = `${comment.path}.`;
+      const descendantPathUpperBound = `${descendantPrefix}~`;
+      let cursor: string | null = null;
+      let isDone = false;
 
-      while (hasMoreComments) {
-        let query = ctx.db
+      while (!isDone) {
+        const page = await ctx.db
           .query("comments")
-          .withIndex("by_post", (q) => q.eq("postId", comment.postId))
-          .order("desc");
+          .withIndex("by_post_and_path", (q) =>
+            q
+              .eq("postId", comment.postId)
+              .gte("path", descendantPrefix)
+              .lt("path", descendantPathUpperBound)
+          )
+          .paginate({ cursor, numItems: 100 });
 
-        if (lastCreationTime !== null) {
-          query = query.filter((q) => q.lt(q.field("_creationTime"), lastCreationTime!));
-        }
-
-        const batch = await query.take(100);
-        if (batch.length === 0) break;
-
-        const descendants = batch.filter(
-          (c) => c.path.startsWith(comment.path + ".") && c._id !== comment._id
-        );
-
-        for (const descendant of descendants) {
-          // Delete likes on descendant in batches
-          let hasMoreDescendantLikes = true;
-          while (hasMoreDescendantLikes) {
-            const descendantLikes = await ctx.db
-              .query("comment_likes")
-              .withIndex("by_comment", (q) => q.eq("commentId", descendant._id))
-              .take(100);
-            if (descendantLikes.length === 0) break;
-            for (const like of descendantLikes) {
-              await ctx.db.delete(like._id);
-            }
-            hasMoreDescendantLikes = descendantLikes.length === 100;
-          }
-
-          // Decrement parent's reply counter for each descendant at depth 1
-          if (descendant.parentId && descendant.depth === comment.depth + 1) {
-            const parentOfDescendant = await ctx.db.get(descendant.parentId);
-            if (parentOfDescendant) {
-              await ctx.db.patch(descendant.parentId, {
-                repliesCount: Math.max(0, (parentOfDescendant.repliesCount ?? 0) - 1),
-              });
-            }
-          }
-
+        for (const descendant of page.page) {
+          await deleteCommentLikesInBatches(ctx, descendant._id);
           await ctx.db.delete(descendant._id);
-          totalDescendantsDeleted++;
         }
 
-        lastCreationTime = batch[batch.length - 1]._creationTime;
-        hasMoreComments = batch.length === 100;
+        cursor = page.continueCursor;
+        isDone = page.isDone;
       }
     }
 

@@ -14,20 +14,20 @@ type PostQueryReturn = FunctionReturnType<typeof api.posts.getById>;
 export type Post = NonNullable<PostQueryReturn>;
 
 // Infer Post feed item type (Convex format - single source of truth)
-type PostFeedReturn = FunctionReturnType<typeof api.posts.getFeed>;
-export type PostFeedItem = PostFeedReturn["data"][number];
+type PostFeedReturn = FunctionReturnType<typeof api.posts.getFeedPaginated>;
+export type PostFeedItem = PostFeedReturn["page"][number];
 
 // Infer Comment type from comments query (Convex format - single source of truth)
-type CommentsQueryReturn = FunctionReturnType<typeof api.comments.getByPost>;
-export type Comment = CommentsQueryReturn["data"][number];
+type CommentsQueryReturn = FunctionReturnType<typeof api.comments.getByPostPaginated>;
+export type Comment = CommentsQueryReturn["page"][number];
 
 // Infer Message type from messages query (Convex format - single source of truth)
 type MessagesQueryReturn = FunctionReturnType<typeof api.messages.getWithUser>;
 export type Message = MessagesQueryReturn["data"][number];
 
 // Infer Conversation type from conversations query (Convex format - single source of truth)
-type ConversationsQueryReturn = FunctionReturnType<typeof api.messages.getConversations>;
-export type Conversation = ConversationsQueryReturn["data"][number];
+type ConversationsQueryReturn = FunctionReturnType<typeof api.messages.getConversationsPaginated>;
+export type Conversation = ConversationsQueryReturn["page"][number];
 
 // Re-export Convex utility types for direct use
 // Note: TypeScript may warn these are unused, but they ARE used via re-export throughout the codebase
@@ -35,5 +35,6 @@ export type { Doc, Id } from "../../../../convex/_generated/dataModel";
 
 // Helper type that uses Doc and Id to ensure imports are recognized
 // This is a workaround for TypeScript's unused import detection
-export type ConvexDoc<T extends keyof { profiles: any; posts: any; comments: any; messages: any; conversations: any }> = Doc<T>;
-export type ConvexId<T extends keyof { profiles: any; posts: any; comments: any; messages: any; conversations: any }> = Id<T>;
+type CoreTables = "profiles" | "posts" | "comments" | "messages" | "conversations";
+export type ConvexDoc<T extends CoreTables> = Doc<T>;
+export type ConvexId<T extends CoreTables> = Id<T>;
