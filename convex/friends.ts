@@ -198,6 +198,9 @@ export const remove = mutation({
 /**
  * Get friends list using native Convex pagination.
  * This is the preferred endpoint for Convex-first frontend pagination.
+ * For search, this endpoint scans accepted friendships page-by-page until
+ * it fills the requested page size with matches, so results are not limited
+ * to only the first loaded friendship page.
  */
 export const listPaginated = query({
   args: {
@@ -215,40 +218,89 @@ export const listPaginated = query({
       targetUserId = profile._id;
     }
 
-    const result = await ctx.db
-      .query("friends")
-      .withIndex("by_user_and_status", (q) =>
-        q.eq("userId", targetUserId).eq("status", "accepted")
-      )
-      .order("desc")
-      .paginate(args.paginationOpts);
-
     const searchLower = args.search?.trim().toLowerCase();
-    const page = await Promise.all(
-      result.page.map(async (friendship) => {
-        const friend = await ctx.db.get(friendship.friendId);
-        if (!friend) return null;
-        if (
-          searchLower &&
-          !friend.username.toLowerCase().includes(searchLower) &&
-          !(friend.displayName ?? "").toLowerCase().includes(searchLower)
-        ) {
-          return null;
-        }
+    const friendshipsQuery = () =>
+      ctx.db
+        .query("friends")
+        .withIndex("by_user_and_status", (q) =>
+          q.eq("userId", targetUserId).eq("status", "accepted")
+        )
+        .order("desc");
 
-        return {
-          id: friend._id,
-          username: friend.username,
-          display_name: friend.displayName ?? "",
-          avatar_url: friend.avatarUrl ?? "",
-          friends_since: new Date(friendship._creationTime).toISOString(),
-        };
-      })
-    );
+    if (!searchLower) {
+      const result = await friendshipsQuery().paginate(args.paginationOpts);
+      const page = await Promise.all(
+        result.page.map(async (friendship) => {
+          const friend = await ctx.db.get(friendship.friendId);
+          if (!friend) return null;
+          return {
+            id: friend._id,
+            username: friend.username,
+            display_name: friend.displayName ?? "",
+            avatar_url: friend.avatarUrl ?? "",
+            friends_since: new Date(friendship._creationTime).toISOString(),
+          };
+        })
+      );
+
+      return {
+        ...result,
+        page: page.filter(
+          (
+            friend
+          ): friend is NonNullable<(typeof page)[number]> => friend !== null
+        ),
+      };
+    }
+
+    let cursor = args.paginationOpts.cursor;
+    let isDone = false;
+    const page: Array<{
+      id: Id<"profiles">;
+      username: string;
+      display_name: string;
+      avatar_url: string;
+      friends_since: string;
+    }> = [];
+
+    while (page.length < args.paginationOpts.numItems && !isDone) {
+      const remaining = args.paginationOpts.numItems - page.length;
+      const batch = await friendshipsQuery().paginate({
+        cursor,
+        numItems: remaining,
+      });
+      cursor = batch.continueCursor;
+      isDone = batch.isDone;
+
+      const matchedFriends = await Promise.all(
+        batch.page.map(async (friendship) => {
+          const friend = await ctx.db.get(friendship.friendId);
+          if (!friend) return null;
+          if (
+            !friend.username.toLowerCase().includes(searchLower) &&
+            !(friend.displayName ?? "").toLowerCase().includes(searchLower)
+          ) {
+            return null;
+          }
+          return {
+            id: friend._id,
+            username: friend.username,
+            display_name: friend.displayName ?? "",
+            avatar_url: friend.avatarUrl ?? "",
+            friends_since: new Date(friendship._creationTime).toISOString(),
+          };
+        })
+      );
+
+      for (const friend of matchedFriends) {
+        if (friend) page.push(friend);
+      }
+    }
 
     return {
-      ...result,
-      page: page.filter(Boolean),
+      page,
+      isDone,
+      continueCursor: cursor ?? "",
     };
   },
 });

@@ -1,6 +1,7 @@
 // FriendsTab.tsx — Twitter DM-style split panel: conversation list left, active view right
 import { useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useDebouncedValue } from "@tanstack/react-pacer";
 import { Avatar, AvatarFallback, AvatarImage, AvatarBadge } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,8 +27,20 @@ type LeftView = "conversations" | "search" | "requests";
 function FriendsTab() {
   const { isGuest, user } = useAuthStore();
   const { openLogin } = useAuthModalStore();
+  const [leftView, setLeftView] = useState<LeftView>("conversations");
+  const [friendSearch, setFriendSearch] = useState("");
+  const [userSearch, setUserSearch] = useState("");
+  const [debouncedFriendSearch] = useDebouncedValue(friendSearch, { wait: 300 });
+  const serverFriendSearch = debouncedFriendSearch.trim() || undefined;
+
   const { data: friendRequests = [] } = useFriendRequests();
-  const { data: friends = [] } = useFriends();
+  const {
+    data: friends = [],
+    isLoading: isLoadingFriends,
+    hasNextPage: hasMoreFriends,
+    isFetchingNextPage: isLoadingMoreFriends,
+    fetchNextPage: fetchMoreFriends,
+  } = useFriends(serverFriendSearch);
   const { data: conversations = [] } = useConversations(user?.id || "");
   const { data: onlineUsers = [] } = useOnlineUsers();
   const onlineIds = new Set(onlineUsers.map(u => u.id));
@@ -41,10 +54,7 @@ function FriendsTab() {
       setSearchParams({}, { replace: true });
     }
   }, [setSearchParams]);
-
-  const [leftView, setLeftView] = useState<LeftView>("conversations");
-  const [friendSearch, setFriendSearch] = useState("");
-  const [userSearch, setUserSearch] = useState("");
+  const isSearchingFriends = friendSearch.trim() !== debouncedFriendSearch.trim();
 
   // Sort friends by last message time
   const sortedFriends = [...friends].sort((a: User, b: User) => {
@@ -59,12 +69,6 @@ function FriendsTab() {
     if (!convA && convB) return 1;
     return 0;
   });
-
-  const filteredFriends = friendSearch.trim()
-    ? sortedFriends.filter((f: User) =>
-        f.username.toLowerCase().includes(friendSearch.toLowerCase())
-      )
-    : sortedFriends;
 
   const handleSelectFriend = (friendId: string) => {
     setActiveDmPartnerId(friendId);
@@ -194,7 +198,11 @@ function FriendsTab() {
           )}
           {leftView === "conversations" && (
             <>
-              {filteredFriends.length === 0 ? (
+              {isLoadingFriends || isSearchingFriends ? (
+                <div className="flex items-center justify-center py-10">
+                  <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : sortedFriends.length === 0 ? (
                 <div className="px-4 py-8 text-center">
                   <p className="text-sm text-muted-foreground">
                     {friendSearch.trim() ? "No conversations found" : "No friends yet"}
@@ -212,7 +220,7 @@ function FriendsTab() {
                 </div>
               ) : (
                 <div>
-                  {filteredFriends.map((friend: User) => {
+                  {sortedFriends.map((friend: User) => {
                     const conversation = conversations.find(
                       (c) => String(c.userId) === String(friend.id)
                     );
@@ -272,6 +280,17 @@ function FriendsTab() {
                       </button>
                     );
                   })}
+                  {hasMoreFriends && (
+                    <div className="px-4 py-3">
+                      <button
+                        onClick={() => fetchMoreFriends()}
+                        disabled={isLoadingMoreFriends}
+                        className="w-full py-2 text-xs text-primary hover:text-primary/80 transition-colors text-center disabled:opacity-50 glass-solid rounded-lg"
+                      >
+                        {isLoadingMoreFriends ? "Loading more..." : "Load more conversations"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </>
