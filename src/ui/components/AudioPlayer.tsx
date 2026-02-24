@@ -91,8 +91,10 @@ export function AudioPlayer({
                 style={{ width: `${audioPlayer.progress}%` }}
               />
             </div>
-            <span className="text-xs text-muted-foreground">
-              {formatDuration(displayDuration)}
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {audioPlayer.progress > 0
+                ? `${formatDuration((audioPlayer.progress / 100) * displayDuration)} / ${formatDuration(displayDuration)}`
+                : formatDuration(displayDuration)}
             </span>
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <button
