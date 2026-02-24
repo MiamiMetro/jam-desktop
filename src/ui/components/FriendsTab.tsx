@@ -21,6 +21,7 @@ import {
   useOnlineUsers,
   useEnsureDmConversation,
 } from "@/hooks/useUsers";
+import { Timestamp } from "@/components/Timestamp";
 import DMConversation from "@/components/social/DMConversation";
 import UserSearchPanel from "@/components/social/UserSearchPanel";
 import FriendRequestsPanel from "@/components/social/FriendRequestsPanel";
@@ -280,9 +281,9 @@ function FriendsTab() {
                               {friend.username}
                             </span>
                             {conversation?.lastMessage?.timestamp && (
-                              <span className="text-[11px] text-muted-foreground flex-shrink-0">
+                              <Timestamp date={conversation.lastMessage.timestamp} className="text-[11px] text-muted-foreground flex-shrink-0">
                                 {formatTimeShort(new Date(conversation.lastMessage.timestamp))}
-                              </span>
+                              </Timestamp>
                             )}
                           </div>
                           {conversation?.lastMessage?.content ? (

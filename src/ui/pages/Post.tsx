@@ -15,6 +15,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { usePost, useComments, useCreateComment, useToggleLike, useToggleCommentLike, type FrontendComment } from "@/hooks/usePosts";
 import { useCommunities } from "@/hooks/useCommunities";
 import { formatTimeAgo } from "@/lib/postUtils";
+import { Timestamp } from "@/components/Timestamp";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
@@ -163,9 +164,9 @@ function Post() {
                     {communityName}
                   </button>
                 ) : null}
-                <span className="text-xs text-muted-foreground">
+                <Timestamp date={post.timestamp} className="text-xs text-muted-foreground">
                   • {formatTimeAgo(post.timestamp)}
-                </span>
+                </Timestamp>
               </div>
             </div>
           </div>
@@ -278,9 +279,9 @@ function Post() {
                         >
                           {comment.author.username}
                         </button>
-                        <span className="text-[11px] text-muted-foreground">
+                        <Timestamp date={comment.timestamp} className="text-[11px] text-muted-foreground">
                           {formatTimeAgo(comment.timestamp)}
-                        </span>
+                        </Timestamp>
                       </div>
                       {comment.content && (
                         <AutoLinkedText text={comment.content} className="text-sm whitespace-pre-wrap leading-relaxed" linkClassName="text-blue-500 hover:text-blue-600 underline" />

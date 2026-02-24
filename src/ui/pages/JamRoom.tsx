@@ -28,6 +28,7 @@ import { useJam, useUpdateRoomActivity } from "@/hooks/useJams";
 import type { RoomParticipant } from "@/hooks/useJams";
 import { useAllUsers } from "@/hooks/useUsers";
 import { useHLSPlayer } from "@/hooks/useHLSPlayer";
+import { Timestamp } from "@/components/Timestamp";
 import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
 import type { User } from "@/lib/api/types";
@@ -438,7 +439,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                             </AvatarFallback>
                           </Avatar>
                           <span className="text-xs font-semibold">{msg.username}</span>
-                          <span className="text-[10px] text-muted-foreground">{formatTime(msg.timestamp)}</span>
+                          <Timestamp date={msg.timestamp} className="text-[10px] text-muted-foreground">{formatTime(msg.timestamp)}</Timestamp>
                         </div>
                       )}
                       <p className={`text-sm whitespace-pre-wrap break-words ${showHeader ? "pl-8" : ""}`}>{msg.content}</p>

@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AutoLinkedText } from "@/components/AutoLinkedText";
+import { Timestamp } from "@/components/Timestamp";
 import { ArrowLeft, Send, ChevronDown } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import {
@@ -243,7 +244,11 @@ export default function DMConversation({
                     <div className={`text-[10px] mt-1 flex items-center gap-1 ${
                       isOwn ? "text-primary-foreground/60 justify-end" : "text-muted-foreground"
                     }`}>
-                      <span>{message.timestamp ? formatTime(message.timestamp) : 'now'}</span>
+                      {message.timestamp ? (
+                        <Timestamp date={message.timestamp}>{formatTime(message.timestamp)}</Timestamp>
+                      ) : (
+                        <span>now</span>
+                      )}
                       {isOwn && (
                         <span
                           className={`inline-block w-1.5 h-1.5 rounded-full ${

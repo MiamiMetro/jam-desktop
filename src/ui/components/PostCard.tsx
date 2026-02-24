@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Timestamp } from "@/components/Timestamp";
 import { AutoLinkedText } from "@/components/AutoLinkedText";
 
 import type { FrontendPost } from '@/hooks/usePosts';
@@ -90,9 +91,9 @@ export function PostCard({
                 From {communityName}
               </button>
             ) : null}
-            <span className="text-xs text-muted-foreground">
+            <Timestamp date={post.timestamp} className="text-xs text-muted-foreground">
               • {formatTimeAgo(post.timestamp)}
-            </span>
+            </Timestamp>
           </div>
           {post.content && (
             <AutoLinkedText

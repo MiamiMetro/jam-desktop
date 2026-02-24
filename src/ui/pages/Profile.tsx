@@ -29,6 +29,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
 import { PostCard } from "@/components/PostCard";
 import { formatTimeAgo } from "@/lib/postUtils";
+import { Timestamp } from "@/components/Timestamp";
 import type { User } from "@/lib/api/types";
 
 type ProfileDraft = {
@@ -521,7 +522,9 @@ function Profile() {
           {profileUser.created_at && (
             <div className="flex items-center gap-1.5 mt-4 pt-4 border-t border-border/50 text-xs text-muted-foreground">
               <CalendarDays className="h-3 w-3" />
-              <span>Member since {new Date(profileUser.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>
+              <Timestamp date={profileUser.created_at}>
+                Member since {new Date(profileUser.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+              </Timestamp>
             </div>
           )}
         </div>
