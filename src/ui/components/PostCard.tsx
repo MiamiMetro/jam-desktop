@@ -74,8 +74,8 @@ export function PostCard({
             </button>
             {post.isGlobal ? (
               <Tooltip>
-                <TooltipTrigger>
-                  <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary cursor-default">
+                <TooltipTrigger className="flex items-center">
+                  <span className="text-xs leading-none px-2 py-1 rounded bg-primary/10 text-primary cursor-default">
                     Global
                   </span>
                 </TooltipTrigger>

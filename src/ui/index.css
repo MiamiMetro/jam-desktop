@@ -288,6 +288,27 @@ body::-webkit-scrollbar {
   box-shadow: 0 0 16px oklch(0.646 0.222 41.116 / 25%), 0 0 6px oklch(0.646 0.222 41.116 / 15%);
 }
 
+/* Primary glow utilities — derived from --primary via relative color syntax */
+.shadow-inset-primary {
+  box-shadow: inset 0 0 12px oklch(from var(--primary) l c h / 8%);
+}
+
+.shadow-glow-primary-lg {
+  box-shadow: 0 0 20px oklch(from var(--primary) l c h / 20%);
+}
+
+.bg-gradient-primary-tl {
+  background: radial-gradient(ellipse at top left, oklch(from var(--primary) l c h / 18%) 0%, transparent 60%);
+}
+
+.bg-gradient-primary-br {
+  background: radial-gradient(ellipse at bottom right, oklch(from var(--primary) l c h / 10%) 0%, transparent 50%);
+}
+
+.bg-gradient-primary-tr {
+  background: radial-gradient(ellipse at top right, oklch(from var(--primary) l c h / 8%), transparent 60%);
+}
+
 /* Heading font utility */
 .font-heading {
   font-family: var(--font-heading);

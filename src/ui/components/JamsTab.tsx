@@ -162,7 +162,7 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
               }`}>
               {/* Active room radial glow */}
               {myRoom.isEnabled && (
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,oklch(0.78_0.16_70/8%),transparent_60%)] pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-primary-tr pointer-events-none" />
               )}
               <div className="flex items-start justify-between gap-4 relative">
                 <div className="flex-1 min-w-0">

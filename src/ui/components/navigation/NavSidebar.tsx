@@ -108,7 +108,7 @@ export default function NavSidebar() {
                   <button
                     onClick={() => navigate(item.path)}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer relative ${active
-                      ? "bg-primary/12 text-primary shadow-[inset_0_0_12px_oklch(0.78_0.16_70/8%)]"
+                      ? "bg-primary/12 text-primary shadow-inset-primary"
                       : "text-muted-foreground hover:bg-muted/50 hover:text-foreground "
                       }`}
                   >
@@ -132,7 +132,7 @@ export default function NavSidebar() {
           <button
             onClick={() => navigate(`/jam/${persistedRoomId}`)}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer relative ${isRoomActive
-              ? "bg-primary/12 text-primary shadow-[inset_0_0_12px_oklch(0.78_0.16_70/8%)]"
+              ? "bg-primary/12 text-primary shadow-inset-primary"
               : "text-muted-foreground hover:bg-muted/50 hover:text-foreground "
               }`}
           >

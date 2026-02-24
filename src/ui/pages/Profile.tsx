@@ -352,8 +352,8 @@ function Profile() {
     <div className="flex flex-col h-full">
       <div className="relative h-36 border-b border-border overflow-hidden flex-shrink-0 bg-gradient-to-br from-primary/30 via-primary/15 to-primary/5" style={bannerStyle}>
         <div className="absolute inset-0 bg-black/15" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,oklch(0.78_0.16_70/18%)_0%,transparent_60%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,oklch(0.78_0.16_70/10%)_0%,transparent_50%)]" />
+        <div className="absolute inset-0 bg-gradient-primary-tl" />
+        <div className="absolute inset-0 bg-gradient-primary-br" />
         <Button
           variant="ghost"
           size="icon"
@@ -380,7 +380,7 @@ function Profile() {
 
       <div className="flex-1 flex min-h-0">
         <div className="w-[320px] min-w-[320px] border-r border-border p-5">
-          <div className="-mt-14 relative z-10 h-24 w-24 rounded-full border-4 border-background overflow-hidden ring-2 ring-primary/30 shadow-[0_0_20px_oklch(0.78_0.16_70/20%)] mb-4">
+          <div className="-mt-14 relative z-10 h-24 w-24 rounded-full border-4 border-background overflow-hidden ring-2 ring-primary/30 shadow-glow-primary-lg mb-4">
             <Avatar className="h-full w-full">
               <AvatarImage src={visibleAvatarUrl || ""} alt={profileUser.username} />
               <AvatarFallback className="bg-primary text-primary-foreground text-2xl font-bold h-full w-full">
