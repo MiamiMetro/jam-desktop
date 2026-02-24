@@ -58,7 +58,7 @@ export function PostCard({
           className="flex-shrink-0 cursor-pointer p-0 m-0 border-0 bg-transparent hover:opacity-80 transition-opacity self-start"
           aria-label={`Go to ${post.author.username}'s profile`}
         >
-          <Avatar size="default" className="pointer-events-none ring-2 ring-border">
+          <Avatar size="lg" className="pointer-events-none ring-1 ring-border">
             <AvatarImage src={post.author.avatar || ""} alt={post.author.username} />
             <AvatarFallback className="bg-muted text-muted-foreground">
               {post.author.username.substring(0, 2).toUpperCase()}

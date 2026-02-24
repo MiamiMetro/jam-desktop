@@ -101,7 +101,7 @@ function Profile() {
 
   const isOwnProfile = currentUser?.username === profileUser?.username;
   const isPreviewing = isOwnProfile && previewDraft !== null;
-  const showFriendActionRow = !isOwnProfile && !isGuest;
+  const showFriendActionRow = !isGuest;
   const isFriend = currentUserFriends.some((friend: User) => friend.id === profileUser?.id);
   const hasSentRequest = profileUser?.id ? hasPendingRequest(profileUser.id) : false;
 
@@ -380,46 +380,36 @@ function Profile() {
       </div>
 
       <div className="flex-1 flex min-h-0">
-        <div className="w-[320px] min-w-[320px] border-r border-border p-5">
-          <div className="-mt-14 relative z-10 h-24 w-24 rounded-full border-4 border-background overflow-hidden ring-2 ring-primary/30 shadow-glow-primary-lg mb-4">
-            <Avatar className="h-full w-full">
-              <AvatarImage src={visibleAvatarUrl || ""} alt={profileUser.username} />
-              <AvatarFallback className="bg-primary text-primary-foreground text-2xl font-bold h-full w-full">
-                {profileUser.username.substring(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-          </div>
-
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <h1 className="text-xl font-heading font-bold truncate">{profileUser.username}</h1>
-              {isOwnProfile && !isPreviewing && (
-                <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                  <Star className="h-3 w-3" />
-                  You
-                </span>
-              )}
+        <div className="w-[320px] min-w-[320px] border-r border-border flex flex-col">
+          <div className="px-5 pt-5 flex-shrink-0">
+            <div className="-mt-14 relative z-10 h-30 w-30 rounded-full border-4 border-background overflow-hidden ring-2 ring-primary/30 shadow-glow-primary-lg mb-4">
+              <Avatar className="h-full w-full">
+                <AvatarImage src={visibleAvatarUrl || ""} alt={profileUser.username} />
+                <AvatarFallback className="bg-primary text-primary-foreground text-2xl font-bold h-full w-full">
+                  {profileUser.username.substring(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
             </div>
-          {isOwnProfile && !isPreviewing && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                resetEditDraft();
-                setIsEditOpen(true);
-              }}
-            >
-              Edit Profile
-            </Button>
-          )}
           </div>
 
-          {visibleDisplayName && visibleDisplayName !== profileUser.username && (
-            <p className="text-sm text-muted-foreground mb-2">{visibleDisplayName}</p>
-          )}
+          <div className="flex-1 overflow-y-auto px-5 pb-5">
+          <h1 className="text-xl font-heading font-bold min-w-0 wrap-break-word">
+            {visibleDisplayName || profileUser.username}
+          </h1>
 
-          <p className="text-sm text-muted-foreground mb-3 wrap-break-word whitespace-pre-wrap">
+          <div className="flex items-center gap-2">
+            {visibleDisplayName && visibleDisplayName !== profileUser.username && (
+              <span className="text-sm text-muted-foreground">@{profileUser.username}</span>
+            )}
+            {isOwnProfile && !isPreviewing && (
+              <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                <Star className="h-3 w-3" />
+                You
+              </span>
+            )}
+          </div>
+
+          <p className="text-sm text-muted-foreground mt-3 mb-3 wrap-break-word whitespace-pre-wrap">
             {visibleBio.trim() || "No bio yet."}
           </p>
 
@@ -469,7 +459,19 @@ function Profile() {
 
           {showFriendActionRow && (
             <div className="mb-4">
-              {isFriend ? (
+              {isOwnProfile && !isPreviewing ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    resetEditDraft();
+                    setIsEditOpen(true);
+                  }}
+                >
+                  Edit Profile
+                </Button>
+              ) : isFriend ? (
                 <Button onClick={handleUnfriend} size="sm" variant="outline" className="w-full">
                   <UserMinus className="h-4 w-4 mr-2" />
                   Unfriend
@@ -527,6 +529,7 @@ function Profile() {
               </Timestamp>
             </div>
           )}
+          </div>
         </div>
 
         <div className="flex-1 min-w-0 flex flex-col">

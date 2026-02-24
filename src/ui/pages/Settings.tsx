@@ -30,7 +30,7 @@ export default function Settings() {
     if (message.includes("USERNAME_TOO_SHORT:")) return "Username must be at least 3 characters.";
     if (message.includes("USERNAME_TOO_LONG:")) return "Username must be 15 characters or less.";
     if (message.includes("USERNAME_RESERVED:")) return "This username is reserved.";
-    if (message.includes("USERNAME_INVALID_CHARS:")) return "Username can only use letters, numbers, and underscores.";
+    if (message.includes("USERNAME_INVALID_CHARS:")) return "Username must start with a letter or number, and can only contain letters, numbers, and underscores.";
     if (message.includes("Rate limit exceeded")) return "Too many requests. Please wait and try again.";
     if (message.includes("PROFILE_LOCKED:")) return "This account cannot be edited right now.";
     if (message.includes("ACCOUNT_STATE_TRANSITION_INVALID:")) return "Account state does not allow this action.";

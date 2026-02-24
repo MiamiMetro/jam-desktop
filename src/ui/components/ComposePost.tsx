@@ -148,7 +148,7 @@ export function ComposePost({
           className="flex-shrink-0 p-0 m-0 border-0 bg-transparent cursor-pointer hover:opacity-80 transition-opacity self-start"
           aria-label="Go to profile"
         >
-          <Avatar size="default" className="pointer-events-none">
+          <Avatar size="lg" className="pointer-events-none">
             <AvatarImage src={user?.avatar_url || ""} alt={user?.username || "You"} />
             <AvatarFallback className="bg-primary text-primary-foreground">
               {user?.username?.substring(0, 2).toUpperCase() || "U"}
