@@ -36,7 +36,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               This page couldn't be loaded. It may not exist or something unexpected happened.
             </p>
             <button
-              onClick={() => { window.location.href = window.location.origin; }}
+              onClick={() => {
+                if (window.electron) {
+                  window.location.hash = "#/";
+                  window.location.reload();
+                } else {
+                  window.location.href = window.location.origin;
+                }
+              }}
               className="mt-1 text-sm text-primary hover:underline cursor-pointer"
             >
               Go home
