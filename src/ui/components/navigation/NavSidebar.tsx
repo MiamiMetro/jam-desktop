@@ -86,7 +86,7 @@ export default function NavSidebar() {
       <div className="px-5 pt-5 pb-4">
         <div
           className="flex items-center gap-2.5 cursor-pointer group"
-          onClick={() => navigate("/jams")}
+          onClick={() => navigate("/")}
         >
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/15 group-hover:bg-primary/20 transition-colors">
             <Logo className="w-5 h-5 opacity-90 group-hover:opacity-100 transition-opacity" />

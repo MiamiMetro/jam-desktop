@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, startTransition, lazy, Suspense } from "re
 import { useLocation, Outlet } from "react-router-dom";
 import { Spinner } from "@/components/ui/spinner";
 import { useScrollRestoration } from "@/hooks/useScrollRestoration";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const JamRoom = lazy(() => import("@/pages/JamRoom"));
 
@@ -56,7 +57,9 @@ export default function MainContent() {
           className="absolute inset-0 overflow-y-auto"
           style={{ display: isOnJamRoute ? "none" : "block" }}
         >
-          <Outlet />
+          <ErrorBoundary key={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </div>
 
         {/* JamRoom — kept mounted when active, hidden when on other pages */}

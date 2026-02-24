@@ -33,7 +33,7 @@ export function Timestamp({ date, children, className }: TimestampProps) {
 
   return (
     <Tooltip>
-      <TooltipTrigger className={`cursor-default decoration-dotted underline-offset-2 hover:underline ${className ?? ""}`}>
+      <TooltipTrigger render={<span />} className={`cursor-default decoration-dotted underline-offset-2 hover:underline ${className ?? ""}`}>
         {children}
       </TooltipTrigger>
       <TooltipContent>{exact}</TooltipContent>

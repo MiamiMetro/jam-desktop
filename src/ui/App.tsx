@@ -1,6 +1,6 @@
 // App.tsx — Root routing with layout route pattern + post modal overlay
 import { lazy, useEffect, Suspense } from "react";
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/AppLayout";
 import { useDeepLink } from "@/hooks/useDeepLink";
 
@@ -22,6 +22,25 @@ function RootRedirect() {
 // Empty placeholder for /jam/:id route — JamRoom is rendered separately for persistence
 function JamRouteSlot() {
   return null;
+}
+
+function NotFound() {
+  const navigate = useNavigate();
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-12">
+      <div className="rounded-2xl glass-strong px-10 py-8 flex flex-col items-center gap-3 max-w-sm">
+        <div className="text-4xl font-heading font-bold text-muted-foreground">404</div>
+        <h2 className="text-base font-heading font-semibold">Page not found</h2>
+        <p className="text-sm text-muted-foreground">This page doesn't exist or has been moved.</p>
+        <button
+          onClick={() => navigate("/", { replace: true })}
+          className="mt-1 text-sm text-primary hover:underline cursor-pointer"
+        >
+          Go home
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function App() {
@@ -48,6 +67,7 @@ function App() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/post/:id" element={<Post />} />
           <Route path="/jam/:id" element={<JamRouteSlot />} />
+          <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
 

@@ -23,6 +23,7 @@ import {
 } from "@/hooks/useUsers";
 import { Timestamp } from "@/components/Timestamp";
 import DMConversation from "@/components/social/DMConversation";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import UserSearchPanel from "@/components/social/UserSearchPanel";
 import FriendRequestsPanel from "@/components/social/FriendRequestsPanel";
 import type { User } from "@/lib/api/types";
@@ -324,13 +325,29 @@ function FriendsTab() {
       {/* ─── Right Panel: Active DM or Empty State ─── */}
       <div className="flex-1 flex flex-col h-full min-h-0 min-w-0">
         {activeDmConversationId ? (
-          <DMConversation
-            conversationId={activeDmConversationId}
-            conversation={
-              conversations.find((c) => String(c.id) === String(activeDmConversationId)) ?? null
+          <ErrorBoundary
+            key={activeDmConversationId}
+            fallback={
+              <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
+                <div className="rounded-2xl glass-strong px-8 py-6 flex flex-col items-center gap-3 max-w-xs">
+                  <div className="text-2xl">:(</div>
+                  <h3 className="text-sm font-heading font-semibold">Conversation unavailable</h3>
+                  <p className="text-xs text-muted-foreground">This conversation could not be loaded.</p>
+                  <Button variant="outline" size="sm" onClick={() => setActiveDmConversationId(null)}>
+                    Go back
+                  </Button>
+                </div>
+              </div>
             }
-            onBack={() => setActiveDmConversationId(null)}
-          />
+          >
+            <DMConversation
+              conversationId={activeDmConversationId}
+              conversation={
+                conversations.find((c) => String(c.id) === String(activeDmConversationId)) ?? null
+              }
+              onBack={() => setActiveDmConversationId(null)}
+            />
+          </ErrorBoundary>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
             <div className="h-14 w-14 rounded-full bg-muted/30 flex items-center justify-center mb-3">

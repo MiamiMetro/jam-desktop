@@ -84,7 +84,7 @@ export default function Settings() {
       setUser(null);
       setIsGuest(true);
 
-      navigate("/jams", { replace: true });
+      navigate("/", { replace: true });
     } catch (error) {
       setDeleteError(toFriendlyError(error));
     } finally {
@@ -122,7 +122,7 @@ export default function Settings() {
             <p className="text-sm text-muted-foreground mb-4">
               Sign in to manage your settings.
             </p>
-            <Button variant="outline" onClick={() => navigate("/jams")}>
+            <Button variant="outline" onClick={() => navigate("/")}>
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back
             </Button>

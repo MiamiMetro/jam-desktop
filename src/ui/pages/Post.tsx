@@ -41,7 +41,8 @@ function Post() {
   const [copied, setCopied] = useState(false);
 
   const handleShare = useCallback(() => {
-    const url = `${window.location.origin}/#/post/${id}`;
+    const base = import.meta.env.VITE_SITE_URL || window.location.origin;
+    const url = `${base}/post/${id}`;
     navigator.clipboard.writeText(url).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);

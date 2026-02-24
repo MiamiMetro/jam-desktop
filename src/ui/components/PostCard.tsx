@@ -43,7 +43,8 @@ export function PostCard({
 
   const handleShare = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    const url = `${window.location.origin}/#/post/${post.id}`;
+    const base = import.meta.env.VITE_SITE_URL || window.location.origin;
+    const url = `${base}/post/${post.id}`;
     navigator.clipboard.writeText(url).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
