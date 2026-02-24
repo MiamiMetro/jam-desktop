@@ -57,6 +57,8 @@ export default function UsernameSetupModal() {
       const msg = err.message || "Failed to create profile";
       if (msg.includes("USERNAME_TAKEN:")) {
         setError("Username already taken. Please try a different one.");
+      } else if (msg.includes("USERNAME_RESERVED:")) {
+        setError("This username is reserved. Please choose another one.");
       } else if (msg.includes("USERNAME_TOO_SHORT:") || msg.includes("USERNAME_TOO_LONG:") || msg.includes("USERNAME_INVALID_CHARS:")) {
         const match = msg.match(/([A-Z_]+):\s*(.+?)(?:\s+at\s+(?:handler|\()|$)/);
         setError(match?.[2]?.trim() || msg);

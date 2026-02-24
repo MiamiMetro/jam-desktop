@@ -3,6 +3,7 @@ import { useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { useAuthStore } from "@/stores/authStore";
+import { useR2Upload } from "@/hooks/useR2Upload";
 import type { Comment, Post } from "@/lib/api/types";
 
 export interface FrontendPost {
@@ -189,18 +190,23 @@ export const useComments = (postId: string) => {
 export const useCreateComment = () => {
   const createComment = useMutation(api.comments.create);
   const { user } = useAuthStore();
+  const { uploadFile } = useR2Upload();
   const [isPending, setIsPending] = useState(false);
 
   const run = async (variables: { postId: string; content: string; audioFile?: File }) => {
     if (!user) throw new Error("User not authenticated");
-    if (variables.audioFile) {
-      throw new Error("AUDIO_NOT_IMPLEMENTED_YET: Audio comments are not implemented yet.");
-    }
     setIsPending(true);
     try {
+      let audioUrl: string | undefined;
+      if (variables.audioFile) {
+        const uploaded = await uploadFile("audio", variables.audioFile);
+        audioUrl = uploaded.url;
+      }
+
       const result = await createComment({
         postId: variables.postId as Id<"posts">,
         text: variables.content || undefined,
+        audioUrl,
       });
       return convertComment(result);
     } finally {
@@ -221,15 +227,21 @@ export const useCreateComment = () => {
 
 export const useCreatePost = () => {
   const createPost = useMutation(api.posts.create);
+  const { uploadFile } = useR2Upload();
   const [isPending, setIsPending] = useState(false);
 
   const run = async (variables: { content: string; audioFile?: File | null }) => {
-    if (variables.audioFile) {
-      throw new Error("AUDIO_NOT_IMPLEMENTED_YET: Audio posts are not implemented yet.");
-    }
     setIsPending(true);
     try {
-      const result = await createPost({ text: variables.content || undefined });
+      let audioUrl: string | undefined;
+      if (variables.audioFile) {
+        const uploaded = await uploadFile("audio", variables.audioFile);
+        audioUrl = uploaded.url;
+      }
+      const result = await createPost({
+        text: variables.content || undefined,
+        audio_url: audioUrl,
+      });
       return convertPost(result);
     } finally {
       setIsPending(false);

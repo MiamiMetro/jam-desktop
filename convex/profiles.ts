@@ -1,8 +1,12 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import {
+  assertValidAccountStateTransition,
+  DELETED_ACCOUNT_DISPLAY_NAME,
   getCurrentProfile,
+  isDiscoverableAccountState,
   requireAuth,
+  resolveAccountState,
   formatProfile,
   validateTextLength,
   validateUsername,
@@ -10,11 +14,66 @@ import {
   sanitizeText,
   normalizeUsername,
   acquireUniqueLock,
+  sanitizeProfileTags,
   setUniqueLockOwner,
   releaseUniqueLock,
   MAX_LENGTHS,
 } from "./helpers";
 import { checkRateLimit } from "./rateLimiter";
+import type { MutationCtx } from "./_generated/server";
+
+const PROFILE_CATALOG = {
+  instruments: [
+    "Guitar",
+    "Bass",
+    "Drums",
+    "Keys",
+    "Piano",
+    "Synth",
+    "Vocals",
+    "Violin",
+    "Saxophone",
+    "DJ",
+    "Producer",
+  ],
+  genres: [
+    "Lo-Fi",
+    "Jazz",
+    "Hip Hop",
+    "Rock",
+    "Electronic",
+    "R&B",
+    "Pop",
+    "Metal",
+    "House",
+    "Ambient",
+    "Indie",
+  ],
+} as const;
+
+async function generateDeletedUsername(
+  ctx: MutationCtx,
+  profileId: string
+): Promise<string> {
+  const compactId = profileId.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+
+  for (let i = 0; i < 6; i++) {
+    const nonce = (Date.now() + i).toString(36).slice(-4);
+    const tail = `${compactId}${nonce}`.slice(-10);
+    const candidate = `del_${tail}`;
+
+    const existing = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) => q.eq("username", candidate))
+      .first();
+
+    if (!existing || existing._id === profileId) {
+      return candidate;
+    }
+  }
+
+  return `del_${Date.now().toString(36).slice(-10)}`.slice(0, 15);
+}
 
 /**
  * Get the current user's profile
@@ -40,18 +99,28 @@ export const updateMe = mutation({
     username: v.optional(v.string()),
     display_name: v.optional(v.string()),
     avatar_url: v.optional(v.string()),
+    banner_url: v.optional(v.string()),
     bio: v.optional(v.string()),
+    instruments: v.optional(v.array(v.string())),
+    genres: v.optional(v.array(v.string())),
     dm_privacy: v.optional(v.union(v.literal("friends"), v.literal("everyone"))),
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
     await checkRateLimit(ctx, "updateProfile", profile._id);
 
+    if ((profile.accountState ?? "active") !== "active") {
+      throw new Error("PROFILE_LOCKED: This account cannot be updated");
+    }
+
     // Sanitize and validate inputs
     const username = normalizeUsername(sanitizeText(args.username));
     const displayName = sanitizeText(args.display_name);
     const avatarUrl = args.avatar_url;
+    const bannerUrl = args.banner_url;
     const bio = sanitizeText(args.bio);
+    const instruments = sanitizeProfileTags(args.instruments, "Instruments");
+    const genres = sanitizeProfileTags(args.genres, "Genres");
     const authIdentityKey = `${profile.authIssuer}:${profile.authSubject}`;
 
     // Validate username if provided
@@ -61,6 +130,7 @@ export const updateMe = mutation({
     validateTextLength(displayName, MAX_LENGTHS.DISPLAY_NAME, "Display name");
     validateTextLength(bio, MAX_LENGTHS.BIO, "Bio");
     validateUrl(avatarUrl);
+    validateUrl(bannerUrl);
 
     // If username is being changed, check uniqueness against legacy rows too.
     if (username && username !== profile.username) {
@@ -99,14 +169,20 @@ export const updateMe = mutation({
         username: string;
         displayName: string;
         avatarUrl: string;
+        bannerUrl: string;
         bio: string;
+        instruments: string[];
+        genres: string[];
         dmPrivacy: "friends" | "everyone";
       }> = {};
 
       if (username !== undefined) updates.username = username;
       if (displayName !== undefined) updates.displayName = displayName;
       if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
+      if (bannerUrl !== undefined) updates.bannerUrl = bannerUrl;
       if (bio !== undefined) updates.bio = bio;
+      if (instruments !== undefined) updates.instruments = instruments;
+      if (genres !== undefined) updates.genres = genres;
       if (args.dm_privacy !== undefined) updates.dmPrivacy = args.dm_privacy;
 
       await ctx.db.patch(profile._id, updates);
@@ -150,8 +226,64 @@ export const getByUsername = query({
     if (!profile) {
       return null;
     }
+    if (!isDiscoverableAccountState(profile.accountState)) {
+      return null;
+    }
 
     return formatProfile(profile);
+  },
+});
+
+/**
+ * Get the curated profile catalog used by profile/settings editors.
+ */
+export const getProfileCatalog = query({
+  args: {},
+  handler: async () => PROFILE_CATALOG,
+});
+
+/**
+ * Soft delete the current user's account profile.
+ * Content remains, identity is anonymized and username is released.
+ */
+export const softDeleteMe = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const profile = await requireAuth(ctx);
+    await checkRateLimit(ctx, "deleteAction", profile._id);
+
+    const currentState = resolveAccountState(profile.accountState);
+    if (currentState === "deleted") {
+      return formatProfile(profile);
+    }
+    assertValidAccountStateTransition(currentState, "deleted");
+
+    const previousUsername = normalizeUsername(profile.username) ?? profile.username;
+    const deletedUsername = await generateDeletedUsername(ctx, profile._id);
+
+    await ctx.db.patch(profile._id, {
+      username: deletedUsername,
+      displayName: DELETED_ACCOUNT_DISPLAY_NAME,
+      avatarUrl: "",
+      bannerUrl: "",
+      bio: "",
+      instruments: [],
+      genres: [],
+      dmPrivacy: "friends",
+      accountState: "deleted",
+      stateChangedAt: Date.now(),
+      stateReason: "user_requested_delete",
+      stateUntil: undefined,
+    });
+
+    await releaseUniqueLock(ctx, "username", previousUsername, profile._id);
+
+    const updated = await ctx.db.get(profile._id);
+    if (!updated) {
+      throw new Error("PROFILE_DELETE_FAILED: Failed to soft delete profile");
+    }
+
+    return formatProfile(updated);
   },
 });
 
@@ -231,7 +363,12 @@ export const createProfile = mutation({
         username: username,
         displayName: displayName ?? username,
         avatarUrl: avatarUrl ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
+        bannerUrl: "",
         bio: "",
+        instruments: [],
+        genres: [],
+        accountState: "active",
+        stateChangedAt: Date.now(),
         dmPrivacy: "friends",
       });
 

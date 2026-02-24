@@ -14,6 +14,7 @@ import type * as comments from "../comments.js";
 import type * as friends from "../friends.js";
 import type * as helpers from "../helpers.js";
 import type * as http from "../http.js";
+import type * as media from "../media.js";
 import type * as messages from "../messages.js";
 import type * as posts from "../posts.js";
 import type * as profiles from "../profiles.js";
@@ -33,6 +34,7 @@ declare const fullApi: ApiFromModules<{
   friends: typeof friends;
   helpers: typeof helpers;
   http: typeof http;
+  media: typeof media;
   messages: typeof messages;
   posts: typeof posts;
   profiles: typeof profiles;

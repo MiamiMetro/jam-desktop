@@ -13,12 +13,45 @@ export const MAX_LENGTHS = {
   USERNAME: 15, // Like Twitter/X
   DISPLAY_NAME: 50,
   BIO: 500,
+  PROFILE_TAG: 24,
   URL: 2048,
 } as const;
 
 /** Minimum lengths for user-generated content */
 export const MIN_LENGTHS = {
   USERNAME: 3,
+} as const;
+
+export const MAX_COUNTS = {
+  PROFILE_TAGS: 8,
+} as const;
+
+export const ACCOUNT_STATES = [
+  "active",
+  "deactivated",
+  "suspended",
+  "banned",
+  "deleted",
+] as const;
+
+export type AccountState = (typeof ACCOUNT_STATES)[number];
+
+export const DELETED_ACCOUNT_USERNAME = "deleted_account";
+export const DELETED_ACCOUNT_DISPLAY_NAME = "Deleted Account";
+export const RESERVED_USERNAMES = new Set<string>([
+  DELETED_ACCOUNT_USERNAME,
+  "deleted",
+  "admin",
+  "support",
+  "system",
+]);
+
+const ALLOWED_ACCOUNT_STATE_TRANSITIONS: Record<AccountState, readonly AccountState[]> = {
+  active: ["deactivated", "suspended", "banned", "deleted"],
+  deactivated: ["active", "deleted"],
+  suspended: ["active", "banned"],
+  banned: ["active"],
+  deleted: [],
 } as const;
 
 /**
@@ -53,6 +86,7 @@ export function validateUsername(username: string | undefined): void {
   }
 
   const trimmed = username.trim();
+  const normalized = trimmed.toLowerCase();
 
   if (trimmed.length < MIN_LENGTHS.USERNAME) {
     throw new Error(`USERNAME_TOO_SHORT: Username must be at least ${MIN_LENGTHS.USERNAME} characters`);
@@ -60,6 +94,10 @@ export function validateUsername(username: string | undefined): void {
 
   if (trimmed.length > MAX_LENGTHS.USERNAME) {
     throw new Error(`USERNAME_TOO_LONG: Username exceeds maximum length of ${MAX_LENGTHS.USERNAME} characters`);
+  }
+
+  if (RESERVED_USERNAMES.has(normalized)) {
+    throw new Error("USERNAME_RESERVED: Username is reserved");
   }
 
   // Only allow letters, numbers, and underscores (like Twitter)
@@ -94,6 +132,38 @@ export function validateUrl(url: string | undefined): void {
  */
 export function sanitizeText(text: string | undefined): string | undefined {
   return text?.trim();
+}
+
+/**
+ * Normalize profile tags while preserving user-friendly casing.
+ * Dedupe is case-insensitive and order-preserving.
+ */
+export function sanitizeProfileTags(
+  tags: string[] | undefined,
+  fieldName: "Instruments" | "Genres"
+): string[] | undefined {
+  if (tags === undefined) return undefined;
+
+  if (tags.length > MAX_COUNTS.PROFILE_TAGS) {
+    throw new Error(`${fieldName} supports a maximum of ${MAX_COUNTS.PROFILE_TAGS} tags`);
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const raw of tags) {
+    const value = raw.trim().replace(/\s+/g, " ");
+    if (!value) continue;
+
+    validateTextLength(value, MAX_LENGTHS.PROFILE_TAG, fieldName);
+
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(value);
+  }
+
+  return normalized;
 }
 
 // ============================================
@@ -145,6 +215,27 @@ export function normalizeUsername(username: string | undefined): string | undefi
   const trimmed = username?.trim();
   if (!trimmed) return trimmed;
   return trimmed.toLowerCase();
+}
+
+export function isDiscoverableAccountState(
+  state: AccountState | undefined
+): boolean {
+  return (state ?? "active") === "active";
+}
+
+export function resolveAccountState(state: AccountState | undefined): AccountState {
+  return state ?? "active";
+}
+
+export function assertValidAccountStateTransition(
+  from: AccountState,
+  to: AccountState
+): void {
+  if (from === to) return;
+  const allowed = ALLOWED_ACCOUNT_STATE_TRANSITIONS[from];
+  if (!allowed.includes(to)) {
+    throw new Error(`ACCOUNT_STATE_TRANSITION_INVALID: ${from} -> ${to}`);
+  }
 }
 
 /**
@@ -267,21 +358,58 @@ export async function releaseUniqueLock(
 /**
  * Format profile for API response
  */
-export function formatProfile(profile: {
+type ProfileForFormatting = {
   _id: Id<"profiles">;
   _creationTime: number;
   username: string;
   displayName?: string;
   avatarUrl?: string;
+  bannerUrl?: string;
   bio?: string;
-}) {
+  instruments?: string[];
+  genres?: string[];
+  accountState?: AccountState;
+  stateChangedAt?: number;
+  dmPrivacy?: "friends" | "everyone";
+};
+
+function getPublicProfileFields(profile: ProfileForFormatting) {
+  const accountState = profile.accountState ?? "active";
+  const stateChangedAt = profile.stateChangedAt ?? profile._creationTime;
+  const isDeleted = accountState === "deleted";
+
   return {
     id: profile._id,
-    username: profile.username,
-    display_name: profile.displayName ?? "",
-    avatar_url: profile.avatarUrl ?? "",
-    bio: profile.bio ?? "",
+    username: isDeleted ? DELETED_ACCOUNT_USERNAME : profile.username,
+    display_name: isDeleted
+      ? DELETED_ACCOUNT_DISPLAY_NAME
+      : profile.displayName ?? "",
+    avatar_url: isDeleted ? "" : profile.avatarUrl ?? "",
+    banner_url: isDeleted ? "" : profile.bannerUrl ?? "",
+    bio: isDeleted ? "" : profile.bio ?? "",
+    instruments: isDeleted ? [] : profile.instruments ?? [],
+    genres: isDeleted ? [] : profile.genres ?? [],
+    dm_privacy: profile.dmPrivacy ?? "friends",
+    account_state: accountState,
+    state_changed_at: new Date(stateChangedAt).toISOString(),
     created_at: new Date(profile._creationTime).toISOString(),
   };
+}
+
+export function formatPublicProfileIdentity(profile: ProfileForFormatting) {
+  const normalized = getPublicProfileFields(profile);
+  return {
+    id: normalized.id,
+    username: normalized.username,
+    display_name: normalized.display_name,
+    avatar_url: normalized.avatar_url,
+  };
+}
+
+/**
+ * Format profile for API response
+ */
+export function formatProfile(profile: ProfileForFormatting) {
+  return getPublicProfileFields(profile);
 }
 

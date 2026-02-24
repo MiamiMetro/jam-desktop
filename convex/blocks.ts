@@ -1,7 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { requireAuth } from "./helpers";
+import { formatPublicProfileIdentity, requireAuth } from "./helpers";
 import { checkRateLimit } from "./rateLimiter";
 
 /**
@@ -107,10 +107,7 @@ export const listPaginated = query({
         const blocked = await ctx.db.get(block.blockedId);
         if (!blocked) return null;
         return {
-          id: blocked._id,
-          username: blocked.username,
-          display_name: blocked.displayName ?? "",
-          avatar_url: blocked.avatarUrl ?? "",
+          ...formatPublicProfileIdentity(blocked),
           blocked_at: new Date(block._creationTime).toISOString(),
         };
       })

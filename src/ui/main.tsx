@@ -1,4 +1,4 @@
-import { StrictMode, useEffect } from "react";
+import { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { HashRouter, useNavigate } from "react-router-dom";
 import { ConvexReactClient } from "convex/react";
@@ -10,8 +10,15 @@ import { authClient } from "./lib/auth-client";
 import { useEnsureProfile } from "./hooks/useEnsureProfile";
 import { useAuthStore } from "./stores/authStore";
 import { useConvexAuth } from "./hooks/useConvexAuth";
+import { instrumentConvexClient } from "./lib/convex-debug";
+
+const ConvexDebugPanel = lazy(() => import("./components/debug/ConvexDebugPanel"));
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL);
+
+if (import.meta.env.DEV) {
+  instrumentConvexClient(convex);
+}
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -61,6 +68,11 @@ createRoot(document.getElementById("root")!).render(
         <ConvexBetterAuthProvider client={convex} authClient={authClient}>
           <AuthSetup />
           <App />
+          {import.meta.env.DEV && (
+            <Suspense fallback={null}>
+              <ConvexDebugPanel />
+            </Suspense>
+          )}
         </ConvexBetterAuthProvider>
       </HashRouter>
     </QueryClientProvider>

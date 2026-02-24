@@ -15,6 +15,7 @@ import {
   type UIConversation,
 } from "@/hooks/useUsers";
 import { useConversationScroll } from "@/hooks/useConversationScroll";
+import type { User } from "@/lib/api/types";
 
 type MessageWithTime = {
   id: string;
@@ -90,7 +91,7 @@ export default function DMConversation({
 
   const currentConversation = conversation ?? null;
   const chatPartner =
-    participants.find((participant) => participant.id !== user?.id) ?? null;
+    participants.find((participant: User) => participant.id !== user?.id) ?? null;
   const isGroupConversation = currentConversation?.isGroup ?? false;
   const conversationTitle = isGroupConversation
     ? currentConversation?.name || "Group conversation"

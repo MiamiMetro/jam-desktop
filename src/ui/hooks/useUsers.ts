@@ -12,7 +12,13 @@ function convertUser(profile: {
   username: string;
   display_name?: string;
   avatar_url?: string;
+  banner_url?: string;
   bio?: string;
+  instruments?: string[];
+  genres?: string[];
+  dm_privacy?: "friends" | "everyone";
+  account_state?: "active" | "deactivated" | "suspended" | "banned" | "deleted";
+  state_changed_at?: string;
   created_at?: string;
 }): User {
   return {
@@ -20,7 +26,13 @@ function convertUser(profile: {
     username: profile.username,
     display_name: profile.display_name ?? "",
     avatar_url: profile.avatar_url ?? "",
+    banner_url: profile.banner_url ?? "",
     bio: profile.bio ?? "",
+    instruments: profile.instruments ?? [],
+    genres: profile.genres ?? [],
+    dm_privacy: profile.dm_privacy ?? "friends",
+    account_state: profile.account_state ?? "active",
+    state_changed_at: profile.state_changed_at ?? new Date().toISOString(),
     created_at: profile.created_at ?? new Date().toISOString(),
   };
 }
@@ -117,7 +129,13 @@ function convertConversation(conv: {
           username: conv.other_user.username,
           display_name: conv.other_user.display_name ?? "",
           avatar_url: conv.other_user.avatar_url ?? "",
+          banner_url: "",
           bio: "",
+          instruments: [],
+          genres: [],
+          dm_privacy: "friends",
+          account_state: "active",
+          state_changed_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
         }
       : undefined,
@@ -152,6 +170,90 @@ export const useUser = (username: string) => {
     data: result ? convertUser(result) : null,
     isLoading: result === undefined && !!username,
     error: null,
+  };
+};
+
+export const useProfileCatalog = () => {
+  const result = useQuery(api.profiles.getProfileCatalog, {});
+  return {
+    data: result ?? { instruments: [], genres: [] },
+    isLoading: result === undefined,
+    error: null,
+  };
+};
+
+export const useMe = () => {
+  const result = useQuery(api.profiles.getMe, {});
+  return {
+    data: result ? convertUser(result) : null,
+    isLoading: result === undefined,
+    error: null,
+  };
+};
+
+type ProfileUpdateVariables = {
+  username?: string;
+  display_name?: string;
+  avatar_url?: string;
+  banner_url?: string;
+  bio?: string;
+  instruments?: string[];
+  genres?: string[];
+  dm_privacy?: "friends" | "everyone";
+};
+
+export const useUpdateProfile = () => {
+  const updateProfile = useMutation(api.profiles.updateMe);
+  const [isPending, setIsPending] = useState(false);
+
+  const run = async (variables: ProfileUpdateVariables) => {
+    setIsPending(true);
+    try {
+      const result = await updateProfile(variables);
+      return convertUser(result);
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return {
+    mutate: (
+      variables: ProfileUpdateVariables,
+      options?: { onSuccess?: (user: User) => void; onError?: (error: Error) => void }
+    ) => {
+      run(variables)
+        .then((user) => options?.onSuccess?.(user))
+        .catch((error) => options?.onError?.(error as Error));
+    },
+    mutateAsync: run,
+    isPending,
+  };
+};
+
+export const useSoftDeleteProfile = () => {
+  const softDelete = useMutation(api.profiles.softDeleteMe);
+  const [isPending, setIsPending] = useState(false);
+
+  const run = async () => {
+    setIsPending(true);
+    try {
+      const result = await softDelete({});
+      return convertUser(result);
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return {
+    mutate: (
+      options?: { onSuccess?: (user: User) => void; onError?: (error: Error) => void }
+    ) => {
+      run()
+        .then((user) => options?.onSuccess?.(user))
+        .catch((error) => options?.onError?.(error as Error));
+    },
+    mutateAsync: run,
+    isPending,
   };
 };
 
@@ -325,7 +427,7 @@ export const useMessages = (userId: string, conversationId: string) => {
   const allMessages = useMemo(() => {
     if (!firstPageResult?.data) return olderMessages;
     const firstPageMessages = firstPageResult.data.map(convertMessage);
-    const firstPageIds = new Set(firstPageMessages.map((m) => String(m.id)));
+    const firstPageIds = new Set(firstPageMessages.map((m: LocalUIMessage) => String(m.id)));
     const dedupedOlder = olderMessages.filter((m) => !firstPageIds.has(String(m.id)));
     return [...dedupedOlder, ...firstPageMessages];
   }, [olderMessages, firstPageResult?.data]);

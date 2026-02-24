@@ -12,7 +12,13 @@ function convertUser(profile: {
   username: string;
   display_name?: string;
   avatar_url?: string;
+  banner_url?: string;
   bio?: string;
+  instruments?: string[];
+  genres?: string[];
+  dm_privacy?: "friends" | "everyone";
+  account_state?: "active" | "deactivated" | "suspended" | "banned" | "deleted";
+  state_changed_at?: string;
   created_at?: string;
   friends_since?: string;
 } | null): User | null {
@@ -23,7 +29,13 @@ function convertUser(profile: {
     username: profile.username,
     display_name: profile.display_name ?? "",
     avatar_url: profile.avatar_url ?? "",
+    banner_url: profile.banner_url ?? "",
     bio: profile.bio ?? "",
+    instruments: profile.instruments ?? [],
+    genres: profile.genres ?? [],
+    dm_privacy: profile.dm_privacy ?? "friends",
+    account_state: profile.account_state ?? "active",
+    state_changed_at: profile.state_changed_at ?? new Date().toISOString(),
     created_at: profile.created_at ?? profile.friends_since ?? new Date().toISOString(),
   };
 }

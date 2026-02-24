@@ -4,7 +4,10 @@ import { v } from "convex/values";
 import type { Id, Doc } from "./_generated/dataModel";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import { 
+  formatPublicProfileIdentity,
   getCurrentProfile, 
+  isDiscoverableAccountState,
+  normalizeUsername,
   requireAuth,
   getUniqueLock,
   acquireUniqueLock,
@@ -50,12 +53,7 @@ async function formatPost(
     audio_url: post.audioUrl ?? "",
     created_at: new Date(post._creationTime).toISOString(),
     author: author
-      ? {
-          id: author._id,
-          username: author.username,
-          display_name: author.displayName ?? "",
-          avatar_url: author.avatarUrl ?? "",
-        }
+      ? formatPublicProfileIdentity(author)
       : null,
     likes_count: likesCount,
     comments_count: commentsCount,
@@ -228,12 +226,16 @@ export const getByUsernamePaginated = query({
   },
   handler: async (ctx, args) => {
     const currentProfile = await getCurrentProfile(ctx);
+    const normalizedUsername = normalizeUsername(args.username) ?? args.username;
     const author = await ctx.db
       .query("profiles")
-      .withIndex("by_username", (q) => q.eq("username", args.username))
+      .withIndex("by_username", (q) => q.eq("username", normalizedUsername))
       .first();
 
     if (!author) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+    if (!isDiscoverableAccountState(author.accountState)) {
       return { page: [], isDone: true, continueCursor: "" };
     }
 
@@ -416,10 +418,7 @@ export const getLikes = query({
         const user = await ctx.db.get(like.userId);
         if (!user) return null;
         return {
-          id: user._id,
-          username: user.username,
-          display_name: user.displayName ?? "",
-          avatar_url: user.avatarUrl ?? "",
+          ...formatPublicProfileIdentity(user),
           liked_at: new Date(like._creationTime).toISOString(),
         };
       })

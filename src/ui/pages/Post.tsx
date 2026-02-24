@@ -5,9 +5,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft,
-  Music,
-  Play,
-  Pause,
   Heart,
   MessageCircle,
   Share2,
@@ -17,11 +14,10 @@ import {
 import { useAuthStore } from "@/stores/authStore";
 import { usePost, useComments, useCreateComment, useToggleLike, useToggleCommentLike, type FrontendComment } from "@/hooks/usePosts";
 import { useCommunities } from "@/hooks/useCommunities";
-import { formatTimeAgo, formatDuration } from "@/lib/postUtils";
+import { formatTimeAgo } from "@/lib/postUtils";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
-import { useAudioPlayer } from "@/hooks/useAudioPlayer";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { ComposePost } from "@/components/ComposePost";
 import { AutoLinkedText } from "@/components/AutoLinkedText";
@@ -40,10 +36,7 @@ function Post() {
   const toggleCommentLikeMutation = useToggleCommentLike();
   const { data: communities = [] } = useCommunities();
 
-  const postAudioUrl = post?.audioFile?.url;
-  const postAudioPlayer = useAudioPlayer(postAudioUrl);
-
-  const [playingCommentId, setPlayingCommentId] = useState<string | null>(null);
+  const [activeAudioTarget, setActiveAudioTarget] = useState<"post" | string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const handleShare = useCallback(() => {
@@ -179,58 +172,22 @@ function Post() {
 
           {post.content && (
             <div className="text-base mt-4 leading-relaxed">
-              <AutoLinkedText text={post.content} className="whitespace-pre-wrap" linkClassName="text-blue-500 hover:text-blue-600 underline" />
+              <AutoLinkedText text={post.content} className="whitespace-pre-wrap block mb-4" linkClassName="text-blue-500 hover:text-blue-600 underline" />
             </div>
           )}
 
           {/* Audio player */}
           {post.audioFile && (
-            <div className="mt-4 p-4 glass-strong rounded-xl">
-              <div className="flex items-center gap-4">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-12 w-12 rounded-full glass-solid hover:bg-foreground/[0.06] transition-colors flex-shrink-0"
-                  onClick={() => {
-                    if (isGuest) return;
-                    postAudioPlayer.togglePlayPause();
-                  }}
-                >
-                  {postAudioPlayer.isPlaying ? (
-                    <Pause className="h-6 w-6" />
-                  ) : (
-                    <Play className="h-6 w-6" />
-                  )}
-                </Button>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Music className="h-4 w-4 text-primary flex-shrink-0" />
-                    <span className="text-sm font-heading font-semibold truncate">
-                      {post.audioFile.title}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 group/progress">
-                    <div
-                      className="flex-1 h-1.5 group-hover/progress:h-2.5 bg-foreground/[0.08] rounded-full overflow-hidden cursor-pointer transition-all duration-200"
-                      onClick={(e) => {
-                        if (isGuest) return;
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const x = e.clientX - rect.left;
-                        const percentage = (x / rect.width) * 100;
-                        postAudioPlayer.seek(percentage);
-                      }}
-                    >
-                      <div
-                        className="h-full bg-primary rounded-full transition-all"
-                        style={{ width: `${postAudioPlayer.progress}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {formatDuration(post.audioFile.duration)}
-                    </span>
-                  </div>
-                </div>
-              </div>
+            <div className="pt-2 border-t border-border/20">
+              <AudioPlayer
+                audioFile={post.audioFile}
+                isActive={activeAudioTarget === "post"}
+                onActivate={() => {
+                  setActiveAudioTarget("post");
+                }}
+                isGuest={isGuest}
+                variant="post"
+              />
             </div>
           )}
 
@@ -331,8 +288,10 @@ function Post() {
                       {comment.audioFile && (
                         <AudioPlayer
                           audioFile={comment.audioFile}
-                          isActive={playingCommentId === comment.id}
-                          onActivate={() => setPlayingCommentId(comment.id)}
+                          isActive={activeAudioTarget === comment.id}
+                          onActivate={() => {
+                            setActiveAudioTarget(comment.id);
+                          }}
                           variant="comment"
                         />
                       )}

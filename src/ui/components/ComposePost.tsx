@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,8 @@ export function ComposePost({
     audioFile: null as File | null,
   });
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmittingLocal, setIsSubmittingLocal] = useState(false);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
   const {
     isRecording,
     recordedAudio,
@@ -62,8 +64,10 @@ export function ComposePost({
   
   // Audio player for recorded audio preview
   const recordedAudioPlayer = useAudioPlayer(recordedAudio?.url);
+  const isBusy = isSubmitting || isSubmittingLocal;
 
   const handleCreatePost = async () => {
+    if (isBusy) return;
     if (isGuest) {
       onGuestAction?.();
       return;
@@ -75,6 +79,7 @@ export function ComposePost({
     if (!newPost.content.trim() && !audioFile) return;
 
     try {
+      setIsSubmittingLocal(true);
       setSubmitError(null);
       await onSubmit(newPost.content, audioFile);
 
@@ -94,6 +99,8 @@ export function ComposePost({
       } else {
         setSubmitError("Failed to submit. Please try again.");
       }
+    } finally {
+      setIsSubmittingLocal(false);
     }
   };
 
@@ -240,30 +247,32 @@ export function ComposePost({
               {!newPost.audioFile && !recordedAudio && (
                 <>
                   {/* Upload Audio Button */}
-                  <label htmlFor={inputId} className="cursor-pointer">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      type="button"
-                      className="text-muted-foreground hover:text-foreground"
-                      disabled={isRecording}
-                    >
-                      <Upload className="h-4 w-4 mr-2" />
-                      Upload Audio
-                    </Button>
-                    <input
-                      id={inputId}
-                      type="file"
-                      accept="audio/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          handleUploadAudio(file);
-                        }
-                      }}
-                    />
-                  </label>
+                  <input
+                    ref={audioInputRef}
+                    id={inputId}
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        handleUploadAudio(file);
+                      }
+                      // Allow selecting the same file again after remove/cancel.
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    className="text-muted-foreground hover:text-foreground"
+                    disabled={isRecording || isBusy}
+                    onClick={() => audioInputRef.current?.click()}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Audio
+                  </Button>
                   
                   {/* Microphone Button */}
                   <Button
@@ -271,6 +280,7 @@ export function ComposePost({
                     size="sm"
                     type="button"
                     onClick={isRecording ? handleStopRecording : handleStartRecording}
+                    disabled={isBusy}
                     className={isRecording ? "bg-red-500 hover:bg-red-600 text-white" : "text-muted-foreground hover:text-foreground"}
                   >
                     <Mic className="h-4 w-4 mr-2" />
@@ -288,11 +298,11 @@ export function ComposePost({
               onClick={() => {
                 void handleCreatePost();
               }}
-              disabled={(!newPost.content.trim() && !newPost.audioFile && !recordedAudio) || isRecording || isSubmitting}
+              disabled={(!newPost.content.trim() && !newPost.audioFile && !recordedAudio) || isRecording || isBusy}
               size="sm"
-              className={(newPost.content.trim() || newPost.audioFile || recordedAudio) && !isRecording && !isSubmitting ? "glow-primary" : ""}
+              className={(newPost.content.trim() || newPost.audioFile || recordedAudio) && !isRecording && !isBusy ? "glow-primary" : ""}
             >
-              {isSubmitting ? "Posting..." : submitButtonText}
+              {isBusy ? "Uploading..." : submitButtonText}
             </Button>
           </div>
         </div>

@@ -4,7 +4,14 @@ export function useAudioPlayer(audioUrl?: string) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [volume, setVolumeState] = useState(() => {
+    const raw = localStorage.getItem("jam-audio-volume");
+    const parsed = raw ? parseFloat(raw) : 0.8;
+    if (!isFinite(parsed)) return 0.8;
+    return Math.min(1, Math.max(0, parsed));
+  });
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const previousVolumeRef = useRef(volume > 0 ? volume : 0.8);
 
   useEffect(() => {
     if (!audioUrl || audioUrl === "#") {
@@ -20,6 +27,7 @@ export function useAudioPlayer(audioUrl?: string) {
 
     const updateProgress = () => {
       if (audio.duration && isFinite(audio.duration)) {
+        setDuration(audio.duration);
         setProgress((audio.currentTime / audio.duration) * 100);
       }
     };
@@ -82,6 +90,16 @@ export function useAudioPlayer(audioUrl?: string) {
     };
   }, [audioUrl]);
 
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+    }
+    localStorage.setItem("jam-audio-volume", String(volume));
+    if (volume > 0) {
+      previousVolumeRef.current = volume;
+    }
+  }, [volume]);
+
   const play = useCallback(async () => {
     if (audioRef.current) {
       try {
@@ -116,14 +134,30 @@ export function useAudioPlayer(audioUrl?: string) {
     }
   }, [duration]);
 
+  const setVolume = useCallback((value: number) => {
+    const clamped = Math.min(1, Math.max(0, value));
+    setVolumeState(clamped);
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    if (volume === 0) {
+      setVolume(previousVolumeRef.current > 0 ? previousVolumeRef.current : 0.8);
+    } else {
+      previousVolumeRef.current = volume;
+      setVolume(0);
+    }
+  }, [setVolume, volume]);
+
   return {
     isPlaying,
     progress,
     duration,
+    volume,
     play,
     pause,
     togglePlayPause,
     seek,
+    setVolume,
+    toggleMute,
   };
 }
-

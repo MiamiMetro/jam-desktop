@@ -131,6 +131,7 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
             placeholder="What's on your mind? Share a message or upload audio..."
             onSubmit={handleCreatePost}
             onGuestAction={onGuestAction}
+            isSubmitting={createPostMutation.isPending}
           />
         </div>
 

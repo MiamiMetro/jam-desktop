@@ -180,12 +180,19 @@ export function useAudioRecorder() {
 
   const getAudioFile = useCallback((): File | null => {
     if (!recordedAudio) return null;
-    
-    // Convert blob to File
-    const file = new File([recordedAudio.blob], `recording-${Date.now()}.webm`, {
-      type: "audio/webm",
+
+    const mimeType = recordedAudio.blob.type || "audio/webm";
+    let extension = "webm";
+    if (mimeType.includes("mp4")) extension = "mp4";
+    else if (mimeType.includes("ogg")) extension = "ogg";
+    else if (mimeType.includes("mpeg")) extension = "mp3";
+    else if (mimeType.includes("wav")) extension = "wav";
+
+    // Convert blob to File while preserving the detected MIME type.
+    const file = new File([recordedAudio.blob], `recording-${Date.now()}.${extension}`, {
+      type: mimeType,
     });
-    
+
     return file;
   }, [recordedAudio]);
 
@@ -199,4 +206,3 @@ export function useAudioRecorder() {
     getAudioFile,
   };
 }
-

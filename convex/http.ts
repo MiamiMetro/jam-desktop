@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
+import { uploadFromApp, uploadFromAppOptions } from "./media";
 
 const http = httpRouter();
 
@@ -19,6 +20,18 @@ http.route({
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
   }),
+});
+
+http.route({
+  path: "/media/upload",
+  method: "OPTIONS",
+  handler: uploadFromAppOptions,
+});
+
+http.route({
+  path: "/media/upload",
+  method: "POST",
+  handler: uploadFromApp,
 });
 
 export default http;

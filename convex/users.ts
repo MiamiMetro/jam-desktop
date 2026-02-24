@@ -1,7 +1,11 @@
 import { query } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { getCurrentProfile } from "./helpers";
+import {
+  formatPublicProfileIdentity,
+  getCurrentProfile,
+  isDiscoverableAccountState,
+} from "./helpers";
 
 /**
  * Search users using native Convex pagination.
@@ -21,21 +25,23 @@ export const searchPaginated = query({
       ? await ctx.db
           .query("profiles")
           .withSearchIndex("search_profiles", (q) =>
-            q.search("username", trimmedSearch)
+            q.search("username", trimmedSearch).eq("accountState", "active")
           )
           .paginate(args.paginationOpts)
       : await ctx.db
           .query("profiles")
+          .withIndex("by_account_state", (q) => q.eq("accountState", "active"))
           .order("desc")
           .paginate(args.paginationOpts);
 
     const page = result.page
-      .filter((user) => !currentProfile || user._id !== currentProfile._id)
+      .filter(
+        (user) =>
+          (!currentProfile || user._id !== currentProfile._id) &&
+          isDiscoverableAccountState(user.accountState)
+      )
       .map((user) => ({
-        id: user._id,
-        username: user.username,
-        display_name: user.displayName ?? "",
-        avatar_url: user.avatarUrl ?? "",
+        ...formatPublicProfileIdentity(user),
         status: "offline",
         statusMessage: "",
       }));
@@ -64,17 +70,19 @@ export const getOnline = query({
     // Note: This is a placeholder - in reality would filter by online status
     const result = await ctx.db
       .query("profiles")
+      .withIndex("by_account_state", (q) => q.eq("accountState", "active"))
       .order("desc")
       .paginate(args.paginationOpts);
 
     // Exclude current user if authenticated and map to response format
     const data = result.page
-      .filter((p) => !currentProfile || p._id !== currentProfile._id)
+      .filter(
+        (p) =>
+          (!currentProfile || p._id !== currentProfile._id) &&
+          isDiscoverableAccountState(p.accountState)
+      )
       .map((user) => ({
-        id: user._id,
-        username: user.username,
-        display_name: user.displayName ?? "",
-        avatar_url: user.avatarUrl ?? "",
+        ...formatPublicProfileIdentity(user),
         status: "online", // Placeholder - will be implemented with presence
         statusMessage: "",
       }));

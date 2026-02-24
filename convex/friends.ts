@@ -2,7 +2,12 @@ import { query, mutation } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { getCurrentProfile, requireAuth } from "./helpers";
+import {
+  formatPublicProfileIdentity,
+  getCurrentProfile,
+  isDiscoverableAccountState,
+  requireAuth,
+} from "./helpers";
 import { checkRateLimit } from "./rateLimiter";
 
 /**
@@ -28,6 +33,9 @@ export const sendRequest = mutation({
     const friend = await ctx.db.get(args.friendId);
     if (!friend) {
       throw new Error("User not found");
+    }
+    if (!isDiscoverableAccountState(friend.accountState)) {
+      throw new Error("This user is not available for friend requests");
     }
 
     // Check if friendship already exists (in either direction)
@@ -234,10 +242,7 @@ export const listPaginated = query({
           const friend = await ctx.db.get(friendship.friendId);
           if (!friend) return null;
           return {
-            id: friend._id,
-            username: friend.username,
-            display_name: friend.displayName ?? "",
-            avatar_url: friend.avatarUrl ?? "",
+            ...formatPublicProfileIdentity(friend),
             friends_since: new Date(friendship._creationTime).toISOString(),
           };
         })
@@ -283,10 +288,7 @@ export const listPaginated = query({
             return null;
           }
           return {
-            id: friend._id,
-            username: friend.username,
-            display_name: friend.displayName ?? "",
-            avatar_url: friend.avatarUrl ?? "",
+            ...formatPublicProfileIdentity(friend),
             friends_since: new Date(friendship._creationTime).toISOString(),
           };
         })
@@ -332,10 +334,7 @@ export const getRequestsPaginated = query({
         const user = await ctx.db.get(request.userId);
         if (!user) return null;
         return {
-          id: user._id,
-          username: user.username,
-          display_name: user.displayName ?? "",
-          avatar_url: user.avatarUrl ?? "",
+          ...formatPublicProfileIdentity(user),
           requested_at: new Date(request._creationTime).toISOString(),
         };
       })
@@ -375,10 +374,7 @@ export const getSentRequestsWithDataPaginated = query({
         const user = await ctx.db.get(request.friendId);
         if (!user) return null;
         return {
-          id: user._id,
-          username: user.username,
-          display_name: user.displayName ?? "",
-          avatar_url: user.avatarUrl ?? "",
+          ...formatPublicProfileIdentity(user),
           requested_at: new Date(request._creationTime).toISOString(),
         };
       })

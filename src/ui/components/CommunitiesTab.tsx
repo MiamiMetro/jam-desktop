@@ -114,12 +114,12 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
 
   const createPostMutation = useCreatePost();
 
-  const handleCreatePost = (content: string, _audioFile: File | null) => {
-    if (!content.trim()) return;
-    createPostMutation.mutate(
-      { content: content.trim() },
-      { onSuccess: () => {} }
-    );
+  const handleCreatePost = async (content: string, audioFile: File | null) => {
+    if (!content.trim() && !audioFile) return;
+    await createPostMutation.mutateAsync({
+      content: content.trim(),
+      audioFile,
+    });
   };
 
   const handleLikePost = async (postId: string) => {
@@ -216,6 +216,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
             placeholder={`Post to ${selectedCommunity.name}...`}
             onSubmit={handleCreatePost}
             onGuestAction={onGuestAction}
+            isSubmitting={createPostMutation.isPending}
           />
 
           {/* Posts Feed */}

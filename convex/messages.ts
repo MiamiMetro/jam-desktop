@@ -4,7 +4,9 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Id, Doc } from "./_generated/dataModel";
 import {
+  formatPublicProfileIdentity,
   getCurrentProfile,
+  isDiscoverableAccountState,
   requireAuth,
   isBlocked,
   areFriends,
@@ -185,6 +187,9 @@ export const ensureDmWithUser = mutation({
     if (!otherUser) {
       throw new Error("User not found");
     }
+    if (!isDiscoverableAccountState(otherUser.accountState)) {
+      throw new Error("Cannot start a conversation with this user");
+    }
 
     const blocked = await isBlocked(ctx, profile._id, args.userId);
     if (blocked) {
@@ -265,6 +270,18 @@ export const send = mutation({
         const blocked = await isBlocked(ctx, profile._id, other.profileId);
         if (blocked) {
           throw new Error("BLOCKED_CANNOT_MESSAGE: Cannot send messages to this user");
+        }
+
+        const otherProfile = await ctx.db.get(other.profileId);
+        if (!otherProfile || !isDiscoverableAccountState(otherProfile.accountState)) {
+          throw new Error("Cannot send messages to this user");
+        }
+
+        const friends = await areFriends(ctx, profile._id, other.profileId);
+        if (!friends && otherProfile.dmPrivacy !== "everyone") {
+          throw new Error(
+            "DM_PRIVACY_RESTRICTED: This user only accepts messages from friends"
+          );
         }
       }
     }
@@ -432,11 +449,12 @@ export const getConversationsPaginated = query({
         if (otherParticipant) {
           const otherProfile = otherProfileMap.get(otherParticipant.profileId);
           if (otherProfile) {
+            const publicOther = formatPublicProfileIdentity(otherProfile);
             otherUser = {
-              id: otherProfile._id,
-              username: otherProfile.username,
-              display_name: otherProfile.displayName ?? "",
-              avatar_url: otherProfile.avatarUrl ?? "",
+              id: publicOther.id,
+              username: publicOther.username,
+              display_name: publicOther.display_name,
+              avatar_url: publicOther.avatar_url,
             };
           }
         }
@@ -608,12 +626,7 @@ export const getParticipants = query({
 
     return profiles
       .filter((p): p is NonNullable<typeof p> => p !== null)
-      .map((p) => ({
-        id: p._id,
-        username: p.username,
-        display_name: p.displayName ?? "",
-        avatar_url: p.avatarUrl ?? "",
-      }));
+      .map((p) => formatPublicProfileIdentity(p));
   },
 });
 

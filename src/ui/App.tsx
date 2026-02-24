@@ -9,6 +9,7 @@ const JamsTab = lazy(() => import("@/components/JamsTab"));
 const FriendsTab = lazy(() => import("@/components/FriendsTab"));
 const CommunitiesTab = lazy(() => import("@/components/CommunitiesTab"));
 const Profile = lazy(() => import("@/pages/Profile"));
+const Settings = lazy(() => import("@/pages/Settings"));
 const Post = lazy(() => import("@/pages/Post"));
 const PostModal = lazy(() => import("@/components/PostModal"));
 
@@ -44,6 +45,7 @@ function App() {
           <Route path="/communities" element={<CommunitiesTab />} />
           <Route path="/community/:id" element={<CommunitiesTab />} />
           <Route path="/profile/:username" element={<Profile />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="/post/:id" element={<Post />} />
           <Route path="/jam/:id" element={<JamRouteSlot />} />
         </Route>

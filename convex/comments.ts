@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import type { Id, Doc } from "./_generated/dataModel";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import {
+  formatPublicProfileIdentity,
   getCurrentProfile,
   requireAuth,
   getUniqueLock,
@@ -64,12 +65,7 @@ async function formatComment(
     audio_url: comment.audioUrl ?? "",
     created_at: new Date(comment._creationTime).toISOString(),
     author: author
-      ? {
-          id: author._id,
-          username: author.username,
-          display_name: author.displayName ?? "",
-          avatar_url: author.avatarUrl ?? "",
-        }
+      ? formatPublicProfileIdentity(author)
       : null,
     likes_count: likesCount,
     replies_count: repliesCount,

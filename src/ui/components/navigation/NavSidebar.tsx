@@ -11,6 +11,7 @@ import {
   LogIn,
   LogOut,
   User as UserIcon,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -209,6 +210,10 @@ export default function NavSidebar() {
                 <DropdownMenuItem onClick={() => user.username && navigate(`/profile/${user.username}`)}>
                   <UserIcon className="h-4 w-4 mr-2" />
                   Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/settings")}>
+                  <SettingsIcon className="h-4 w-4 mr-2" />
+                  Settings
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={toggleTheme}>
                   {isDark ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}

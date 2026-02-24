@@ -10,14 +10,28 @@ export default defineSchema({
     username: v.string(),
     displayName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
+    bannerUrl: v.optional(v.string()),
     bio: v.optional(v.string()),
+    instruments: v.optional(v.array(v.string())),
+    genres: v.optional(v.array(v.string())),
+    accountState: v.union(
+      v.literal("active"),
+      v.literal("deactivated"),
+      v.literal("suspended"),
+      v.literal("banned"),
+      v.literal("deleted")
+    ),
+    stateChangedAt: v.number(),
+    stateReason: v.optional(v.string()),
+    stateUntil: v.optional(v.number()),
     dmPrivacy: v.union(v.literal("friends"), v.literal("everyone")),
   })
     .index("by_auth_identity", ["authIssuer", "authSubject"])
     .index("by_username", ["username"])
+    .index("by_account_state", ["accountState"])
     .searchIndex("search_profiles", {
       searchField: "username",
-      filterFields: ["_creationTime"],
+      filterFields: ["_creationTime", "accountState"],
     }),
 
   // Posts table - top-level posts only (comments moved to separate table)

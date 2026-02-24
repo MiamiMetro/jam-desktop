@@ -210,7 +210,7 @@ if (!gotTheLock) {
                         "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " + // React needs unsafe-eval in dev
                         "style-src 'self' 'unsafe-inline'; " +
                         "img-src 'self' data: https:; " + // Allow images from HTTPS sources
-                        "connect-src 'self' https://*.convex.cloud wss://*.convex.cloud http://localhost:* ws://localhost:*; " + // Convex backend + HLS streams + dev server
+                        "connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://*.r2.cloudflarestorage.com https://media.welor.fun http://localhost:* ws://localhost:*; " + // Convex + R2 uploads + media CDN + dev server
                         "media-src 'self' https: http: blob:; " + // Allow HLS video streams
                         "font-src 'self' data:; " +
                         "object-src 'none'; " + // Block plugins
