@@ -173,7 +173,7 @@ function Post() {
 
           {post.content && (
             <div className="text-base mt-4 leading-relaxed">
-              <AutoLinkedText text={post.content} className="whitespace-pre-wrap block mb-4" linkClassName="text-blue-500 hover:text-blue-600 underline" />
+              <AutoLinkedText text={post.content} className="whitespace-pre-wrap wrap-break-word block mb-4" linkClassName="text-blue-500 hover:text-blue-600 underline" />
             </div>
           )}
 
@@ -284,7 +284,7 @@ function Post() {
                         </Timestamp>
                       </div>
                       {comment.content && (
-                        <AutoLinkedText text={comment.content} className="text-sm whitespace-pre-wrap leading-relaxed" linkClassName="text-blue-500 hover:text-blue-600 underline" />
+                        <AutoLinkedText text={comment.content} className="text-sm whitespace-pre-wrap wrap-break-word leading-relaxed" linkClassName="text-blue-500 hover:text-blue-600 underline" />
                       )}
                       {comment.audioFile && (
                         <AudioPlayer

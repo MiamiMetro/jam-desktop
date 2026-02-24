@@ -419,7 +419,7 @@ function Profile() {
             <p className="text-sm text-muted-foreground mb-2">{visibleDisplayName}</p>
           )}
 
-          <p className="text-sm text-muted-foreground mb-3">
+          <p className="text-sm text-muted-foreground mb-3 wrap-break-word whitespace-pre-wrap">
             {visibleBio.trim() || "No bio yet."}
           </p>
 
@@ -624,7 +624,7 @@ function Profile() {
       </div>
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto surface-elevated">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden surface-elevated">
           <DialogHeader className="space-y-0">
             <DialogTitle>Edit Profile</DialogTitle>
           </DialogHeader>
@@ -754,7 +754,7 @@ function Profile() {
                 onChange={(e) => setEditBio(e.target.value)}
                 maxLength={500}
                 rows={4}
-                className="bg-muted/50 border-transparent focus:bg-background focus:border-border"
+                className="bg-muted/50 border-transparent focus:bg-background focus:border-border break-all"
               />
             </div>
 

@@ -98,7 +98,7 @@ export function PostCard({
           {post.content && (
             <AutoLinkedText
               text={post.content}
-              className="text-sm mb-3 whitespace-pre-wrap block"
+              className="text-sm mb-3 whitespace-pre-wrap wrap-break-word block"
               linkClassName="text-blue-500 hover:text-blue-600 underline"
             />
           )}
