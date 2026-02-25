@@ -19,7 +19,7 @@ npx convex env set R2_ACCOUNT_ID "<your-cloudflare-account-id>"
 npx convex env set R2_ACCESS_KEY_ID "<your-r2-access-key-id>"
 npx convex env set R2_SECRET_ACCESS_KEY "<your-r2-secret-access-key>"
 npx convex env set R2_BUCKET_PUBLIC "jam-media-public"
-npx convex env set R2_PUBLIC_BASE_URL "https://media.yourdomain.com"
+npx convex env set MEDIA_PUBLIC_BASE_URL "https://media.yourdomain.com"
 ```
 
 ```env

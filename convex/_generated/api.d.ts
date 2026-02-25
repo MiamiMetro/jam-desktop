@@ -11,14 +11,19 @@
 import type * as auth from "../auth.js";
 import type * as blocks from "../blocks.js";
 import type * as comments from "../comments.js";
+import type * as crons from "../crons.js";
 import type * as friends from "../friends.js";
 import type * as helpers from "../helpers.js";
 import type * as http from "../http.js";
 import type * as media from "../media.js";
+import type * as mediaCleanup from "../mediaCleanup.js";
+import type * as mediaMaintenance from "../mediaMaintenance.js";
+import type * as mediaService from "../mediaService.js";
 import type * as messages from "../messages.js";
 import type * as posts from "../posts.js";
 import type * as profiles from "../profiles.js";
 import type * as rateLimiter from "../rateLimiter.js";
+import type * as uploadSessions from "../uploadSessions.js";
 import type * as users from "../users.js";
 
 import type {
@@ -31,14 +36,19 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   blocks: typeof blocks;
   comments: typeof comments;
+  crons: typeof crons;
   friends: typeof friends;
   helpers: typeof helpers;
   http: typeof http;
   media: typeof media;
+  mediaCleanup: typeof mediaCleanup;
+  mediaMaintenance: typeof mediaMaintenance;
+  mediaService: typeof mediaService;
   messages: typeof messages;
   posts: typeof posts;
   profiles: typeof profiles;
   rateLimiter: typeof rateLimiter;
+  uploadSessions: typeof uploadSessions;
   users: typeof users;
 }>;
 

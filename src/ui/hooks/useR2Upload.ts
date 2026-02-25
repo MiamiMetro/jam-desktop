@@ -14,41 +14,98 @@ export function useR2Upload() {
         throw new Error("UPLOAD_CONFIG_MISSING: VITE_CONVEX_SITE_URL is not configured");
       }
 
-      const formData = new FormData();
-      formData.append("kind", kind);
-      formData.append("file", file, file.name);
-
       const tokenResult = await authClient.convex.token();
       const token = tokenResult?.data?.token;
       if (!token) {
         throw new Error("NOT_AUTHENTICATED: Missing auth token");
       }
 
-      const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/media/upload`, {
+      const initResponse = await fetch(`${baseUrl.replace(/\/+$/, "")}/media/upload`, {
         method: "POST",
-        credentials: "include",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: formData,
+        body: JSON.stringify({
+          kind,
+          filename: file.name,
+          contentType: file.type,
+          fileSize: file.size,
+        }),
       });
 
-      const data = (await response.json().catch(() => null)) as
-        | { publicUrl?: string; key?: string; error?: string; details?: string }
+      const data = (await initResponse.json().catch(() => null)) as
+        | {
+            uploadSessionId?: string;
+            uploadUrl?: string;
+            method?: "PUT";
+            headers?: Record<string, string>;
+            publicUrl?: string;
+            key?: string;
+            error?: string;
+            details?: string;
+          }
         | null;
 
-      if (!response.ok) {
-        const details = data?.details || data?.error || `Upload failed with status ${response.status}`;
+      if (!initResponse.ok) {
+        const details =
+          data?.details || data?.error || `Upload failed with status ${initResponse.status}`;
         throw new Error(`UPLOAD_FAILED: ${details}`);
       }
 
-      if (!data?.publicUrl || !data?.key) {
+      if (!data?.uploadSessionId || !data?.uploadUrl || !data?.publicUrl || !data?.key) {
         throw new Error("UPLOAD_FAILED: Invalid upload response");
       }
 
+      const uploadResponse = await fetch(data.uploadUrl, {
+        method: data.method ?? "PUT",
+        headers: data.headers ?? {
+          "Content-Type": file.type || "application/octet-stream",
+        },
+        body: file,
+      });
+
+      if (!uploadResponse.ok) {
+        const details = await uploadResponse.text().catch(() => "");
+        throw new Error(
+          `UPLOAD_FAILED: ${details || `Storage returned status ${uploadResponse.status}`}`
+        );
+      }
+
+      const finalizeResponse = await fetch(`${baseUrl.replace(/\/+$/, "")}/media/finalize`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          uploadSessionId: data.uploadSessionId,
+        }),
+      });
+
+      const finalized = (await finalizeResponse.json().catch(() => null)) as
+        | {
+            publicUrl?: string;
+            key?: string;
+            error?: string;
+            details?: string;
+          }
+        | null;
+
+      if (!finalizeResponse.ok) {
+        const details =
+          finalized?.details ||
+          finalized?.error ||
+          `Finalize failed with status ${finalizeResponse.status}`;
+        throw new Error(`UPLOAD_FINALIZE_FAILED: ${details}`);
+      }
+
+      if (!finalized?.publicUrl) {
+        throw new Error("UPLOAD_FINALIZE_FAILED: Invalid finalize response");
+      }
+
       return {
-        url: data.publicUrl,
-        key: data.key,
+        url: finalized.publicUrl,
       };
     } finally {
       setIsUploading(false);

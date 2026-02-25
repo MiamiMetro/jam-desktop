@@ -2,6 +2,8 @@ import { RateLimiter, MINUTE } from "@convex-dev/rate-limiter";
 import { components } from "./_generated/api";
 import type { MutationCtx } from "./_generated/server";
 
+const TEN_SECONDS = 10 * 1000;
+
 /**
  * Server-side rate limiter for Convex mutations
  * This provides security against abuse that client-side rate limiting cannot.
@@ -96,6 +98,14 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
     period: MINUTE,
     capacity: 5
   },
+
+  // Upload init: 1 request per 10 seconds per user
+  uploadInit: {
+    kind: "token bucket",
+    rate: 1,
+    period: TEN_SECONDS,
+    capacity: 1,
+  },
 });
 
 /**
@@ -112,7 +122,8 @@ export type RateLimitName =
   | "deleteAction"
   | "blockAction"
   | "createProfile"
-  | "general";
+  | "general"
+  | "uploadInit";
 
 /**
  * Helper to check rate limit and throw a user-friendly error

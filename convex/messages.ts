@@ -4,6 +4,11 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Id, Doc } from "./_generated/dataModel";
 import {
+  extractManagedMediaObjectKeyFromUrl,
+  resolvePublicMediaUrl,
+} from "./mediaService";
+import { consumeReadyUploadSessionByPublicUrl } from "./uploadSessions";
+import {
   formatPublicProfileIdentity,
   getCurrentProfile,
   isDiscoverableAccountState,
@@ -226,6 +231,7 @@ export const send = mutation({
     // Sanitize and validate inputs
     const text = sanitizeText(args.text);
     const audioUrl = args.audio_url;
+    const audioObjectKey = extractManagedMediaObjectKeyFromUrl(audioUrl);
     
     validateTextLength(text, MAX_LENGTHS.MESSAGE_TEXT, "Message text");
     validateUrl(audioUrl);
@@ -233,6 +239,21 @@ export const send = mutation({
     // Text or audio must be provided
     if (!text && !audioUrl) {
       throw new Error("Message must have either text or audio");
+    }
+
+    let nextAudioUrl = audioUrl;
+    let nextAudioObjectKey = audioObjectKey;
+    if (audioUrl && audioObjectKey) {
+      const audioSession = await consumeReadyUploadSessionByPublicUrl(ctx, {
+        ownerProfileId: profile._id,
+        publicUrl: audioUrl,
+        kind: "audio",
+      });
+      nextAudioObjectKey = audioSession.objectKey;
+      nextAudioUrl = undefined;
+    }
+    if (audioUrl && !audioObjectKey) {
+      nextAudioObjectKey = undefined;
     }
 
     const conversation = await ctx.db.get(args.conversationId);
@@ -291,7 +312,8 @@ export const send = mutation({
       conversationId: args.conversationId,
       senderId: profile._id,
       text: text,
-      audioUrl: audioUrl,
+      audioUrl: nextAudioUrl,
+      audioObjectKey: nextAudioObjectKey,
     });
 
     // Get message to access _creationTime
@@ -304,6 +326,7 @@ export const send = mutation({
       lastMessageSenderId: message!.senderId,
       lastMessageText: message!.text,
       lastMessageAudioUrl: message!.audioUrl,
+      lastMessageAudioObjectKey: message!.audioObjectKey,
       lastMessageCreatedAt: message!._creationTime,
     });
 
@@ -341,7 +364,10 @@ export const send = mutation({
       conversation_id: message!.conversationId,
       sender_id: message!.senderId,
       text: message!.text ?? "",
-      audio_url: message!.audioUrl ?? "",
+      audio_url: resolvePublicMediaUrl({
+        url: message!.audioUrl,
+        objectKey: message!.audioObjectKey,
+      }),
       created_at: new Date(message!._creationTime).toISOString(),
     };
   },
@@ -469,7 +495,10 @@ export const getConversationsPaginated = query({
               conversation_id: conversation._id,
               sender_id: conversation.lastMessageSenderId,
               text: conversation.lastMessageText ?? "",
-              audio_url: conversation.lastMessageAudioUrl ?? "",
+              audio_url: resolvePublicMediaUrl({
+                url: conversation.lastMessageAudioUrl,
+                objectKey: conversation.lastMessageAudioObjectKey,
+              }),
               created_at: new Date(conversation.lastMessageCreatedAt).toISOString(),
             }
           : null;
@@ -568,7 +597,10 @@ export const getByConversationPaginated = query({
       conversation_id: msg.conversationId,
       sender_id: msg.senderId,
       text: msg.text ?? "",
-      audio_url: msg.audioUrl ?? "",
+      audio_url: resolvePublicMediaUrl({
+        url: msg.audioUrl,
+        objectKey: msg.audioObjectKey,
+      }),
       created_at: new Date(msg._creationTime).toISOString(),
       _creationTime: msg._creationTime,
     }));
@@ -714,6 +746,7 @@ export const remove = mutation({
           lastMessageSenderId: latestRemainingMessage.senderId,
           lastMessageText: latestRemainingMessage.text,
           lastMessageAudioUrl: latestRemainingMessage.audioUrl,
+          lastMessageAudioObjectKey: latestRemainingMessage.audioObjectKey,
           lastMessageCreatedAt: latestRemainingMessage._creationTime,
         });
       } else {
@@ -723,6 +756,7 @@ export const remove = mutation({
           lastMessageSenderId: undefined,
           lastMessageText: undefined,
           lastMessageAudioUrl: undefined,
+          lastMessageAudioObjectKey: undefined,
           lastMessageCreatedAt: undefined,
         });
       }

@@ -3,6 +3,11 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Id, Doc } from "./_generated/dataModel";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
+import {
+  extractManagedMediaObjectKeyFromUrl,
+  resolvePublicMediaUrl,
+} from "./mediaService";
+import { consumeReadyUploadSessionByPublicUrl } from "./uploadSessions";
 import { 
   formatPublicProfileIdentity,
   getCurrentProfile, 
@@ -50,7 +55,10 @@ async function formatPost(
     id: post._id,
     author_id: post.authorId,
     text: post.text ?? "",
-    audio_url: post.audioUrl ?? "",
+    audio_url: resolvePublicMediaUrl({
+      url: post.audioUrl,
+      objectKey: post.audioObjectKey,
+    }),
     created_at: new Date(post._creationTime).toISOString(),
     author: author
       ? formatPublicProfileIdentity(author)
@@ -133,6 +141,7 @@ export const create = mutation({
     // Sanitize and validate inputs
     const text = sanitizeText(args.text);
     const audioUrl = args.audio_url;
+    const audioObjectKey = extractManagedMediaObjectKeyFromUrl(audioUrl);
     
     validateTextLength(text, MAX_LENGTHS.POST_TEXT, "Post text");
     validateUrl(audioUrl);
@@ -142,10 +151,26 @@ export const create = mutation({
       throw new Error("Post must have either text or audio");
     }
 
+    let nextAudioUrl = audioUrl;
+    let nextAudioObjectKey = audioObjectKey;
+    if (audioUrl && audioObjectKey) {
+      const audioSession = await consumeReadyUploadSessionByPublicUrl(ctx, {
+        ownerProfileId: profile._id,
+        publicUrl: audioUrl,
+        kind: "audio",
+      });
+      nextAudioObjectKey = audioSession.objectKey;
+      nextAudioUrl = undefined;
+    }
+    if (audioUrl && !audioObjectKey) {
+      nextAudioObjectKey = undefined;
+    }
+
     const postId = await ctx.db.insert("posts", {
       authorId: profile._id,
       text: text,
-      audioUrl: audioUrl,
+      audioUrl: nextAudioUrl,
+      audioObjectKey: nextAudioObjectKey,
       likesCount: 0,
       commentsCount: 0,
       nextCommentSequence: 0, // Initialize atomic counter for comment path generation

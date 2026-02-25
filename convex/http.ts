@@ -1,7 +1,12 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
-import { uploadFromApp, uploadFromAppOptions } from "./media";
+import {
+  finalizeUploadFromApp,
+  finalizeUploadOptions,
+  uploadFromApp,
+  uploadFromAppOptions,
+} from "./media";
 
 const http = httpRouter();
 
@@ -32,6 +37,18 @@ http.route({
   path: "/media/upload",
   method: "POST",
   handler: uploadFromApp,
+});
+
+http.route({
+  path: "/media/finalize",
+  method: "OPTIONS",
+  handler: finalizeUploadOptions,
+});
+
+http.route({
+  path: "/media/finalize",
+  method: "POST",
+  handler: finalizeUploadFromApp,
 });
 
 export default http;

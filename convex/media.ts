@@ -1,6 +1,8 @@
-import { httpAction, internalQuery } from "./_generated/server";
+import { httpAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
+import { checkRateLimit } from "./rateLimiter";
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -19,6 +21,20 @@ const DEFAULT_EXTENSIONS = {
 } as const;
 
 type UploadKind = keyof typeof UPLOAD_LIMITS;
+const SIGNED_UPLOAD_TTL_SECONDS = 120;
+const UPLOAD_SESSION_TTL_SECONDS = 30 * 60;
+
+type UploadSessionDoc = {
+  _id: Id<"upload_sessions">;
+  ownerProfileId: Id<"profiles">;
+  kind: UploadKind;
+  objectKey: string;
+  publicUrl: string;
+  contentType: string;
+  fileSize: number;
+  status: "initiated" | "ready" | "consumed" | "expired";
+  expiresAt: number;
+};
 
 const siteUrls = [process.env.SITE_URL, process.env.VITE_SITE_URL]
   .filter((value): value is string => !!value)
@@ -129,15 +145,22 @@ function parseUploadError(error: unknown): string {
   return match?.[1] ?? raw;
 }
 
+function isRateLimitError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : "";
+  return message.includes("Rate limit exceeded");
+}
+
 function getR2Config() {
   const accountId = process.env.R2_ACCOUNT_ID;
   const accessKeyId = process.env.R2_ACCESS_KEY_ID;
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
   const bucket = process.env.R2_BUCKET_PUBLIC;
-  const publicBaseUrl = process.env.R2_PUBLIC_BASE_URL;
+  const publicBaseUrl = process.env.MEDIA_PUBLIC_BASE_URL;
 
   if (!accountId || !accessKeyId || !secretAccessKey || !bucket || !publicBaseUrl) {
-    throw new Error("R2_CONFIG_MISSING: R2 env vars are not fully configured");
+    throw new Error(
+      "R2_CONFIG_MISSING: set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_PUBLIC, and MEDIA_PUBLIC_BASE_URL"
+    );
   }
 
   return { accountId, accessKeyId, secretAccessKey, bucket, publicBaseUrl };
@@ -173,7 +196,7 @@ async function buildSignedUpload(params: {
     ["X-Amz-Algorithm", "AWS4-HMAC-SHA256"],
     ["X-Amz-Credential", `${accessKeyId}/${credentialScope}`],
     ["X-Amz-Date", amzDate],
-    ["X-Amz-Expires", "900"],
+    ["X-Amz-Expires", String(SIGNED_UPLOAD_TTL_SECONDS)],
     ["X-Amz-SignedHeaders", "host"],
   ];
 
@@ -220,7 +243,7 @@ async function buildSignedUpload(params: {
     uploadUrl,
     publicUrl,
     key,
-    expiresInSeconds: 900,
+    expiresInSeconds: SIGNED_UPLOAD_TTL_SECONDS,
     method: "PUT" as const,
     headers: {
       "Content-Type": contentType,
@@ -240,6 +263,65 @@ export const getProfileByAuthIdentity = internalQuery({
         q.eq("authIssuer", args.authIssuer).eq("authSubject", args.authSubject)
       )
       .first();
+  },
+});
+
+export const createUploadSession = internalMutation({
+  args: {
+    ownerProfileId: v.id("profiles"),
+    kind: v.union(v.literal("avatar"), v.literal("banner"), v.literal("audio")),
+    objectKey: v.string(),
+    publicUrl: v.string(),
+    contentType: v.string(),
+    fileSize: v.number(),
+    expiresAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await checkRateLimit(ctx, "uploadInit", `${args.ownerProfileId}:${args.kind}`);
+
+    return await ctx.db.insert("upload_sessions", {
+      ownerProfileId: args.ownerProfileId,
+      kind: args.kind,
+      objectKey: args.objectKey,
+      publicUrl: args.publicUrl,
+      contentType: args.contentType,
+      fileSize: args.fileSize,
+      status: "initiated",
+      expiresAt: args.expiresAt,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+export const getUploadSessionById = internalQuery({
+  args: {
+    uploadSessionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.uploadSessionId as Id<"upload_sessions">);
+  },
+});
+
+export const markUploadSessionExpired = internalMutation({
+  args: {
+    uploadSessionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.uploadSessionId as Id<"upload_sessions">, {
+      status: "expired",
+    });
+  },
+});
+
+export const markUploadSessionReady = internalMutation({
+  args: {
+    uploadSessionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.uploadSessionId as Id<"upload_sessions">, {
+      status: "ready",
+      finalizedAt: Date.now(),
+    });
   },
 });
 
@@ -288,8 +370,22 @@ export const uploadFromApp = httpAction(async (ctx, request) => {
       });
     }
 
-    const formData = await request.formData();
-    const kindInput = `${formData.get("kind") ?? ""}`.trim().toLowerCase();
+    const payload = (await request.json().catch(() => null)) as
+      | {
+          kind?: string;
+          filename?: string;
+          contentType?: string;
+          fileSize?: number;
+        }
+      | null;
+    if (!payload) {
+      return new Response(JSON.stringify({ error: "INVALID_REQUEST_BODY" }), {
+        status: 400,
+        headers: corsHeaders,
+      });
+    }
+
+    const kindInput = `${payload.kind ?? ""}`.trim().toLowerCase();
     if (!isUploadKind(kindInput)) {
       return new Response(JSON.stringify({ error: "INVALID_KIND" }), {
         status: 400,
@@ -297,23 +393,15 @@ export const uploadFromApp = httpAction(async (ctx, request) => {
       });
     }
 
-    const file = formData.get("file");
-    if (!file || typeof file === "string") {
-      return new Response(JSON.stringify({ error: "FILE_REQUIRED" }), {
-        status: 400,
-        headers: corsHeaders,
-      });
-    }
-
     const filename =
-      ("name" in file && typeof file.name === "string" && file.name.length > 0)
-        ? file.name
+      (typeof payload.filename === "string" && payload.filename.length > 0)
+        ? payload.filename
         : `upload${DEFAULT_EXTENSIONS[kindInput]}`;
     const contentType =
-      ("type" in file && typeof file.type === "string" && file.type.length > 0)
-        ? file.type
+      (typeof payload.contentType === "string" && payload.contentType.length > 0)
+        ? payload.contentType
         : "application/octet-stream";
-    const fileSize = "size" in file && typeof file.size === "number" ? file.size : 0;
+    const fileSize = typeof payload.fileSize === "number" ? payload.fileSize : 0;
 
     validateUpload(kindInput, contentType, fileSize);
 
@@ -324,28 +412,24 @@ export const uploadFromApp = httpAction(async (ctx, request) => {
       profileId: profile._id,
     });
 
-    const uploadResponse = await fetch(signed.uploadUrl, {
-      method: signed.method,
-      headers: signed.headers,
-      body: file,
+    const expiresAt = Date.now() + UPLOAD_SESSION_TTL_SECONDS * 1000;
+    const uploadSessionId = await ctx.runMutation(internal.media.createUploadSession, {
+      ownerProfileId: profile._id,
+      kind: kindInput,
+      objectKey: signed.key,
+      publicUrl: signed.publicUrl,
+      contentType,
+      fileSize,
+      expiresAt,
     });
-
-    if (!uploadResponse.ok) {
-      const details = await uploadResponse.text().catch(() => "");
-      return new Response(
-        JSON.stringify({
-          error: "UPLOAD_FAILED",
-          details: details || `R2 returned status ${uploadResponse.status}`,
-        }),
-        {
-          status: 502,
-          headers: corsHeaders,
-        }
-      );
-    }
 
     return new Response(
       JSON.stringify({
+        uploadSessionId,
+        uploadUrl: signed.uploadUrl,
+        method: signed.method,
+        headers: signed.headers,
+        expiresInSeconds: signed.expiresInSeconds,
         publicUrl: signed.publicUrl,
         key: signed.key,
       }),
@@ -355,9 +439,160 @@ export const uploadFromApp = httpAction(async (ctx, request) => {
       }
     );
   } catch (error) {
+    const status = isRateLimitError(error) ? 429 : 500;
+    const errorCode = isRateLimitError(error) ? "RATE_LIMITED" : "UPLOAD_FAILED";
     return new Response(
       JSON.stringify({
-        error: "UPLOAD_FAILED",
+        error: errorCode,
+        details: parseUploadError(error),
+      }),
+      {
+        status,
+        headers: corsHeaders,
+      }
+    );
+  }
+});
+
+export const finalizeUploadOptions = httpAction(async (_ctx, request) => {
+  const origin = request.headers.get("origin");
+  if (origin && !isAllowedOrigin(origin)) {
+    return new Response(JSON.stringify({ error: "ORIGIN_NOT_ALLOWED" }), {
+      status: 403,
+      headers: buildCorsHeaders(origin),
+    });
+  }
+  return new Response(null, {
+    status: 204,
+    headers: buildCorsHeaders(origin),
+  });
+});
+
+async function verifyUploadedObjectExists(session: {
+  publicUrl: string;
+  contentType: string;
+  fileSize: number;
+}) {
+  const response = await fetch(session.publicUrl, { method: "HEAD" });
+  if (!response.ok) {
+    throw new Error("UPLOAD_VERIFY_FAILED: Uploaded object not found");
+  }
+
+  const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
+  if (contentType && !contentType.startsWith(session.contentType.toLowerCase())) {
+    throw new Error("UPLOAD_VERIFY_FAILED: Uploaded object content type mismatch");
+  }
+
+  const contentLengthRaw = response.headers.get("content-length");
+  if (contentLengthRaw) {
+    const contentLength = Number(contentLengthRaw);
+    if (Number.isFinite(contentLength) && contentLength !== session.fileSize) {
+      throw new Error("UPLOAD_VERIFY_FAILED: Uploaded object size mismatch");
+    }
+  }
+}
+
+export const finalizeUploadFromApp = httpAction(async (ctx, request) => {
+  const origin = request.headers.get("origin");
+  const corsHeaders = buildCorsHeaders(origin);
+  if (origin && !isAllowedOrigin(origin)) {
+    return new Response(JSON.stringify({ error: "ORIGIN_NOT_ALLOWED" }), {
+      status: 403,
+      headers: corsHeaders,
+    });
+  }
+
+  try {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return new Response(JSON.stringify({ error: "NOT_AUTHENTICATED" }), {
+        status: 401,
+        headers: corsHeaders,
+      });
+    }
+
+    const profile = await ctx.runQuery(internal.media.getProfileByAuthIdentity, {
+      authIssuer: identity.issuer,
+      authSubject: identity.subject,
+    });
+    if (!profile) {
+      return new Response(JSON.stringify({ error: "PROFILE_REQUIRED" }), {
+        status: 403,
+        headers: corsHeaders,
+      });
+    }
+
+    const payload = (await request.json().catch(() => null)) as
+      | { uploadSessionId?: string }
+      | null;
+    const uploadSessionId = payload?.uploadSessionId;
+    if (!uploadSessionId || typeof uploadSessionId !== "string") {
+      return new Response(JSON.stringify({ error: "UPLOAD_SESSION_ID_REQUIRED" }), {
+        status: 400,
+        headers: corsHeaders,
+      });
+    }
+
+    const session = (await ctx.runQuery(internal.media.getUploadSessionById, {
+      uploadSessionId,
+    })) as UploadSessionDoc | null;
+
+    if (!session) {
+      return new Response(JSON.stringify({ error: "UPLOAD_SESSION_NOT_FOUND" }), {
+        status: 404,
+        headers: corsHeaders,
+      });
+    }
+    if (session.ownerProfileId !== profile._id) {
+      return new Response(JSON.stringify({ error: "UPLOAD_SESSION_OWNER_MISMATCH" }), {
+        status: 403,
+        headers: corsHeaders,
+      });
+    }
+    if (session.status === "consumed") {
+      return new Response(JSON.stringify({ error: "UPLOAD_SESSION_ALREADY_CONSUMED" }), {
+        status: 409,
+        headers: corsHeaders,
+      });
+    }
+    if (session.status === "expired") {
+      return new Response(JSON.stringify({ error: "UPLOAD_SESSION_EXPIRED" }), {
+        status: 410,
+        headers: corsHeaders,
+      });
+    }
+    if (session.expiresAt < Date.now()) {
+      await ctx.runMutation(internal.media.markUploadSessionExpired, {
+        uploadSessionId,
+      });
+      return new Response(JSON.stringify({ error: "UPLOAD_SESSION_EXPIRED" }), {
+        status: 410,
+        headers: corsHeaders,
+      });
+    }
+
+    if (session.status === "initiated") {
+      await verifyUploadedObjectExists(session);
+      await ctx.runMutation(internal.media.markUploadSessionReady, {
+        uploadSessionId,
+      });
+    }
+
+    return new Response(
+      JSON.stringify({
+        uploadSessionId: session._id,
+        publicUrl: session.publicUrl,
+        key: session.objectKey,
+      }),
+      {
+        status: 200,
+        headers: corsHeaders,
+      }
+    );
+  } catch (error) {
+    return new Response(
+      JSON.stringify({
+        error: "UPLOAD_FINALIZE_FAILED",
         details: parseUploadError(error),
       }),
       {

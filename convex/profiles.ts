@@ -1,5 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { extractManagedMediaObjectKeyFromUrl } from "./mediaService";
+import { consumeReadyUploadSessionByPublicUrl } from "./uploadSessions";
 import {
   assertValidAccountStateTransition,
   DELETED_ACCOUNT_DISPLAY_NAME,
@@ -117,7 +119,9 @@ export const updateMe = mutation({
     const username = normalizeUsername(sanitizeText(args.username));
     const displayName = sanitizeText(args.display_name);
     const avatarUrl = args.avatar_url;
+    const avatarObjectKey = extractManagedMediaObjectKeyFromUrl(avatarUrl);
     const bannerUrl = args.banner_url;
+    const bannerObjectKey = extractManagedMediaObjectKeyFromUrl(bannerUrl);
     const bio = sanitizeText(args.bio);
     const instruments = sanitizeProfileTags(args.instruments, "Instruments");
     const genres = sanitizeProfileTags(args.genres, "Genres");
@@ -165,11 +169,51 @@ export const updateMe = mutation({
       }
 
       // Build update object
+      let nextAvatarUrl = avatarUrl;
+      let nextAvatarObjectKey = avatarObjectKey;
+      if (avatarUrl !== undefined && avatarObjectKey) {
+        const isUnchangedManagedAvatar =
+          profile.avatarObjectKey === avatarObjectKey || profile.avatarUrl === avatarUrl;
+        if (!isUnchangedManagedAvatar) {
+          const avatarSession = await consumeReadyUploadSessionByPublicUrl(ctx, {
+            ownerProfileId: profile._id,
+            publicUrl: avatarUrl,
+            kind: "avatar",
+          });
+          nextAvatarObjectKey = avatarSession.objectKey;
+        }
+        nextAvatarUrl = undefined;
+      }
+      if (avatarUrl !== undefined && !avatarObjectKey) {
+        nextAvatarObjectKey = undefined;
+      }
+
+      let nextBannerUrl = bannerUrl;
+      let nextBannerObjectKey = bannerObjectKey;
+      if (bannerUrl !== undefined && bannerObjectKey) {
+        const isUnchangedManagedBanner =
+          profile.bannerObjectKey === bannerObjectKey || profile.bannerUrl === bannerUrl;
+        if (!isUnchangedManagedBanner) {
+          const bannerSession = await consumeReadyUploadSessionByPublicUrl(ctx, {
+            ownerProfileId: profile._id,
+            publicUrl: bannerUrl,
+            kind: "banner",
+          });
+          nextBannerObjectKey = bannerSession.objectKey;
+        }
+        nextBannerUrl = undefined;
+      }
+      if (bannerUrl !== undefined && !bannerObjectKey) {
+        nextBannerObjectKey = undefined;
+      }
+
       const updates: Partial<{
         username: string;
         displayName: string;
-        avatarUrl: string;
-        bannerUrl: string;
+        avatarUrl: string | undefined;
+        avatarObjectKey: string | undefined;
+        bannerUrl: string | undefined;
+        bannerObjectKey: string | undefined;
         bio: string;
         instruments: string[];
         genres: string[];
@@ -178,8 +222,14 @@ export const updateMe = mutation({
 
       if (username !== undefined) updates.username = username;
       if (displayName !== undefined) updates.displayName = displayName;
-      if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
-      if (bannerUrl !== undefined) updates.bannerUrl = bannerUrl;
+      if (avatarUrl !== undefined) {
+        updates.avatarUrl = nextAvatarUrl;
+        updates.avatarObjectKey = nextAvatarObjectKey;
+      }
+      if (bannerUrl !== undefined) {
+        updates.bannerUrl = nextBannerUrl;
+        updates.bannerObjectKey = nextBannerObjectKey;
+      }
       if (bio !== undefined) updates.bio = bio;
       if (instruments !== undefined) updates.instruments = instruments;
       if (genres !== undefined) updates.genres = genres;
@@ -265,7 +315,9 @@ export const softDeleteMe = mutation({
       username: deletedUsername,
       displayName: DELETED_ACCOUNT_DISPLAY_NAME,
       avatarUrl: "",
+      avatarObjectKey: undefined,
       bannerUrl: "",
+      bannerObjectKey: undefined,
       bio: "",
       instruments: [],
       genres: [],
@@ -311,6 +363,7 @@ export const createProfile = mutation({
     const usernameInput = normalizeUsername(sanitizeText(args.username));
     const displayName = sanitizeText(args.displayName);
     const avatarUrl = args.avatarUrl;
+    const avatarObjectKey = extractManagedMediaObjectKeyFromUrl(avatarUrl);
     const authIdentityKey = `${identity.issuer}:${identity.subject}`;
 
     // Validate username (checks both min and max length, throws if invalid)
@@ -320,6 +373,11 @@ export const createProfile = mutation({
 
     validateTextLength(displayName, MAX_LENGTHS.DISPLAY_NAME, "Display name");
     validateUrl(avatarUrl);
+    if (avatarObjectKey) {
+      throw new Error(
+        "PROFILE_CREATE_MANAGED_AVATAR_NOT_ALLOWED: Create profile first, then upload avatar"
+      );
+    }
 
     // Check if profile already exists for this auth identity
     const existing = await ctx.db
@@ -363,7 +421,9 @@ export const createProfile = mutation({
         username: username,
         displayName: displayName ?? username,
         avatarUrl: avatarUrl ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
+        avatarObjectKey,
         bannerUrl: "",
+        bannerObjectKey: undefined,
         bio: "",
         instruments: [],
         genres: [],

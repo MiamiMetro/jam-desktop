@@ -4,6 +4,11 @@ import { v } from "convex/values";
 import type { Id, Doc } from "./_generated/dataModel";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import {
+  extractManagedMediaObjectKeyFromUrl,
+  resolvePublicMediaUrl,
+} from "./mediaService";
+import { consumeReadyUploadSessionByPublicUrl } from "./uploadSessions";
+import {
   formatPublicProfileIdentity,
   getCurrentProfile,
   requireAuth,
@@ -62,7 +67,10 @@ async function formatComment(
     path: comment.path,
     depth: comment.depth,
     text: comment.text ?? "",
-    audio_url: comment.audioUrl ?? "",
+    audio_url: resolvePublicMediaUrl({
+      url: comment.audioUrl,
+      objectKey: comment.audioObjectKey,
+    }),
     created_at: new Date(comment._creationTime).toISOString(),
     author: author
       ? formatPublicProfileIdentity(author)
@@ -124,12 +132,28 @@ export const create = mutation({
     // Sanitize and validate inputs
     const text = sanitizeText(args.text);
     const audioUrl = args.audioUrl;
+    const audioObjectKey = extractManagedMediaObjectKeyFromUrl(audioUrl);
 
     validateTextLength(text, MAX_LENGTHS.COMMENT_TEXT, "Comment text");
     validateUrl(audioUrl);
 
     if (!text && !audioUrl) {
       throw new Error("Comment must have either text or audio");
+    }
+
+    let nextAudioUrl = audioUrl;
+    let nextAudioObjectKey = audioObjectKey;
+    if (audioUrl && audioObjectKey) {
+      const audioSession = await consumeReadyUploadSessionByPublicUrl(ctx, {
+        ownerProfileId: profile._id,
+        publicUrl: audioUrl,
+        kind: "audio",
+      });
+      nextAudioObjectKey = audioSession.objectKey;
+      nextAudioUrl = undefined;
+    }
+    if (audioUrl && !audioObjectKey) {
+      nextAudioObjectKey = undefined;
     }
 
     // Get parent post for atomic sequence counter
@@ -156,7 +180,8 @@ export const create = mutation({
       path,
       depth: 0,
       text,
-      audioUrl,
+      audioUrl: nextAudioUrl,
+      audioObjectKey: nextAudioObjectKey,
       likesCount: 0,
       repliesCount: 0,
       nextReplySequence: 0, // Initialize counter for this comment's replies
@@ -195,12 +220,28 @@ export const reply = mutation({
     // Sanitize and validate inputs
     const text = sanitizeText(args.text);
     const audioUrl = args.audioUrl;
+    const audioObjectKey = extractManagedMediaObjectKeyFromUrl(audioUrl);
 
     validateTextLength(text, MAX_LENGTHS.COMMENT_TEXT, "Comment text");
     validateUrl(audioUrl);
 
     if (!text && !audioUrl) {
       throw new Error("Reply must have either text or audio");
+    }
+
+    let nextAudioUrl = audioUrl;
+    let nextAudioObjectKey = audioObjectKey;
+    if (audioUrl && audioObjectKey) {
+      const audioSession = await consumeReadyUploadSessionByPublicUrl(ctx, {
+        ownerProfileId: profile._id,
+        publicUrl: audioUrl,
+        kind: "audio",
+      });
+      nextAudioObjectKey = audioSession.objectKey;
+      nextAudioUrl = undefined;
+    }
+    if (audioUrl && !audioObjectKey) {
+      nextAudioObjectKey = undefined;
     }
 
     // Atomically increment sequence counter to generate unique path
@@ -222,7 +263,8 @@ export const reply = mutation({
       path,
       depth: parent.depth + 1,
       text,
-      audioUrl,
+      audioUrl: nextAudioUrl,
+      audioObjectKey: nextAudioObjectKey,
       likesCount: 0,
       repliesCount: 0,
       nextReplySequence: 0, // Initialize counter for this comment's replies

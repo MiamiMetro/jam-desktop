@@ -10,7 +10,9 @@ export default defineSchema({
     username: v.string(),
     displayName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
+    avatarObjectKey: v.optional(v.string()),
     bannerUrl: v.optional(v.string()),
+    bannerObjectKey: v.optional(v.string()),
     bio: v.optional(v.string()),
     instruments: v.optional(v.array(v.string())),
     genres: v.optional(v.array(v.string())),
@@ -39,6 +41,7 @@ export default defineSchema({
     authorId: v.id("profiles"),
     text: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
+    audioObjectKey: v.optional(v.string()),
     // Denormalized counts for O(1) read performance
     likesCount: v.optional(v.number()),
     commentsCount: v.optional(v.number()),
@@ -58,6 +61,7 @@ export default defineSchema({
     depth: v.number(), // 0 for top-level, 1 for first reply, etc.
     text: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
+    audioObjectKey: v.optional(v.string()),
     // Denormalized counts for O(1) read performance
     likesCount: v.optional(v.number()),
     repliesCount: v.optional(v.number()),
@@ -96,6 +100,30 @@ export default defineSchema({
     ownerId: v.string(),
     createdAt: v.number(),
   }).index("by_scope_value", ["scope", "value"]),
+
+  // Upload sessions for strict direct-upload verification.
+  // Flow: initiated -> ready (finalized) -> consumed (attached to entity)
+  upload_sessions: defineTable({
+    ownerProfileId: v.id("profiles"),
+    kind: v.union(v.literal("avatar"), v.literal("banner"), v.literal("audio")),
+    objectKey: v.string(),
+    publicUrl: v.string(),
+    contentType: v.string(),
+    fileSize: v.number(),
+    status: v.union(
+      v.literal("initiated"),
+      v.literal("ready"),
+      v.literal("consumed"),
+      v.literal("expired")
+    ),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+    finalizedAt: v.optional(v.number()),
+    usedAt: v.optional(v.number()),
+  })
+    .index("by_owner", ["ownerProfileId"])
+    .index("by_public_url", ["publicUrl"])
+    .index("by_status_expires", ["status", "expiresAt"]),
 
   // Friends table - for friend requests and friendships
   // BIDIRECTIONAL MODEL:
@@ -141,6 +169,7 @@ export default defineSchema({
     lastMessageSenderId: v.optional(v.id("profiles")),
     lastMessageText: v.optional(v.string()),
     lastMessageAudioUrl: v.optional(v.string()),
+    lastMessageAudioObjectKey: v.optional(v.string()),
     lastMessageCreatedAt: v.optional(v.number()),
     // For duplicate DM cleanup - points to canonical conversation
     mergedIntoConversationId: v.optional(v.id("conversations")),
@@ -172,6 +201,7 @@ export default defineSchema({
     senderId: v.id("profiles"),
     text: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
+    audioObjectKey: v.optional(v.string()),
   })
     .index("by_conversation_time", ["conversationId"])
     .index("by_sender", ["senderId"]),

@@ -1,5 +1,6 @@
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { resolvePublicMediaUrl } from "./mediaService";
 
 // ============================================
 // Input Validation Constants & Utilities
@@ -364,7 +365,9 @@ type ProfileForFormatting = {
   username: string;
   displayName?: string;
   avatarUrl?: string;
+  avatarObjectKey?: string;
   bannerUrl?: string;
+  bannerObjectKey?: string;
   bio?: string;
   instruments?: string[];
   genres?: string[];
@@ -384,8 +387,18 @@ function getPublicProfileFields(profile: ProfileForFormatting) {
     display_name: isDeleted
       ? DELETED_ACCOUNT_DISPLAY_NAME
       : profile.displayName ?? "",
-    avatar_url: isDeleted ? "" : profile.avatarUrl ?? "",
-    banner_url: isDeleted ? "" : profile.bannerUrl ?? "",
+    avatar_url: isDeleted
+      ? ""
+      : resolvePublicMediaUrl({
+          url: profile.avatarUrl,
+          objectKey: profile.avatarObjectKey,
+        }),
+    banner_url: isDeleted
+      ? ""
+      : resolvePublicMediaUrl({
+          url: profile.bannerUrl,
+          objectKey: profile.bannerObjectKey,
+        }),
     bio: isDeleted ? "" : profile.bio ?? "",
     instruments: isDeleted ? [] : profile.instruments ?? [],
     genres: isDeleted ? [] : profile.genres ?? [],
