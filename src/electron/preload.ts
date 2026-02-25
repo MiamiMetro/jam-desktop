@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('electron', {
     saveTheme: (theme: 'dark' | 'light') => {
         ipcRenderer.invoke('save-theme', theme);
     },
+    setPresenceSessionState: (state: { sessionToken: string | null; convexUrl?: string | null }) => {
+        ipcRenderer.send('presence-session-state', state);
+    },
 });
 
 

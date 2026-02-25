@@ -21,10 +21,22 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { RoomCard } from "@/components/RoomCard";
 import { useFriends } from "@/hooks/useFriends";
-import { useOnlineUsers } from "@/hooks/useUsers";
+import { useOnlineUsers, type PresenceStatus } from "@/hooks/useUsers";
 
 interface JamsTabProps {
   onGuestAction?: () => void;
+}
+
+function getPresenceRingClass(status: PresenceStatus) {
+  if (status === "busy") return "ring-red-500/30";
+  if (status === "away") return "ring-amber-500/30";
+  return "ring-green-500/30";
+}
+
+function getPresenceBadgeClass(status: PresenceStatus) {
+  if (status === "busy") return "bg-red-500";
+  if (status === "away") return "bg-amber-500";
+  return "bg-green-500";
 }
 
 function JamsTab({ onGuestAction }: JamsTabProps) {
@@ -282,8 +294,12 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
 
       {/* Friends Jamming Now */}
       {!isGuest && (() => {
-        const onlineIds = new Set(onlineUsers.map(u => u.id));
-        const onlineFriends = friends.filter(f => f && onlineIds.has(f.id));
+        const onlineStatusById = new Map(
+          onlineUsers.map((onlineUser) => [String(onlineUser.id), onlineUser.status])
+        );
+        const onlineFriends = friends.filter(
+          (friend) => friend && onlineStatusById.has(String(friend.id))
+        );
         const activeRooms = rooms.filter(r => r.isEnabled);
         if (onlineFriends.length === 0 || activeRooms.length === 0) return null;
         return (
@@ -294,6 +310,7 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
             <div className="flex gap-3 overflow-x-auto pb-1">
               {onlineFriends.slice(0, 6).map((friend, index) => {
                 if (!friend) return null;
+                const friendStatus = onlineStatusById.get(String(friend.id)) ?? "online";
                 // Assign friend to a room (round-robin for mock display)
                 const friendRoom = activeRooms[index % activeRooms.length];
                 return (
@@ -302,12 +319,12 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
                     onClick={() => navigate(`/jam/${friendRoom.id}`)}
                     className="flex flex-col items-center gap-1.5 p-3 rounded-xl glass-solid hover:glass-strong transition-all duration-200 cursor-pointer min-w-[80px] hover:ring-1 hover:ring-primary/20"
                   >
-                    <Avatar size="default" className="ring-2 ring-green-500/30">
+                    <Avatar size="default" className={`ring-2 ${getPresenceRingClass(friendStatus)}`}>
                       <AvatarImage src={friend.avatar_url || ""} alt={friend.username} />
                       <AvatarFallback className="bg-muted text-muted-foreground text-xs">
                         {friend.username.substring(0, 2).toUpperCase()}
                       </AvatarFallback>
-                      <AvatarBadge className="bg-green-500" />
+                      <AvatarBadge className={getPresenceBadgeClass(friendStatus)} />
                     </Avatar>
                     <span className="text-xs font-medium truncate w-full text-center">
                       {friend.username}

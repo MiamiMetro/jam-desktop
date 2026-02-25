@@ -24,6 +24,12 @@ function getSavedTheme(): 'dark' | 'light' {
 // Track the spawned client process
 let clientProcess: ChildProcess | null = null;
 
+const PRESENCE_DISCONNECT_REQUEST_TIMEOUT_MS = 700;
+const PRESENCE_BACKGROUND_QUIT_DELAY_MS = 500;
+
+let presenceSessionToken: string | null = null;
+let presenceConvexUrl: string | null = null;
+
 /**
  * Handle deep links (e.g., jam://profile/123 or https://yourapp.com/#/profile/123)
  * Converts protocol URLs to internal navigation paths
@@ -195,6 +201,14 @@ if (!gotTheLock) {
         } catch { /* non-critical */ }
     });
 
+    // Cache the latest presence session state so main can send non-blocking disconnect on app close.
+    ipcMain.on('presence-session-state', (_event, payload: { sessionToken: string | null; convexUrl?: string | null }) => {
+        presenceSessionToken = payload.sessionToken ?? null;
+        if (payload.convexUrl) {
+            presenceConvexUrl = payload.convexUrl;
+        }
+    });
+
     app.on('ready', () => {
         const preloadPath = isDev()
             ? path.join(process.cwd(), 'dist-electron', 'preload.js')
@@ -236,9 +250,46 @@ if (!gotTheLock) {
                 contextIsolation: true,
                 // Ensure auth cookies persist across app restarts
                 partition: 'persist:jam-desktop',
+                // Keep timers active while minimized/hidden so presence heartbeats continue.
+                backgroundThrottling: false,
                 webSecurity: true, // Enable web security
                 allowRunningInsecureContent: false, // Block mixed content
             },
+        });
+
+        let isAppQuitting = false;
+        let isBackgroundCloseInProgress = false;
+        let quitTimeoutId: NodeJS.Timeout | null = null;
+
+        app.on('before-quit', () => {
+            isAppQuitting = true;
+            if (quitTimeoutId) {
+                clearTimeout(quitTimeoutId);
+                quitTimeoutId = null;
+            }
+        });
+
+        mainWindow.on('close', (event) => {
+            if (isAppQuitting) return;
+            event.preventDefault();
+
+            if (isBackgroundCloseInProgress || !mainWindow || mainWindow.isDestroyed()) {
+                return;
+            }
+
+            isBackgroundCloseInProgress = true;
+
+            // Close instantly from the user's perspective.
+            mainWindow.hide();
+
+            // Fire-and-forget graceful disconnect from main process.
+            void sendPresenceDisconnectInBackground();
+
+            // Hard timeout to finish app shutdown without waiting for network completion.
+            quitTimeoutId = setTimeout(() => {
+                isAppQuitting = true;
+                app.quit();
+            }, PRESENCE_BACKGROUND_QUIT_DELAY_MS);
         });
 
         // Security: Lock down navigation - prevent navigating to external sites
@@ -377,4 +428,39 @@ if (!gotTheLock) {
             windows[0].focus();
         }
     });
+}
+
+async function sendPresenceDisconnectInBackground() {
+    if (!presenceSessionToken || !presenceConvexUrl) {
+        return;
+    }
+
+    const sessionToken = presenceSessionToken;
+    const convexUrl = presenceConvexUrl;
+    // Clear token immediately to avoid duplicate disconnect attempts.
+    presenceSessionToken = null;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+        controller.abort();
+    }, PRESENCE_DISCONNECT_REQUEST_TIMEOUT_MS);
+
+    try {
+        await fetch(`${convexUrl}/api/mutation`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                path: 'presence:disconnect',
+                args: { sessionToken },
+            }),
+            signal: controller.signal,
+        });
+    } catch (error) {
+        // Non-blocking shutdown: disconnect failures fall back to presence timeout cleanup.
+        console.warn('[Presence] Background disconnect request failed:', error);
+    } finally {
+        clearTimeout(timeoutId);
+    }
 }

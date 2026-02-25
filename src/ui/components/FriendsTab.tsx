@@ -20,6 +20,7 @@ import {
   useConversations,
   useOnlineUsers,
   useEnsureDmConversation,
+  type PresenceStatus,
 } from "@/hooks/useUsers";
 import { Timestamp } from "@/components/Timestamp";
 import DMConversation from "@/components/social/DMConversation";
@@ -29,6 +30,18 @@ import FriendRequestsPanel from "@/components/social/FriendRequestsPanel";
 import type { User } from "@/lib/api/types";
 
 type LeftView = "conversations" | "search" | "requests";
+
+function getPresenceRingClass(status: PresenceStatus) {
+  if (status === "busy") return "ring-red-500/30";
+  if (status === "away") return "ring-amber-500/30";
+  return "ring-green-500/30";
+}
+
+function getPresenceBadgeClass(status: PresenceStatus) {
+  if (status === "busy") return "bg-red-500";
+  if (status === "away") return "bg-amber-500";
+  return "bg-green-500";
+}
 
 function FriendsTab() {
   const { isGuest, user } = useAuthStore();
@@ -50,7 +63,9 @@ function FriendsTab() {
   const { data: conversations = [] } = useConversations(user?.id || "");
   const { data: onlineUsers = [] } = useOnlineUsers();
   const ensureDmConversation = useEnsureDmConversation();
-  const onlineIds = new Set(onlineUsers.map(u => u.id));
+  const onlineStatusById = new Map(
+    onlineUsers.map((onlineUser) => [String(onlineUser.id), onlineUser.status])
+  );
 
   const [searchParams, setSearchParams] = useSearchParams();
   const activeDmConversationId = searchParams.get("dm");
@@ -247,6 +262,7 @@ function FriendsTab() {
                       (c) => String(c.userId) === String(friend.id)
                     );
                     const isActive = activeDmConversationId === conversation?.id;
+                    const friendStatus = onlineStatusById.get(String(friend.id));
 
                     return (
                       <button
@@ -261,13 +277,16 @@ function FriendsTab() {
                         }`}
                       >
                         <div className="relative flex-shrink-0">
-                          <Avatar size="default" className={`h-11 w-11 ${onlineIds.has(friend.id) ? "ring-2 ring-green-500/30" : ""}`}>
+                          <Avatar
+                            size="default"
+                            className={`h-11 w-11 ${friendStatus ? `ring-2 ${getPresenceRingClass(friendStatus)}` : ""}`}
+                          >
                             <AvatarImage src={friend.avatar_url || ""} alt={friend.username} />
                             <AvatarFallback className="bg-muted text-muted-foreground text-sm">
                               {friend.username.substring(0, 2).toUpperCase()}
                             </AvatarFallback>
-                            {onlineIds.has(friend.id) && (
-                              <AvatarBadge className="bg-green-500" />
+                            {friendStatus && (
+                              <AvatarBadge className={getPresenceBadgeClass(friendStatus)} />
                             )}
                           </Avatar>
                           {conversation?.hasUnread && (

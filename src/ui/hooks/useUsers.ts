@@ -4,8 +4,15 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { User } from "@/lib/api/types";
 import { useAuthStore } from "@/stores/authStore";
+import { usePresenceStore } from "@/stores/presenceStore";
 import { useProfileStore } from "./useEnsureProfile";
 import { useConvexAuthStore } from "./useConvexAuth";
+
+export type PresenceStatus = "online" | "away" | "busy";
+export type OnlinePresenceUser = User & {
+  status: PresenceStatus;
+  statusMessage: string;
+};
 
 function convertUser(profile: {
   id: string | Id<"profiles">;
@@ -35,6 +42,13 @@ function convertUser(profile: {
     state_changed_at: profile.state_changed_at ?? new Date().toISOString(),
     created_at: profile.created_at ?? new Date().toISOString(),
   };
+}
+
+function normalizePresenceStatus(status: string | undefined): PresenceStatus {
+  if (status === "away" || status === "busy") {
+    return status;
+  }
+  return "online";
 }
 
 function getPaginatedStatusFlags(status: string) {
@@ -153,14 +167,104 @@ function convertConversation(conv: {
 }
 
 export const useOnlineUsers = () => {
-  const paginated = usePaginatedQuery(api.users.getOnline, {}, { initialNumItems: 50 });
-  const flags = getPaginatedStatusFlags(paginated.status);
+  const { isGuest } = useAuthStore();
+  const { isAuthSet } = useConvexAuthStore();
+  const roomToken = usePresenceStore((state) => state.roomToken);
+  const canQuery = !isGuest && isAuthSet;
+  const result = useQuery(
+    api.users.getOnline,
+    canQuery ? { roomToken: roomToken ?? undefined } : "skip"
+  );
+  const onlineUsers: OnlinePresenceUser[] = (result ?? []).map((profile) => {
+    const user = convertUser(profile);
+    return {
+      ...user,
+      status: normalizePresenceStatus(profile.status),
+      statusMessage: profile.statusMessage ?? "",
+    };
+  });
 
   return {
-    data: paginated.results.map(convertUser),
-    ...flags,
-    fetchNextPage: () => paginated.loadMore(50),
+    data: onlineUsers,
+    isLoading: canQuery && result === undefined,
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    fetchNextPage: () => {},
     error: null,
+  };
+};
+
+export const useOnlineIdsSnapshot = (
+  userIds: Id<"profiles">[],
+  enabled = true
+) => {
+  const convex = useConvex();
+  const stableUserIds = useMemo(
+    () => Array.from(new Map(userIds.map((id) => [String(id), id])).values()),
+    [userIds]
+  );
+  const idsKey = useMemo(
+    () => stableUserIds.map((id) => String(id)).join(","),
+    [stableUserIds]
+  );
+
+  const [data, setData] = useState<Id<"profiles">[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (!enabled) {
+      setData([]);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchOnlineIds = async () => {
+      try {
+        const result = await convex.query(api.users.getOnlineIds, {
+          userIds: stableUserIds,
+        });
+        if (!cancelled) {
+          setData(result);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err as Error);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    setIsLoading(true);
+    void fetchOnlineIds();
+
+    const intervalId = window.setInterval(() => {
+      void fetchOnlineIds();
+    }, 60_000);
+
+    const handleWindowFocus = () => {
+      void fetchOnlineIds();
+    };
+
+    window.addEventListener("focus", handleWindowFocus);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, [convex, enabled, idsKey, stableUserIds]);
+
+  return {
+    data,
+    isLoading,
+    error,
   };
 };
 

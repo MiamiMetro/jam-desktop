@@ -106,6 +106,14 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
     period: TEN_SECONDS,
     capacity: 1,
   },
+
+  // Presence status changes: 10 per minute with small burst allowance
+  presenceStatus: {
+    kind: "token bucket",
+    rate: 10,
+    period: MINUTE,
+    capacity: 3,
+  },
 });
 
 /**
@@ -123,7 +131,8 @@ export type RateLimitName =
   | "blockAction"
   | "createProfile"
   | "general"
-  | "uploadInit";
+  | "uploadInit"
+  | "presenceStatus";
 
 /**
  * Helper to check rate limit and throw a user-friendly error

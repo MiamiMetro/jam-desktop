@@ -22,6 +22,7 @@
   "dependencies": {
     "@base-ui/react": "^1.0.0",
     "@convex-dev/better-auth": "^0.10.10",
+    "@convex-dev/presence": "^0.3.0",
     "@convex-dev/rate-limiter": "^0.3.2",
     "@fontsource-variable/bricolage-grotesque": "^5.2.10",
     "@fontsource-variable/noto-sans": "^5.2.10",

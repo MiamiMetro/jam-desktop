@@ -5,10 +5,12 @@ import NavSidebar from "@/components/navigation/NavSidebar";
 import MainContent from "@/layouts/MainContent";
 import AuthModalRoot from "@/components/auth/AuthModalRoot";
 import { useUIStore } from "@/stores/uiStore";
+import { usePresenceHeartbeat } from "@/hooks/usePresenceHeartbeat";
 
 export default function AppLayout() {
   const { theme, setTheme } = useUIStore();
   const navigate = useNavigate();
+  usePresenceHeartbeat();
 
   // Menu-triggered navigation (Ctrl/Cmd+1-4) and theme toggle (Ctrl/Cmd+T)
   // Shortcuts are registered as menu accelerators in main process
