@@ -174,7 +174,7 @@ export default function DMConversation({
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Conversation Header */}
-      <div className="px-4 py-3 border-b border-border flex items-center gap-3 flex-shrink-0 glass-strong">
+      <div className="page-header caption-safe px-4 py-3 border-b border-border flex items-center gap-3 flex-shrink-0 glass-strong">
         <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full flex-shrink-0" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -231,7 +231,7 @@ export default function DMConversation({
                   </div>
                 )}
                 <div className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-1`}>
-                  <div className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-sm ${
+                  <div className={`max-w-[75%] rounded-xl px-3.5 py-2 text-sm ${
                     isOwn
                       ? "bg-primary text-primary-foreground rounded-br-md shadow-sm"
                       : "bg-muted text-foreground rounded-bl-md"

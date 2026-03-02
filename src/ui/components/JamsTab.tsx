@@ -153,9 +153,9 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Compact Header */}
-      <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
+      <div className="page-header px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
         <Music className="h-4 w-4 text-muted-foreground" />
-        <h2 className="text-sm font-heading font-semibold text-muted-foreground">Jams</h2>
+        <h2 className="text-sm font-semibold text-muted-foreground">Jams</h2>
       </div>
 
       <div className="flex-1 overflow-y-auto p-5">
@@ -168,7 +168,7 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
               <p className="text-sm text-muted-foreground">Loading your room...</p>
             </div>
           ) : myRoom ? (
-            <div className={`p-5 rounded-xl glass-strong relative overflow-hidden ${myRoom.isEnabled
+            <div className={`p-4 rounded-lg glass-strong relative overflow-hidden ${myRoom.isEnabled
               ? "ring-1 ring-primary/30"
               : "ring-1 ring-border"
               }`}>
@@ -180,7 +180,7 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
                     <Hash className="h-4 w-4 text-muted-foreground" />
-                    <h3 className="text-base font-heading font-semibold">My Room</h3>
+                    <h3 className="text-base font-semibold">My Room</h3>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${myRoom.isEnabled
                       ? "bg-green-500/20 text-green-400"
                       : "bg-muted-foreground/20 text-muted-foreground"
@@ -257,21 +257,7 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="flex items-center gap-4 p-4 rounded-xl glass-solid border border-dashed border-border/50">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <Music className="h-5 w-5 text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">Create your room to start jamming</p>
-                <p className="text-xs text-muted-foreground">Set up a room and invite friends</p>
-              </div>
-              <Button variant="default" size="sm" onClick={() => setIsCreateRoomOpen(true)} className="flex-shrink-0">
-                <Plus className="h-4 w-4 mr-1" />
-                Create
-              </Button>
-            </div>
-          )}
+          ) : null}
         </div>
       )}
 
@@ -304,7 +290,7 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
         if (onlineFriends.length === 0 || activeRooms.length === 0) return null;
         return (
           <div className="mb-6">
-            <h3 className="text-sm font-heading font-semibold text-muted-foreground mb-3">
+            <h3 className="text-sm font-semibold text-muted-foreground mb-3">
               Friends Jamming Now
             </h3>
             <div className="flex gap-3 overflow-x-auto pb-1">
@@ -317,7 +303,7 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
                   <button
                     key={friend.id}
                     onClick={() => navigate(`/jam/${friendRoom.id}`)}
-                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl glass-solid hover:glass-strong transition-all duration-200 cursor-pointer min-w-[80px] hover:ring-1 hover:ring-primary/20"
+                    className="flex flex-col items-center gap-1.5 p-3 rounded-lg glass-solid hover:glass-strong transition-all duration-200 cursor-pointer min-w-[80px] hover:ring-1 hover:ring-primary/20"
                   >
                     <Avatar size="default" className={`ring-2 ${getPresenceRingClass(friendStatus)}`}>
                       <AvatarImage src={friend.avatar_url || ""} alt={friend.username} />
@@ -342,16 +328,25 @@ function JamsTab({ onGuestAction }: JamsTabProps) {
 
       {/* Search */}
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm pb-3 -mx-5 px-5">
-        <SearchInput
-          placeholder="Search jams..."
-          value={searchQuery}
-          onSearch={handleSearchChange}
-        />
+        <div className="flex items-center gap-3">
+          <SearchInput
+            placeholder="Search jams..."
+            value={searchQuery}
+            onSearch={handleSearchChange}
+            className="flex-1"
+          />
+          {!isGuest && user && !myRoom && !myRoomLoading && (
+            <Button variant="default" size="sm" className="flex-shrink-0" onClick={() => setIsCreateRoomOpen(true)}>
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Create Room
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Other Jams Grid */}
       <div className="mb-3">
-        <h3 className="text-sm font-heading font-semibold text-muted-foreground mb-3">
+        <h3 className="text-sm font-semibold text-muted-foreground mb-3">
           Live Rooms
         </h3>
       </div>

@@ -115,7 +115,7 @@ function FriendsTab() {
   if (isGuest) {
     return (
       <div className="flex-1 flex flex-col justify-center items-center px-6 py-12 text-center">
-        <div className="rounded-2xl glass-strong px-10 py-8 flex flex-col items-center gap-4 max-w-sm animate-page-in">
+        <div className="rounded-xl glass-strong px-10 py-8 flex flex-col items-center gap-4 max-w-sm animate-page-in">
           <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center">
             <Users className="h-7 w-7 text-muted-foreground" />
           </div>
@@ -136,7 +136,7 @@ function FriendsTab() {
       {/* ─── Left Panel: Conversations ─── */}
       <div className="w-[320px] min-w-[320px] surface-elevated flex flex-col h-full">
         {/* Left Header */}
-        <div className="px-4 pt-3 pb-3 flex-shrink-0 border-b border-border">
+        <div className="page-header px-4 pt-3 pb-3 flex-shrink-0 border-b border-border">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-heading font-semibold text-muted-foreground">Messages</h2>
             <div className="flex items-center gap-1">
@@ -348,7 +348,7 @@ function FriendsTab() {
             key={activeDmConversationId}
             fallback={
               <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
-                <div className="rounded-2xl glass-strong px-8 py-6 flex flex-col items-center gap-3 max-w-xs">
+                <div className="rounded-xl glass-strong px-8 py-6 flex flex-col items-center gap-3 max-w-xs">
                   <div className="text-2xl">:(</div>
                   <h3 className="text-sm font-heading font-semibold">Conversation unavailable</h3>
                   <p className="text-xs text-muted-foreground">This conversation could not be loaded.</p>

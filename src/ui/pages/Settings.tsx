@@ -95,7 +95,7 @@ export default function Settings() {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
+        <div className="page-header caption-safe px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
           <div className="h-8 w-8 rounded animate-shimmer" />
           <div className="h-4 w-28 rounded animate-shimmer" />
         </div>
@@ -111,7 +111,7 @@ export default function Settings() {
   if (!me) {
     return (
       <div className="flex flex-col h-full">
-        <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
+        <div className="page-header caption-safe px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(-1)}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -134,7 +134,7 @@ export default function Settings() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
+      <div className="page-header caption-safe px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -146,7 +146,7 @@ export default function Settings() {
 
       <div className="flex-1 overflow-y-auto p-5">
         <div className="w-full max-w-3xl mx-auto space-y-6">
-          <section className="rounded-xl border border-border glass-solid p-4 space-y-4">
+          <section className="rounded-lg border border-border glass-solid p-4 space-y-4">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Account</h2>
             <div className="space-y-2">
               <label className="text-xs text-muted-foreground">Username</label>
@@ -173,7 +173,7 @@ export default function Settings() {
             </div>
           </section>
 
-          <section className="rounded-xl border border-border glass-solid p-4 space-y-4">
+          <section className="rounded-lg border border-border glass-solid p-4 space-y-4">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Security</h2>
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Email</label>
@@ -197,7 +197,7 @@ export default function Settings() {
             </div>
           </section>
 
-          <section className="rounded-xl border border-destructive/40 p-4 space-y-3">
+          <section className="rounded-lg border border-destructive/40 p-4 space-y-3">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-destructive">Danger Zone</h2>
             <div className="flex items-start gap-2 text-sm text-muted-foreground">
               <ShieldAlert className="h-4 w-4 mt-0.5 text-destructive" />

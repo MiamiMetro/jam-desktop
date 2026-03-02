@@ -12,7 +12,7 @@ export function RoomCard({ room, onClick }: RoomCardProps) {
   return (
     <div
       onClick={() => onClick?.(room.id)}
-      className="p-4 rounded-xl glass-solid hover:glass-strong cursor-pointer transition-all duration-200 group hover:ring-1 hover:ring-primary/20 relative overflow-hidden"
+      className="p-3 rounded-lg glass-solid hover:glass-strong cursor-pointer transition-all duration-200 group hover:ring-1 hover:ring-primary/20 hover:-translate-y-px hover:shadow-md relative overflow-hidden"
     >
       {/* Active pulse indicator */}
       {room.isEnabled && (
@@ -20,7 +20,7 @@ export function RoomCard({ room, onClick }: RoomCardProps) {
       )}
       <div className="flex items-center gap-2 mb-2">
         <Hash className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-        <h3 className="text-sm font-heading font-semibold truncate">
+        <h3 className="text-sm font-semibold truncate">
           {room.name}
         </h3>
         {room.isPrivate && (

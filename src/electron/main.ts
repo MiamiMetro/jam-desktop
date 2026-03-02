@@ -10,7 +10,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Theme background colors (read at startup to prevent native window flash)
-const THEME_BG = { dark: '#05070D', light: '#f5f0e8' } as const;
+// Must approximate the CSS --background values (oklch dark ≈ #1e1d2b, light ≈ #f5f0e8)
+const THEME_BG = { dark: '#1e1d2b', light: '#f5f0e8' } as const;
+
+// Windows titleBarOverlay: transparent so panel backgrounds show through seamlessly
+const OVERLAY_BG = '#00000000';
+
+// Windows titleBarOverlay symbol colors per theme (caption button icons)
+const OVERLAY_SYMBOL = { dark: '#e8e6f0', light: '#2c2518' } as const;
+
+const isMac = process.platform === 'darwin';
+const isWindows = process.platform === 'win32';
 
 function getSavedTheme(): 'dark' | 'light' {
     try {
@@ -201,6 +211,17 @@ if (!gotTheLock) {
         } catch { /* non-critical */ }
     });
 
+    // Update Windows titleBarOverlay symbol color when theme changes (bg stays transparent)
+    ipcMain.handle('update-title-bar-overlay', (_event, theme: 'dark' | 'light') => {
+        if (!isWindows || !mainWindow || mainWindow.isDestroyed()) return;
+        try {
+            mainWindow.setTitleBarOverlay({
+                color: OVERLAY_BG,
+                symbolColor: OVERLAY_SYMBOL[theme],
+            });
+        } catch { /* non-critical: overlay update failed */ }
+    });
+
     // Cache the latest presence session state so main can send non-blocking disconnect on app close.
     ipcMain.on('presence-session-state', (_event, payload: { sessionToken: string | null; convexUrl?: string | null }) => {
         presenceSessionToken = payload.sessionToken ?? null;
@@ -244,6 +265,19 @@ if (!gotTheLock) {
             show: false, // Don't show until ready
             backgroundColor: THEME_BG[getSavedTheme()],
             autoHideMenuBar: process.platform !== 'darwin', // Hide menu on Windows/Linux, keep on macOS
+            // Custom titlebar — native controls, no chrome
+            ...(isMac && {
+                titleBarStyle: 'hiddenInset' as const,
+                trafficLightPosition: { x: 16, y: 14 },
+            }),
+            ...(isWindows && {
+                titleBarStyle: 'hidden' as const,
+                titleBarOverlay: {
+                    color: OVERLAY_BG,
+                    symbolColor: OVERLAY_SYMBOL[getSavedTheme()],
+                    height: 36,
+                },
+            }),
             webPreferences: {
                 preload: preloadPath,
                 nodeIntegration: false,
@@ -335,7 +369,6 @@ if (!gotTheLock) {
         });
 
         // Custom application menu
-        const isMac = process.platform === 'darwin';
         const menuTemplate: Electron.MenuItemConstructorOptions[] = [
             // macOS app menu (required — uses app name automatically)
             ...(isMac ? [{

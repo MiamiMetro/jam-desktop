@@ -163,7 +163,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
       {/* Main Room Content */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {/* Room Header */}
-        <div className="border-b border-border px-4 py-3 flex-shrink-0">
+        <div className="page-header caption-safe border-b border-border px-4 py-3 flex-shrink-0">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" className="flex-shrink-0 h-8 w-8" onClick={() => navigate(-1)}>
               <ArrowLeft className="h-4 w-4" />
@@ -236,7 +236,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             {/* Audio Stream */}
             <div className="mb-4 flex-shrink-0">
-              <div className="p-4 glass-strong rounded-xl">
+              <div className="p-4 glass-strong rounded-lg">
                 {room.streamUrl ? (
                   <div className="flex items-center gap-4">
                     <Button
@@ -333,7 +333,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                   {performers.map((p) => (
                     <div
                       key={p.userId}
-                      className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/10 hover:border-primary/25 transition-all cursor-pointer"
+                      className="flex items-center gap-3 px-4 py-3 rounded-lg bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/10 hover:border-primary/25 transition-all cursor-pointer"
                       onClick={() => navigate(`/profile/${p.username}`)}
                     >
                       <div className="relative">

@@ -111,7 +111,7 @@ function Post() {
   return (
     <div className="flex flex-col h-full">
       {/* Compact Header Bar */}
-      <div className="px-4 py-2.5 border-b border-border flex items-center gap-3 flex-shrink-0">
+      <div className="page-header caption-safe px-4 py-2.5 border-b border-border flex items-center gap-3 flex-shrink-0">
         <Button
           variant="ghost"
           size="icon"
@@ -239,7 +239,7 @@ function Post() {
                 textareaRows={2}
                 textareaMinHeight="60px"
                 maxLength={1000}
-                wrapperClassName="glass-solid rounded-xl p-3"
+                wrapperClassName="glass-solid rounded-lg p-3"
                 inputId="comment-audio-upload"
                 isSubmitting={createCommentMutation.isPending}
               />

@@ -59,7 +59,7 @@ export function AudioPlayer({
     audioPlayer.duration > 0 ? audioPlayer.duration : audioFile.duration;
 
   return (
-    <div className={`p-3 rounded-xl glass-strong ${variant === "post" ? "mb-3" : "mt-2"}`}>
+    <div className={`p-3 rounded-lg glass-strong ${variant === "post" ? "mb-3" : "mt-2"}`}>
       <div className="flex items-center gap-3">
         <Button
           variant="ghost"

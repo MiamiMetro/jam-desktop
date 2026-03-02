@@ -315,7 +315,13 @@ function Profile() {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <div className="h-36 animate-shimmer flex-shrink-0" />
+        <div className="page-header caption-safe px-4 py-2.5 border-b border-border flex items-center gap-3 flex-shrink-0">
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted/50" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm text-muted-foreground">Profile</span>
+        </div>
+        <div className="h-28 animate-shimmer flex-shrink-0" />
         <div className="flex-1 flex min-h-0">
           <div className="w-[320px] min-w-[320px] border-r border-border p-5">
             <div className="-mt-14 h-24 w-24 rounded-full animate-shimmer ring-2 ring-background mb-4" />
@@ -335,12 +341,20 @@ function Profile() {
 
   if (!profileUser) {
     return (
-      <div className="p-6">
-        <EmptyState
-          icon={UserPlus}
-          title="User not found"
-          action={<Button variant="outline" size="sm" onClick={() => navigate(-1)}><ArrowLeft className="h-3.5 w-3.5 mr-1.5" />Go Back</Button>}
-        />
+      <div className="flex flex-col h-full">
+        <div className="page-header caption-safe px-4 py-2.5 border-b border-border flex items-center gap-3 flex-shrink-0">
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted/50" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm text-muted-foreground">Profile</span>
+        </div>
+        <div className="p-6">
+          <EmptyState
+            icon={UserPlus}
+            title="User not found"
+            action={<Button variant="outline" size="sm" onClick={() => navigate(-1)}><ArrowLeft className="h-3.5 w-3.5 mr-1.5" />Go Back</Button>}
+          />
+        </div>
       </div>
     );
   }
@@ -351,23 +365,25 @@ function Profile() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="relative h-36 border-b border-border overflow-hidden flex-shrink-0 bg-gradient-to-br from-primary/30 via-primary/15 to-primary/5" style={bannerStyle}>
-        <div className="absolute inset-0 bg-black/15" />
-        <div className="absolute inset-0 bg-gradient-primary-tl" />
-        <div className="absolute inset-0 bg-gradient-primary-br" />
+      {/* Standard page header */}
+      <div className="page-header caption-safe px-4 py-2.5 border-b border-border flex items-center gap-3 flex-shrink-0">
         <Button
           variant="ghost"
           size="icon"
-          className="absolute top-3 left-3 z-10 glass-solid hover:glass-strong"
+          className="h-8 w-8 rounded-lg hover:bg-muted/50"
           onClick={() => navigate(-1)}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
+        <span className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">{visibleDisplayName || profileUser.username}</span>
+        </span>
+        <div className="flex-1" />
         {isPreviewing && (
           <Button
             variant="outline"
             size="sm"
-            className={`absolute top-3 right-3 z-10 glass-solid hover:glass-strong transition-all duration-200 ${
+            className={`transition-all duration-200 ${
               stopPreviewAnimPhase === "hidden"
                 ? "opacity-0 -translate-y-1 scale-95"
                 : "opacity-100 translate-y-0 scale-100"
@@ -377,6 +393,13 @@ function Profile() {
             Stop Preview
           </Button>
         )}
+      </div>
+
+      {/* Banner — decorative */}
+      <div className="relative h-28 border-b border-border overflow-hidden flex-shrink-0 bg-gradient-to-br from-primary/30 via-primary/15 to-primary/5" style={bannerStyle}>
+        <div className="absolute inset-0 bg-black/15" />
+        <div className="absolute inset-0 bg-gradient-primary-tl" />
+        <div className="absolute inset-0 bg-gradient-primary-br" />
       </div>
 
       <div className="flex-1 flex min-h-0">

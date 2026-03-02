@@ -219,15 +219,17 @@ export default function NavSidebar() {
 
   return (
     <div className="w-[220px] min-w-[220px] surface-elevated flex flex-col h-full select-none relative z-10">
-      {/* Brand */}
-      <div className="px-5 pt-5 pb-4">
-        <div className="flex items-center gap-2.5 cursor-pointer group" onClick={() => navigate("/")}>
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/15 group-hover:bg-primary/20 transition-colors">
-            <Logo className="w-5 h-5 opacity-90 group-hover:opacity-100 transition-opacity" />
+      {/* Brand + drag region */}
+      <div className="drag-region titlebar-sidebar-pad">
+        <div className="px-5 pt-4 pb-3">
+          <div className="no-drag flex items-center gap-2 cursor-pointer group" onClick={() => navigate("/")}>
+            <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-primary/15 group-hover:bg-primary/20 transition-colors">
+              <Logo className="w-4 h-4 opacity-90 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <h1 className="text-lg font-bold tracking-tight text-foreground group-hover:text-primary transition-colors" style={{ fontFamily: "'Bricolage Grotesque Variable', 'Bricolage Grotesque', sans-serif" }}>
+              Jam
+            </h1>
           </div>
-          <h1 className="text-xl font-heading font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
-            Jam
-          </h1>
         </div>
       </div>
 
@@ -253,7 +255,7 @@ export default function NavSidebar() {
                     <span className={`transition-colors duration-200 ${active ? "text-primary" : ""}`}>
                       {item.icon}
                     </span>
-                    <span>{item.label}</span>
+                    <span className="flex-1">{item.label}</span>
                   </button>
                 }
               />

@@ -28,7 +28,7 @@ function NotFound() {
   const navigate = useNavigate();
   return (
     <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-12">
-      <div className="rounded-2xl glass-strong px-10 py-8 flex flex-col items-center gap-3 max-w-sm">
+      <div className="rounded-xl glass-strong px-10 py-8 flex flex-col items-center gap-3 max-w-sm">
         <div className="text-4xl font-heading font-bold text-muted-foreground">404</div>
         <h2 className="text-base font-heading font-semibold">Page not found</h2>
         <p className="text-sm text-muted-foreground">This page doesn't exist or has been moved.</p>

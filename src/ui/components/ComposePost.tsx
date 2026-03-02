@@ -39,7 +39,7 @@ export function ComposePost({
   textareaRows = 4,
   textareaMinHeight = "100px",
   maxLength = MAX_POST_LENGTH,
-  wrapperClassName = "glass-strong rounded-xl mx-4 my-3 p-4",
+  wrapperClassName = "glass-strong rounded-lg mx-4 my-3 p-4",
   inputId = "audio-upload",
   isSubmitting = false,
 }: ComposePostProps) {
@@ -176,7 +176,7 @@ export function ComposePost({
           )}
           {/* Recorded Audio Preview */}
           {recordedAudio && (
-            <div className="flex items-center gap-3 p-3 glass-solid rounded-xl">
+            <div className="flex items-center gap-3 p-3 glass-solid rounded-lg">
               <Button
                 variant="ghost"
                 size="icon"
@@ -227,7 +227,7 @@ export function ComposePost({
 
           {/* Uploaded Audio Preview */}
           {newPost.audioFile && !recordedAudio && (
-            <div className="flex items-center gap-2 p-3 glass-solid rounded-xl">
+            <div className="flex items-center gap-2 p-3 glass-solid rounded-lg">
               <Music className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm flex-1 truncate">{newPost.audioFile.name}</span>
               <Button

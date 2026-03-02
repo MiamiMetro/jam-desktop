@@ -120,7 +120,7 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
       {/* Main Feed Column */}
       <div ref={parentRef} className="flex-1 min-w-0 overflow-y-auto">
         {/* Compact Feed Header */}
-        <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+        <div className="page-header px-5 py-3 border-b border-border flex items-center gap-2">
           <Rss className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-heading font-semibold text-muted-foreground">Feed</h2>
         </div>
@@ -202,7 +202,9 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
       </div>
 
       {/* Activity Sidebar */}
-      <div className="w-72 flex-shrink-0 border-l border-border overflow-y-auto p-4 space-y-6">
+      <div className="w-72 flex-shrink-0 border-l border-border flex flex-col">
+        <div className="page-header caption-safe py-3 flex-shrink-0" />
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
         {/* Active Jams */}
         {(() => {
           const activeRooms = rooms.filter(r => r.isEnabled).slice(0, 3);
@@ -294,6 +296,7 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

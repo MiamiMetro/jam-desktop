@@ -21,6 +21,7 @@ export const useUIStore = create<UIState>((set) => ({
       ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
       : theme;
     window.electron?.saveTheme?.(resolved);
+    window.electron?.updateTitleBarOverlay?.(resolved);
     set({ theme });
   },
   rightPanelOpen: (() => {

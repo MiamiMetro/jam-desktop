@@ -46,7 +46,7 @@ export default function PostModal() {
       {/* Modal */}
       <div
         data-post-modal
-        className={`relative w-full max-w-2xl h-[85vh] bg-background rounded-xl border border-border shadow-2xl overflow-hidden flex flex-col transition-all duration-150 ${
+        className={`relative w-full max-w-2xl h-[85vh] bg-background rounded-lg border border-border shadow-2xl overflow-hidden flex flex-col transition-all duration-150 ${
           closing
             ? "opacity-0 scale-95"
             : "animate-in fade-in zoom-in-95 duration-200"

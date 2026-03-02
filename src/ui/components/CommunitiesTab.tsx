@@ -161,7 +161,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
         {/* Main Content */}
         <div className="flex-1 min-w-0 overflow-y-auto border-r border-border">
           {/* Community Header — compact, consistent */}
-          <div className="px-5 py-3 border-b border-border flex-shrink-0">
+          <div className="page-header px-5 py-3 border-b border-border flex-shrink-0">
             <div className="flex items-center gap-3">
               <Button
                 variant="ghost"
@@ -251,27 +251,30 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
         </div>
 
         {/* Members Sidebar */}
-        <div className="w-60 flex-shrink-0 p-4 overflow-y-auto">
-          <h3 className="text-xs font-heading font-semibold text-muted-foreground mb-3 flex items-center gap-2 uppercase tracking-wider">
-            <Users className="h-3.5 w-3.5" />
-            Active Members
-          </h3>
-          <div className="space-y-1">
-            {mockMembers.map((member) => (
-              <button
-                key={member.id}
-                onClick={() => navigate(`/profile/${member.username}`)}
-                className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-              >
-                <Avatar size="sm" className="h-8 w-8">
-                  <AvatarImage src={member.avatar} alt={member.username} />
-                  <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-                    {member.username.substring(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="text-sm font-medium truncate">{member.username}</span>
-              </button>
-            ))}
+        <div className="w-60 flex-shrink-0 flex flex-col">
+          <div className="page-header caption-safe py-3 flex-shrink-0" />
+          <div className="flex-1 overflow-y-auto p-4">
+            <h3 className="text-xs font-heading font-semibold text-muted-foreground mb-3 flex items-center gap-2 uppercase tracking-wider">
+              <Users className="h-3.5 w-3.5" />
+              Active Members
+            </h3>
+            <div className="space-y-1">
+              {mockMembers.map((member) => (
+                <button
+                  key={member.id}
+                  onClick={() => navigate(`/profile/${member.username}`)}
+                  className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                >
+                  <Avatar size="sm" className="h-8 w-8">
+                    <AvatarImage src={member.avatar} alt={member.username} />
+                    <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                      {member.username.substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium truncate">{member.username}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -281,7 +284,7 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Compact Header */}
-      <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
+      <div className="page-header caption-safe px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
         <Disc3 className="h-4 w-4 text-muted-foreground" />
         <h2 className="text-sm font-heading font-semibold text-muted-foreground">Communities</h2>
       </div>

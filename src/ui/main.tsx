@@ -14,6 +14,15 @@ import { useAuthStore } from "./stores/authStore";
 import { useConvexAuth } from "./hooks/useConvexAuth";
 import { instrumentConvexClient } from "./lib/convex-debug";
 
+// Set platform class on <html> synchronously before React mounts (prevents layout shift)
+if (window.electron?.platform === 'darwin') {
+  document.documentElement.classList.add('electron-mac');
+} else if (window.electron?.platform === 'win32') {
+  document.documentElement.classList.add('electron-windows');
+} else if (window.electron?.platform) {
+  document.documentElement.classList.add('electron-linux');
+}
+
 const ConvexDebugPanel = lazy(() => import("./components/debug/ConvexDebugPanel"));
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL);

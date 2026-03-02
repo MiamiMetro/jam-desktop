@@ -29,7 +29,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       if (this.props.fallback) return this.props.fallback;
       return (
         <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-12">
-          <div className="rounded-2xl glass-strong px-10 py-8 flex flex-col items-center gap-3 max-w-sm">
+          <div className="rounded-xl glass-strong px-10 py-8 flex flex-col items-center gap-3 max-w-sm">
             <div className="text-3xl">:(</div>
             <h2 className="text-base font-heading font-semibold">Something went wrong</h2>
             <p className="text-sm text-muted-foreground leading-relaxed">

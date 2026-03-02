@@ -33,6 +33,7 @@ export default function AppLayout() {
         const isSystemLight = !window.matchMedia("(prefers-color-scheme: dark)").matches;
         root.classList.toggle("dark", !isSystemLight);
         root.classList.toggle("light", isSystemLight);
+        window.electron?.updateTitleBarOverlay?.(isSystemLight ? "light" : "dark");
       } else {
         root.classList.toggle("dark", theme === "dark");
         root.classList.toggle("light", theme === "light");
@@ -52,7 +53,7 @@ export default function AppLayout() {
   return (
     <div className="flex h-screen bg-background text-foreground app-bg">
       <NavSidebar />
-      <div className="flex-1 flex flex-col bg-background overflow-hidden relative z-10">
+      <div className="content-column flex-1 flex flex-col bg-background overflow-hidden relative z-10">
         <MainContent />
       </div>
       <AuthModalRoot />
