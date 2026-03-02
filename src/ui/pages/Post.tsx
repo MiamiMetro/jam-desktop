@@ -111,19 +111,17 @@ function Post() {
   return (
     <div className="flex flex-col h-full">
       {/* Compact Header Bar */}
-      <div className="page-header caption-safe px-4 py-2.5 border-b border-border flex items-center gap-3 flex-shrink-0">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 rounded-lg hover:bg-muted/50"
+      <div className="page-header caption-safe px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
+        <button
+          className="no-drag cursor-pointer text-muted-foreground hover:text-foreground transition-colors"
           onClick={() => navigate(-1)}
         >
           <ArrowLeft className="h-4 w-4" />
-        </Button>
+        </button>
         {post && (
-          <span className="text-sm text-muted-foreground">
-            Post by <span className="font-medium text-foreground">{post.author.username}</span>
-          </span>
+          <h2 className="text-sm font-semibold text-muted-foreground">
+            Post by {post.author.username}
+          </h2>
         )}
       </div>
 

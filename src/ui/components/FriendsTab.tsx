@@ -136,7 +136,7 @@ function FriendsTab() {
       {/* ─── Left Panel: Conversations ─── */}
       <div className="w-[320px] min-w-[320px] surface-elevated flex flex-col h-full">
         {/* Left Header */}
-        <div className="page-header px-4 pt-3 pb-3 flex-shrink-0 border-b border-border">
+        <div className="page-header px-5 py-3 flex-shrink-0 border-b border-border">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-heading font-semibold text-muted-foreground">Messages</h2>
             <div className="flex items-center gap-1">

@@ -162,15 +162,13 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
         <div className="flex-1 min-w-0 overflow-y-auto border-r border-border">
           {/* Community Header — compact, consistent */}
           <div className="page-header px-5 py-3 border-b border-border flex-shrink-0">
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 flex-shrink-0"
+            <div className="flex items-center gap-2">
+              <button
+                className="no-drag cursor-pointer flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                 onClick={() => navigate(-1)}
               >
                 <ArrowLeft className="h-4 w-4" />
-              </Button>
+              </button>
               <Avatar className="h-10 w-10 flex-shrink-0 ring-1 ring-border">
                 <AvatarImage src="" alt={selectedCommunity.name} />
                 <AvatarFallback className={`${communityGenre.bg} ${communityGenre.text} text-sm font-bold`}>

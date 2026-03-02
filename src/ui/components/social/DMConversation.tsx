@@ -174,10 +174,10 @@ export default function DMConversation({
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Conversation Header */}
-      <div className="page-header caption-safe px-4 py-3 border-b border-border flex items-center gap-3 flex-shrink-0 glass-strong">
-        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full flex-shrink-0" onClick={onBack}>
+      <div className="page-header caption-safe px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0 glass-strong">
+        <button className="no-drag cursor-pointer text-muted-foreground hover:text-foreground transition-colors flex-shrink-0" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
-        </Button>
+        </button>
         {!isGroupConversation && chatPartner ? (
           <button
             onClick={() => navigate(`/profile/${chatPartner.username}`)}

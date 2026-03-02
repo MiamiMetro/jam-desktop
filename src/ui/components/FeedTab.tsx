@@ -118,12 +118,14 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
   return (
     <div className="flex h-full">
       {/* Main Feed Column */}
-      <div ref={parentRef} className="flex-1 min-w-0 overflow-y-auto">
-        {/* Compact Feed Header */}
-        <div className="page-header px-5 py-3 border-b border-border flex items-center gap-2">
+      <div className="flex-1 min-w-0 flex flex-col">
+        {/* Compact Feed Header — fixed, never scrolls */}
+        <div className="page-header px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
           <Rss className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-heading font-semibold text-muted-foreground">Feed</h2>
         </div>
+
+        <div ref={parentRef} className="flex-1 overflow-y-auto">
 
         {/* Compose Post Area */}
         <div>
@@ -199,6 +201,7 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
             </div>
           </>
         )}
+      </div>
       </div>
 
       {/* Activity Sidebar */}

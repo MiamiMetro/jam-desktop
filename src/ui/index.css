@@ -506,9 +506,9 @@ body::-webkit-scrollbar {
   padding-top: 38px;
 }
 
-/* Windows: small top pad on sidebar to align with content */
+/* Windows: no extra sidebar pad — headers start at y=0 */
 .electron-windows .titlebar-sidebar-pad {
-  padding-top: 6px;
+  padding-top: 0;
 }
 
 /* Windows: push right-side content away from caption buttons (~140px wide) */

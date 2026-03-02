@@ -96,7 +96,7 @@ export default function Settings() {
     return (
       <div className="flex flex-col h-full">
         <div className="page-header caption-safe px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
-          <div className="h-8 w-8 rounded animate-shimmer" />
+          <div className="h-4 w-4 rounded animate-shimmer" />
           <div className="h-4 w-28 rounded animate-shimmer" />
         </div>
         <div className="flex-1 overflow-y-auto p-5">
@@ -112,10 +112,10 @@ export default function Settings() {
     return (
       <div className="flex flex-col h-full">
         <div className="page-header caption-safe px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(-1)}>
+          <button className="no-drag cursor-pointer text-muted-foreground hover:text-foreground transition-colors" onClick={() => navigate(-1)}>
             <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <h2 className="text-sm font-heading font-semibold text-muted-foreground">Settings</h2>
+          </button>
+          <h2 className="text-sm font-semibold text-muted-foreground">Settings</h2>
         </div>
         <div className="flex-1 overflow-y-auto p-5">
           <div className="max-w-3xl mx-auto">
@@ -135,13 +135,10 @@ export default function Settings() {
   return (
     <div className="flex flex-col h-full">
       <div className="page-header caption-safe px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(-1)}>
+        <button className="no-drag cursor-pointer text-muted-foreground hover:text-foreground transition-colors" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="min-w-0">
-          <h2 className="text-sm font-heading font-semibold text-muted-foreground">Settings</h2>
-          <p className="text-xs text-muted-foreground/80">Account and security management.</p>
-        </div>
+        </button>
+        <h2 className="text-sm font-semibold text-muted-foreground">Settings</h2>
       </div>
 
       <div className="flex-1 overflow-y-auto p-5">

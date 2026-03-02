@@ -163,11 +163,11 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
       {/* Main Room Content */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {/* Room Header */}
-        <div className="page-header caption-safe border-b border-border px-4 py-3 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="flex-shrink-0 h-8 w-8" onClick={() => navigate(-1)}>
+        <div className="page-header caption-safe border-b border-border px-5 py-3 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <button className="no-drag cursor-pointer flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors" onClick={() => navigate(-1)}>
               <ArrowLeft className="h-4 w-4" />
-            </Button>
+            </button>
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">

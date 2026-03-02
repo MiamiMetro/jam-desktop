@@ -315,11 +315,11 @@ function Profile() {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <div className="page-header caption-safe px-4 py-2.5 border-b border-border flex items-center gap-3 flex-shrink-0">
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted/50" onClick={() => navigate(-1)}>
+        <div className="page-header caption-safe px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
+          <button className="no-drag cursor-pointer text-muted-foreground hover:text-foreground transition-colors" onClick={() => navigate(-1)}>
             <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm text-muted-foreground">Profile</span>
+          </button>
+          <h2 className="text-sm font-semibold text-muted-foreground">Profile</h2>
         </div>
         <div className="h-28 animate-shimmer flex-shrink-0" />
         <div className="flex-1 flex min-h-0">
@@ -342,11 +342,11 @@ function Profile() {
   if (!profileUser) {
     return (
       <div className="flex flex-col h-full">
-        <div className="page-header caption-safe px-4 py-2.5 border-b border-border flex items-center gap-3 flex-shrink-0">
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted/50" onClick={() => navigate(-1)}>
+        <div className="page-header caption-safe px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
+          <button className="no-drag cursor-pointer text-muted-foreground hover:text-foreground transition-colors" onClick={() => navigate(-1)}>
             <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm text-muted-foreground">Profile</span>
+          </button>
+          <h2 className="text-sm font-semibold text-muted-foreground">Profile</h2>
         </div>
         <div className="p-6">
           <EmptyState
@@ -366,24 +366,20 @@ function Profile() {
   return (
     <div className="flex flex-col h-full">
       {/* Standard page header */}
-      <div className="page-header caption-safe px-4 py-2.5 border-b border-border flex items-center gap-3 flex-shrink-0">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 rounded-lg hover:bg-muted/50"
+      <div className="page-header caption-safe px-5 py-3 border-b border-border flex items-center gap-2 flex-shrink-0">
+        <button
+          className="no-drag cursor-pointer text-muted-foreground hover:text-foreground transition-colors"
           onClick={() => navigate(-1)}
         >
           <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <span className="text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{visibleDisplayName || profileUser.username}</span>
-        </span>
+        </button>
+        <h2 className="text-sm font-semibold text-muted-foreground">{visibleDisplayName || profileUser.username}</h2>
         <div className="flex-1" />
         {isPreviewing && (
           <Button
             variant="outline"
             size="sm"
-            className={`transition-all duration-200 ${
+            className={`no-drag transition-all duration-200 ${
               stopPreviewAnimPhase === "hidden"
                 ? "opacity-0 -translate-y-1 scale-95"
                 : "opacity-100 translate-y-0 scale-100"
