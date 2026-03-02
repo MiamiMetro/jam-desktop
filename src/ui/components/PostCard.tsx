@@ -17,26 +17,22 @@ import type { FrontendPost } from '@/hooks/usePosts';
 interface PostCardProps {
   post: FrontendPost;
   communityName?: string | null;
-  isPlaying?: boolean;
   isGuest?: boolean;
   onAuthorClick?: (username: string) => void;
   onCommunityClick?: (communityId: string) => void;
   onPostClick?: (postId: string) => void;
   onLike?: (postId: string) => void;
-  onPlayPause?: () => void;
   formatTimeAgo: (date: Date) => string;
 }
 
 export function PostCard({
   post,
   communityName,
-  isPlaying = false,
   isGuest = false,
   onAuthorClick,
   onCommunityClick,
   onPostClick,
   onLike,
-  onPlayPause,
   formatTimeAgo,
 }: PostCardProps) {
   const [copied, setCopied] = useState(false);
@@ -105,9 +101,9 @@ export function PostCard({
           )}
           {post.audioFile && (
             <AudioPlayer
+              postId={post.id}
               audioFile={post.audioFile}
-              isActive={isPlaying}
-              onActivate={() => onPlayPause?.()}
+              authorName={post.author.username}
               isGuest={isGuest}
               variant="post"
             />

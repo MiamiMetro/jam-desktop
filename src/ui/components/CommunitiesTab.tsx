@@ -75,8 +75,6 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
     if (query) params.search = query;
     setSearchParams(params, { replace: true });
   }, [categoryFilter, setSearchParams]);
-  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
-  
   const handleAuthorClick = (username: string) => {
     navigate(`/profile/${username}`);
   };
@@ -233,13 +231,11 @@ function CommunitiesTab({ onGuestAction }: CommunitiesTabProps) {
                   <PostCard
                     post={post}
                     communityName={null}
-                    isPlaying={playingAudioId === post.id}
                     isGuest={isGuest}
                     onAuthorClick={handleAuthorClick}
                     onCommunityClick={handleCommunityClick}
                     onPostClick={handlePostClick}
                     onLike={handleLikePost}
-                    onPlayPause={() => setPlayingAudioId(playingAudioId === post.id ? null : post.id)}
                     formatTimeAgo={formatTimeAgo}
                   />
                 </div>

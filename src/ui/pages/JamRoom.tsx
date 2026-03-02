@@ -29,6 +29,7 @@ import { useJam, useUpdateRoomActivity } from "@/hooks/useJams";
 import type { RoomParticipant } from "@/hooks/useJams";
 import { useAllUsers } from "@/hooks/useUsers";
 import { usePlayer } from "@/contexts/PlayerContext";
+import { usePostAudio } from "@/contexts/PostAudioContext";
 import { Timestamp } from "@/components/Timestamp";
 import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
@@ -60,6 +61,7 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
 
   // HLS stream player (shared via context so StatusBar can control it too)
   const hlsPlayer = usePlayer();
+  const postAudio = usePostAudio();
   const [messages, setMessages] = useState<Array<{
     id: string;
     userId: string;
@@ -245,7 +247,12 @@ function JamRoom({ roomId }: JamRoomProps = {}) {
                       variant="ghost"
                       size="icon"
                       className="h-14 w-14 rounded-full glass-solid hover:bg-foreground/[0.06] flex-shrink-0"
-                      onClick={() => hlsPlayer.togglePlayPause()}
+                      onClick={() => {
+                        if (!hlsPlayer.isPlaying && postAudio.currentTrack) {
+                          postAudio.stop();
+                        }
+                        hlsPlayer.togglePlayPause();
+                      }}
                       disabled={hlsPlayer.isLoading}
                     >
                       {hlsPlayer.isLoading ? (

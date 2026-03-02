@@ -1,46 +1,52 @@
 // AudioPlayer.tsx — Unified audio player for posts and comments
+// Connects to the global PostAudioContext singleton instead of owning its own Audio element.
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Music, Play, Pause, Volume2, VolumeX } from "lucide-react";
-import { useAudioPlayer } from "@/hooks/useAudioPlayer";
+import { usePostAudio } from "@/contexts/PostAudioContext";
 import { formatDuration } from "@/lib/postUtils";
 
 interface AudioPlayerProps {
+  postId: string;
   audioFile: {
     url: string;
     title: string;
     duration: number;
   };
-  isActive: boolean;
-  onActivate: () => void;
+  authorName: string;
   isGuest?: boolean;
   variant?: "post" | "comment";
 }
 
 export function AudioPlayer({
+  postId,
   audioFile,
-  isActive,
-  onActivate,
+  authorName,
   isGuest = false,
   variant = "post",
 }: AudioPlayerProps) {
-  // Only enable audio player if URL is valid (not "#" placeholder)
-  const audioUrl = audioFile.url && audioFile.url !== "#" ? audioFile.url : undefined;
-  const audioPlayer = useAudioPlayer(audioUrl);
+  const ctx = usePostAudio();
+  const isActive = ctx.currentTrack?.id === postId;
+  const isThisPlaying = isActive && ctx.isPlaying;
 
+  // Register/unregister for visibility tracking
   useEffect(() => {
-    if (!isActive && audioPlayer.isPlaying) {
-      audioPlayer.pause();
-    }
-  }, [isActive, audioPlayer.isPlaying, audioPlayer.pause]);
+    ctx.registerPlayer(postId);
+    return () => ctx.unregisterPlayer(postId);
+  }, [postId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleClick = () => {
     if (isGuest) return;
     if (!isActive) {
-      onActivate();
-      void audioPlayer.play();
+      ctx.play({
+        id: postId,
+        url: audioFile.url,
+        title: audioFile.title,
+        author: authorName,
+        sourceType: variant,
+      });
     } else {
-      audioPlayer.togglePlayPause();
+      ctx.togglePlayPause();
     }
   };
 
@@ -50,13 +56,19 @@ export function AudioPlayer({
     const x = e.clientX - rect.left;
     const percentage = (x / rect.width) * 100;
     if (!isActive) {
-      onActivate();
+      ctx.play({
+        id: postId,
+        url: audioFile.url,
+        title: audioFile.title,
+        author: authorName,
+        sourceType: variant,
+      });
     }
-    audioPlayer.seek(percentage);
+    ctx.seek(percentage);
   };
 
-  const displayDuration =
-    audioPlayer.duration > 0 ? audioPlayer.duration : audioFile.duration;
+  const displayProgress = isActive ? ctx.progress : 0;
+  const displayDuration = isActive && ctx.duration > 0 ? ctx.duration : audioFile.duration;
 
   return (
     <div className={`p-3 rounded-lg glass-strong ${variant === "post" ? "mb-3" : "mt-2"}`}>
@@ -68,7 +80,7 @@ export function AudioPlayer({
           onClick={handleClick}
           disabled={isGuest}
         >
-          {isActive && audioPlayer.isPlaying ? (
+          {isThisPlaying ? (
             <Pause className="h-5 w-5" />
           ) : (
             <Play className="h-5 w-5" />
@@ -88,22 +100,22 @@ export function AudioPlayer({
             >
               <div
                 className="h-full bg-primary transition-all"
-                style={{ width: `${audioPlayer.progress}%` }}
+                style={{ width: `${displayProgress}%` }}
               />
             </div>
             <span className="text-xs text-muted-foreground tabular-nums">
-              {audioPlayer.progress > 0
-                ? `${formatDuration((audioPlayer.progress / 100) * displayDuration)} / ${formatDuration(displayDuration)}`
+              {displayProgress > 0
+                ? `${formatDuration((displayProgress / 100) * displayDuration)} / ${formatDuration(displayDuration)}`
                 : formatDuration(displayDuration)}
             </span>
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <button
                 type="button"
-                onClick={audioPlayer.toggleMute}
+                onClick={ctx.toggleMute}
                 className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                 disabled={isGuest}
               >
-                {audioPlayer.volume === 0 ? (
+                {ctx.volume === 0 ? (
                   <VolumeX className="h-3.5 w-3.5" />
                 ) : (
                   <Volume2 className="h-3.5 w-3.5" />
@@ -114,8 +126,8 @@ export function AudioPlayer({
                 min={0}
                 max={1}
                 step={0.05}
-                value={audioPlayer.volume}
-                onChange={(e) => audioPlayer.setVolume(parseFloat(e.target.value))}
+                value={ctx.volume}
+                onChange={(e) => ctx.setVolume(parseFloat(e.target.value))}
                 className="w-16 h-1 accent-primary cursor-pointer"
                 disabled={isGuest}
               />

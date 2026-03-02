@@ -52,8 +52,6 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
   const handleAuthorClick = (username: string) => {
     navigate(`/profile/${username}`);
   };
-  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
-
   const handleCreatePost = async (content: string, audioFile: File | null) => {
     if (isGuest) return;
     await createPostMutation.mutateAsync({ content, audioFile });
@@ -177,13 +175,11 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
                       <PostCard
                         post={post}
                         communityName={communityName}
-                        isPlaying={playingAudioId === post.id}
                         isGuest={isGuest}
                         onAuthorClick={handleAuthorClick}
                         onCommunityClick={handleCommunityClick}
                         onPostClick={handlePostClick}
                         onLike={handleLikePost}
-                        onPlayPause={() => setPlayingAudioId(playingAudioId === post.id ? null : post.id)}
                         formatTimeAgo={formatTimeAgo}
                       />
                     </div>

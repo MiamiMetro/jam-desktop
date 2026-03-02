@@ -36,7 +36,6 @@ function Post() {
   const toggleCommentLikeMutation = useToggleCommentLike();
   const { data: communities = [] } = useCommunities();
 
-  const [activeAudioTarget, setActiveAudioTarget] = useState<"post" | string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const handleShare = useCallback(() => {
@@ -179,11 +178,9 @@ function Post() {
           {post.audioFile && (
             <div className="pt-2 border-t border-border/20">
               <AudioPlayer
+                postId={post.id}
                 audioFile={post.audioFile}
-                isActive={activeAudioTarget === "post"}
-                onActivate={() => {
-                  setActiveAudioTarget("post");
-                }}
+                authorName={post.author.username}
                 isGuest={isGuest}
                 variant="post"
               />
@@ -286,11 +283,9 @@ function Post() {
                       )}
                       {comment.audioFile && (
                         <AudioPlayer
+                          postId={comment.id}
                           audioFile={comment.audioFile}
-                          isActive={activeAudioTarget === comment.id}
-                          onActivate={() => {
-                            setActiveAudioTarget(comment.id);
-                          }}
+                          authorName={comment.author.username}
                           variant="comment"
                         />
                       )}

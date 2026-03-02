@@ -70,7 +70,6 @@ function Profile() {
   const { hasPendingRequest } = useSentFriendRequests();
 
   const [activeTab, setActiveTab] = useState<"posts" | "friends">("posts");
-  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editDisplayName, setEditDisplayName] = useState("");
@@ -588,12 +587,10 @@ function Profile() {
                         <PostCard
                           post={post}
                           communityName={null}
-                          isPlaying={playingAudioId === post.id}
                           isGuest={isGuest}
                           onAuthorClick={(u) => navigate(`/profile/${u}`)}
                           onPostClick={(pid) => navigate(`/post/${pid}`, { state: { backgroundLocation: location } })}
                           onLike={handleLikePost}
-                          onPlayPause={() => setPlayingAudioId(playingAudioId === post.id ? null : post.id)}
                           formatTimeAgo={formatTimeAgo}
                         />
                       </div>
