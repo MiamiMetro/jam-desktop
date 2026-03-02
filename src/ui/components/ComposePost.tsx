@@ -92,9 +92,7 @@ export function ComposePost({
         deleteRecording();
       }
     } catch (error) {
-      if (error instanceof Error && error.message.includes("AUDIO_NOT_IMPLEMENTED_YET")) {
-        setSubmitError("Audio posting is not implemented yet.");
-      } else if (error instanceof Error && error.message) {
+      if (error instanceof Error && error.message) {
         setSubmitError(error.message);
       } else {
         setSubmitError("Failed to submit. Please try again.");

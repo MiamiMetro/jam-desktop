@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AutoLinkedText } from "@/components/AutoLinkedText";
 import { Timestamp } from "@/components/Timestamp";
-import { ArrowLeft, Send, ChevronDown } from "lucide-react";
+import { ArrowLeft, Send, ChevronDown, Trash2 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import {
   useMessages,
   useSendMessage,
   useMarkAsRead,
+  useDeleteMessage,
   useConversationParticipants,
   type UIConversation,
 } from "@/hooks/useUsers";
@@ -89,6 +90,7 @@ export default function DMConversation({
   } = useMessages(user?.id || "", conversationId);
   const sendMessageMutation = useSendMessage();
   const markAsReadMutation = useMarkAsRead();
+  const deleteMessageMutation = useDeleteMessage();
 
   const currentConversation = conversation ?? null;
   const chatPartner =
@@ -230,40 +232,60 @@ export default function DMConversation({
                     <div className="flex-1 h-px bg-primary/30" />
                   </div>
                 )}
-                <div className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-1`}>
-                  <div className={`max-w-[75%] rounded-xl px-3.5 py-2 text-sm ${
-                    isOwn
-                      ? "bg-primary text-primary-foreground rounded-br-md shadow-sm"
-                      : "bg-muted text-foreground rounded-bl-md"
-                  }`}>
-                    <AutoLinkedText
-                      text={message.content || ''}
-                      className="wrap-break-word whitespace-pre-wrap leading-relaxed"
-                      linkClassName={isOwn ? "underline text-primary-foreground hover:opacity-80" : "underline text-primary hover:opacity-80"}
-                    />
-                    <div className={`text-[10px] mt-1 flex items-center gap-1 ${
-                      isOwn ? "text-primary-foreground/60 justify-end" : "text-muted-foreground"
-                    }`}>
-                      {message.timestamp ? (
-                        <Timestamp date={message.timestamp}>{formatTime(message.timestamp)}</Timestamp>
-                      ) : (
-                        <span>now</span>
-                      )}
+                <div className={`group flex items-center gap-1.5 ${isOwn ? "justify-end" : "justify-start"} mb-1`}>
+                  {message.isDeleted ? (
+                    <p className={`text-xs italic text-muted-foreground/50 px-1 ${isOwn ? "text-right" : ""}`}>
+                      ♪ message removed
+                      <span className="not-italic ml-1.5 text-muted-foreground/30">
+                        • {message.timestamp ? formatTime(message.timestamp) : "now"}
+                      </span>
+                    </p>
+                  ) : (
+                    <>
                       {isOwn && (
-                        <span
-                          className={`inline-block w-1.5 h-1.5 rounded-full ${
-                            message._creationTime && otherParticipantLastRead && message._creationTime <= otherParticipantLastRead
-                              ? "bg-emerald-400"
-                              : "bg-primary-foreground/30"
-                          }`}
-                          title={
-                            message._creationTime && otherParticipantLastRead && message._creationTime <= otherParticipantLastRead
-                              ? "Read" : "Delivered"
-                          }
-                        />
+                        <button
+                          onClick={() => deleteMessageMutation.mutate(message.id)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-1 rounded shrink-0"
+                          title="Delete message"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
                       )}
-                    </div>
-                  </div>
+                      <div className={`max-w-[75%] rounded-xl px-3.5 py-2 text-sm ${
+                        isOwn
+                          ? "bg-primary text-primary-foreground rounded-br-md shadow-sm"
+                          : "bg-muted text-foreground rounded-bl-md"
+                      }`}>
+                        <AutoLinkedText
+                          text={message.content || ''}
+                          className="wrap-break-word whitespace-pre-wrap leading-relaxed"
+                          linkClassName={isOwn ? "underline text-primary-foreground hover:opacity-80" : "underline text-primary hover:opacity-80"}
+                        />
+                        <div className={`text-[10px] mt-1 flex items-center gap-1 ${
+                          isOwn ? "text-primary-foreground/60 justify-end" : "text-muted-foreground"
+                        }`}>
+                          {message.timestamp ? (
+                            <Timestamp date={message.timestamp}>{formatTime(message.timestamp)}</Timestamp>
+                          ) : (
+                            <span>now</span>
+                          )}
+                          {isOwn && (
+                            <span
+                              className={`inline-block w-1.5 h-1.5 rounded-full ${
+                                message._creationTime && otherParticipantLastRead && message._creationTime <= otherParticipantLastRead
+                                  ? "bg-emerald-400"
+                                  : "bg-primary-foreground/30"
+                              }`}
+                              title={
+                                message._creationTime && otherParticipantLastRead && message._creationTime <= otherParticipantLastRead
+                                  ? "Read" : "Delivered"
+                              }
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             );

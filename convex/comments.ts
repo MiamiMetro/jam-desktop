@@ -59,6 +59,8 @@ async function formatComment(
     isLiked = !!likeLock;
   }
 
+  const isDeleted = comment.deletedAt != null;
+
   return {
     id: comment._id,
     post_id: comment.postId,
@@ -66,8 +68,8 @@ async function formatComment(
     parent_id: comment.parentId ?? null,
     path: comment.path,
     depth: comment.depth,
-    text: comment.text ?? "",
-    audio_url: resolvePublicMediaUrl({
+    text: isDeleted ? "" : (comment.text ?? ""),
+    audio_url: isDeleted ? null : resolvePublicMediaUrl({
       url: comment.audioUrl,
       objectKey: comment.audioObjectKey,
     }),
@@ -78,35 +80,11 @@ async function formatComment(
     likes_count: likesCount,
     replies_count: repliesCount,
     is_liked: isLiked,
+    deleted_at: comment.deletedAt ?? null,
   };
 }
 
-async function deleteCommentLikesInBatches(
-  ctx: MutationCtx,
-  commentId: Id<"comments">
-): Promise<void> {
-  let cursor: string | null = null;
-  let isDone = false;
 
-  while (!isDone) {
-    const page = await ctx.db
-      .query("comment_likes")
-      .withIndex("by_comment", (q) => q.eq("commentId", commentId))
-      .paginate({ cursor, numItems: 100 });
-
-    for (const like of page.page) {
-      await releaseUniqueLock(
-        ctx,
-        "comment_like",
-        `${like.commentId}:${like.userId}`
-      );
-      await ctx.db.delete(like._id);
-    }
-
-    cursor = page.continueCursor;
-    isDone = page.isDone;
-  }
-}
 
 /**
  * Create a top-level comment on a post
@@ -307,7 +285,7 @@ export const getByPostPaginated = query({
     );
     const authorMap = new Map(authorEntries);
 
-    const page = await Promise.all(
+    const formatted = await Promise.all(
       result.page.map((comment) =>
         formatComment(ctx, comment, currentProfile?._id, {
           author: authorMap.get(comment.authorId) ?? null,
@@ -317,7 +295,7 @@ export const getByPostPaginated = query({
 
     return {
       ...result,
-      page,
+      page: formatted,
     };
   },
 });
@@ -467,11 +445,10 @@ export const toggleLike = mutation({
 export const remove = mutation({
   args: {
     commentId: v.id("comments"),
-    cascade: v.optional(v.boolean()), // If true, delete all replies too
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
-    
+
     // Rate limit: 10 deletes per minute
     await checkRateLimit(ctx, "deleteAction", profile._id);
 
@@ -484,55 +461,36 @@ export const remove = mutation({
       throw new Error("You can only delete your own comments");
     }
 
-    await deleteCommentLikesInBatches(ctx, args.commentId);
+    // Soft delete: mark deleted and clear content. The document is kept so
+    // threaded replies still have a parent. The query layer will render a
+    // placeholder for deleted-but-replied-to comments, and will exclude
+    // deleted leaf comments from results entirely.
+    await ctx.db.patch(args.commentId, {
+      deletedAt: Date.now(),
+      text: undefined,
+      audioUrl: undefined,
+      audioObjectKey: undefined,
+    });
 
-    if (args.cascade) {
-      const descendantPrefix = `${comment.path}.`;
-      const descendantPathUpperBound = `${descendantPrefix}~`;
-      let cursor: string | null = null;
-      let isDone = false;
-
-      while (!isDone) {
-        const page = await ctx.db
-          .query("comments")
-          .withIndex("by_post_and_path", (q) =>
-            q
-              .eq("postId", comment.postId)
-              .gte("path", descendantPrefix)
-              .lt("path", descendantPathUpperBound)
-          )
-          .paginate({ cursor, numItems: 100 });
-
-        for (const descendant of page.page) {
-          await deleteCommentLikesInBatches(ctx, descendant._id);
-          await ctx.db.delete(descendant._id);
+    // Only decrement counts when the comment is a leaf (will be excluded from results)
+    const hasReplies = (comment.repliesCount ?? 0) > 0;
+    if (!hasReplies) {
+      if (comment.parentId) {
+        const parentComment = await ctx.db.get(comment.parentId);
+        if (parentComment) {
+          await ctx.db.patch(comment.parentId, {
+            repliesCount: Math.max(0, (parentComment.repliesCount ?? 0) - 1),
+          });
         }
-
-        cursor = page.continueCursor;
-        isDone = page.isDone;
+      } else {
+        const postDoc = await ctx.db.get(comment.postId);
+        if (postDoc) {
+          await ctx.db.patch(comment.postId, {
+            commentsCount: Math.max(0, (postDoc.commentsCount ?? 0) - 1),
+          });
+        }
       }
     }
-
-    // Decrement parent comment's replies count (if it has a parent)
-    if (comment.parentId) {
-      const parentComment = await ctx.db.get(comment.parentId);
-      if (parentComment) {
-        await ctx.db.patch(comment.parentId, {
-          repliesCount: Math.max(0, (parentComment.repliesCount ?? 0) - 1),
-        });
-      }
-    } else {
-      // Top-level comment - decrement post's comments count
-      const postDoc = await ctx.db.get(comment.postId);
-      if (postDoc) {
-        await ctx.db.patch(comment.postId, {
-          commentsCount: Math.max(0, (postDoc.commentsCount ?? 0) - 1),
-        });
-      }
-    }
-
-    // Delete the comment itself
-    await ctx.db.delete(args.commentId);
 
     return { message: "Comment deleted successfully" };
   },

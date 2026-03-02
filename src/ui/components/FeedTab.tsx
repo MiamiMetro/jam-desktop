@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useAuthStore } from "@/stores/authStore";
-import { usePosts, useCreatePost, useToggleLike } from "@/hooks/usePosts";
+import { usePosts, useCreatePost, useToggleLike, useDeletePost } from "@/hooks/usePosts";
 import { useCommunities } from "@/hooks/useCommunities";
 import { useJams } from "@/hooks/useJams";
 import { PostCard } from "@/components/PostCard";
@@ -30,12 +30,13 @@ interface FeedTabProps {
 function FeedTab({ onGuestAction }: FeedTabProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isGuest } = useAuthStore();
+  const { isGuest, user } = useAuthStore();
   const { data: posts = [], isLoading: postsLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = usePosts();
   const { data: communities = [] } = useCommunities();
   const { data: rooms = [] } = useJams();
   const createPostMutation = useCreatePost();
   const toggleLikeMutation = useToggleLike();
+  const deletePostMutation = useDeletePost();
   const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
   const [justSent, setJustSent] = useState<string | null>(null);
 
@@ -176,10 +177,12 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
                         post={post}
                         communityName={communityName}
                         isGuest={isGuest}
+                        currentUsername={user?.username}
                         onAuthorClick={handleAuthorClick}
                         onCommunityClick={handleCommunityClick}
                         onPostClick={handlePostClick}
                         onLike={handleLikePost}
+                        onDelete={(postId) => deletePostMutation.mutate(postId)}
                         formatTimeAgo={formatTimeAgo}
                       />
                     </div>

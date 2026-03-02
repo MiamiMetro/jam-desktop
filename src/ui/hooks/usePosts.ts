@@ -27,6 +27,7 @@ export interface FrontendPost {
   comments?: number;
   community?: string;
   isGlobal?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface FrontendComment {
@@ -50,11 +51,13 @@ export interface FrontendComment {
   isLiked?: boolean;
   likes?: number;
   repliesCount?: number;
+  isDeleted?: boolean;
 }
 
 type FriendMutationOptions = { onSuccess?: () => void; onError?: (error: Error) => void };
 
 function convertPost(post: Post): FrontendPost {
+  const isDeleted = post.deleted_at != null;
   return {
     id: post.id,
     author: {
@@ -78,10 +81,12 @@ function convertPost(post: Post): FrontendPost {
     comments: post.comments_count || 0,
     community: undefined,
     isGlobal: true,
+    isDeleted,
   };
 }
 
 function convertComment(comment: Comment): FrontendComment {
+  const isDeleted = comment.deleted_at != null;
   return {
     id: comment.id,
     postId: comment.post_id,
@@ -105,6 +110,7 @@ function convertComment(comment: Comment): FrontendComment {
     isLiked: comment.is_liked || false,
     likes: comment.likes_count || 0,
     repliesCount: comment.replies_count || 0,
+    isDeleted,
   };
 }
 
@@ -330,6 +336,46 @@ export const useToggleCommentLike = () => {
     },
     mutateAsync: run,
     isPending,
+  };
+};
+
+export const useDeleteComment = () => {
+  const deleteComment = useMutation(api.comments.remove);
+  const [isPending, setIsPending] = useState(false);
+
+  const run = async (commentId: string) => {
+    setIsPending(true);
+    try {
+      await deleteComment({ commentId: commentId as Id<"comments"> });
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return {
+    mutate: (commentId: string, options?: FriendMutationOptions) => {
+      run(commentId)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
+    },
+    mutateAsync: run,
+    isPending,
+  };
+};
+
+export const usePostLikes = (postId: string | null) => {
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.posts.getLikes,
+    postId ? { postId: postId as Id<"posts"> } : "skip",
+    { initialNumItems: 20 }
+  );
+
+  const flags = getPaginatedStatusFlags(status);
+
+  return {
+    data: results as Array<{ id: string; username: string; display_name?: string | null; avatar_url?: string | null; liked_at: string }>,
+    ...flags,
+    fetchNextPage: () => loadMore(20),
   };
 };
 

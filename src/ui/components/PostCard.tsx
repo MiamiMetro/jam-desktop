@@ -6,6 +6,7 @@ import {
   Share2,
   Check,
   Hash as HashIcon,
+  Trash2,
 } from "lucide-react";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -18,10 +19,12 @@ interface PostCardProps {
   post: FrontendPost;
   communityName?: string | null;
   isGuest?: boolean;
+  currentUsername?: string;
   onAuthorClick?: (username: string) => void;
   onCommunityClick?: (communityId: string) => void;
   onPostClick?: (postId: string) => void;
   onLike?: (postId: string) => void;
+  onDelete?: (postId: string) => void;
   formatTimeAgo: (date: Date) => string;
 }
 
@@ -29,12 +32,15 @@ export function PostCard({
   post,
   communityName,
   isGuest = false,
+  currentUsername,
   onAuthorClick,
   onCommunityClick,
   onPostClick,
   onLike,
+  onDelete,
   formatTimeAgo,
 }: PostCardProps) {
+  const isOwn = !isGuest && !!currentUsername && currentUsername === post.author.username;
   const [copied, setCopied] = useState(false);
 
   const handleShare = useCallback((e: React.MouseEvent) => {
@@ -47,12 +53,25 @@ export function PostCard({
     });
   }, [post.id]);
 
+  if (post.isDeleted) {
+    return (
+      <div className="px-5 py-4 border-l-2 border-l-transparent">
+        <p className="text-sm italic text-muted-foreground/60">
+          ♪ this post was removed
+          <span className="not-italic ml-2 text-xs text-muted-foreground/40">
+            • <Timestamp date={post.timestamp} className="inline">{formatTimeAgo(post.timestamp)}</Timestamp>
+          </span>
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-5 border-l-2 border-l-transparent hover:border-l-primary/40 hover:bg-muted/15 transition-all duration-200">
+    <div className="group p-5 border-l-2 border-l-transparent hover:border-l-primary/40 hover:bg-muted/15 transition-all duration-200">
       <div className="flex gap-3">
         <button
           onClick={() => onAuthorClick?.(post.author.username)}
-          className="flex-shrink-0 cursor-pointer p-0 m-0 border-0 bg-transparent hover:opacity-80 transition-opacity self-start"
+          className="shrink-0 cursor-pointer p-0 m-0 border-0 bg-transparent hover:opacity-80 transition-opacity self-start"
           aria-label={`Go to ${post.author.username}'s profile`}
         >
           <Avatar size="lg" className="pointer-events-none ring-1 ring-border">
@@ -91,6 +110,16 @@ export function PostCard({
             <Timestamp date={post.timestamp} className="text-xs text-muted-foreground">
               • {formatTimeAgo(post.timestamp)}
             </Timestamp>
+            {isOwn && onDelete && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onDelete(post.id); }}
+                className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-1 rounded"
+                title="Delete post"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
           {post.content && (
             <AutoLinkedText
@@ -126,7 +155,7 @@ export function PostCard({
               <Heart className={`h-4 w-4 ${post.isLiked ? "fill-current" : ""} pointer-events-none`} />
               <span className="pointer-events-none">{post.likes}</span>
             </button>
-            <button 
+            <button
               onClick={() => onPostClick?.(post.id)}
               className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             >

@@ -18,8 +18,13 @@ export default function Settings() {
   const softDeleteProfile = useSoftDeleteProfile();
 
   const [username, setUsername] = useState("");
+  const [dmPrivacy, setDmPrivacy] = useState<"friends" | "everyone">("friends");
+  const [dmPrivacySuccess, setDmPrivacySuccess] = useState<string | null>(null);
+  const [dmPrivacyError, setDmPrivacyError] = useState<string | null>(null);
+  const [isSavingPrivacy, setIsSavingPrivacy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [isSavingUsername, setIsSavingUsername] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -40,7 +45,8 @@ export default function Settings() {
   useEffect(() => {
     if (!me) return;
     setUsername(me.username ?? "");
-  }, [me?.id, me?.username]);
+    setDmPrivacy((me.dm_privacy as "friends" | "everyone") ?? "friends");
+  }, [me?.id, me?.username, me?.dm_privacy]);
 
   const usernameChanged = useMemo(() => {
     if (!me) return false;
@@ -51,16 +57,35 @@ export default function Settings() {
     if (!me || !usernameChanged) return;
     setSaveError(null);
     setSaveSuccess(null);
+    setIsSavingUsername(true);
     try {
       const updated = await updateProfile.mutateAsync({
         username: username.trim() || undefined,
-        dm_privacy: "friends",
+        dm_privacy: dmPrivacy,
       });
       setUser(updated);
       setSaveSuccess("Username updated.");
       setUsername(updated.username ?? "");
     } catch (error) {
       setSaveError(toFriendlyError(error));
+    } finally {
+      setIsSavingUsername(false);
+    }
+  };
+
+  const handleSaveDmPrivacy = async () => {
+    if (!me) return;
+    setDmPrivacySuccess(null);
+    setDmPrivacyError(null);
+    setIsSavingPrivacy(true);
+    try {
+      const updated = await updateProfile.mutateAsync({ dm_privacy: dmPrivacy });
+      setUser(updated);
+      setDmPrivacySuccess("Privacy updated.");
+    } catch (error) {
+      setDmPrivacyError(toFriendlyError(error));
+    } finally {
+      setIsSavingPrivacy(false);
     }
   };
 
@@ -157,16 +182,39 @@ export default function Settings() {
                 Display name, bio, avatar, banner, and musician profile are edited from your Profile page.
               </p>
               <div className="pt-1">
-                <Button onClick={handleSaveUsername} disabled={!usernameChanged || updateProfile.isPending}>
-                  {updateProfile.isPending ? "Saving..." : "Save Username"}
+                <Button onClick={handleSaveUsername} disabled={!usernameChanged || isSavingUsername}>
+                  {isSavingUsername ? "Saving..." : "Save Username"}
                 </Button>
               </div>
               {saveError && <p className="text-sm text-destructive">{saveError}</p>}
               {saveSuccess && <p className="text-sm text-green-600 dark:text-green-400">{saveSuccess}</p>}
             </div>
 
-            <div className="pt-2 border-t border-border/40">
-              <p className="text-xs text-muted-foreground">DM privacy is currently fixed to friends-only.</p>
+            <div className="pt-2 border-t border-border/40 space-y-2">
+              <label className="text-xs text-muted-foreground">Who can DM you</label>
+              <select
+                value={dmPrivacy}
+                onChange={(e) => setDmPrivacy(e.target.value as "friends" | "everyone")}
+                className="w-full h-9 rounded-md border border-input bg-muted/50 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="friends">Friends only</option>
+                <option value="everyone">Everyone</option>
+              </select>
+              <div className="pt-1 flex items-center gap-3">
+                <Button
+                  onClick={handleSaveDmPrivacy}
+                  disabled={isSavingPrivacy}
+                  size="sm"
+                >
+                  {isSavingPrivacy ? "Saving..." : "Save Privacy"}
+                </Button>
+                {dmPrivacySuccess && (
+                  <span className="text-xs text-green-600 dark:text-green-400">{dmPrivacySuccess}</span>
+                )}
+                {dmPrivacyError && (
+                  <span className="text-xs text-destructive">{dmPrivacyError}</span>
+                )}
+              </div>
             </div>
           </section>
 

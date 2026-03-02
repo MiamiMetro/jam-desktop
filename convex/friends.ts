@@ -387,35 +387,4 @@ export const getSentRequestsWithDataPaginated = query({
   },
 });
 
-/**
- * Get pending friend requests sent by me
- * Equivalent to GET /friends/sent-requests
- * Returns a simple list of user IDs that have pending requests from the current user
- * Uses Convex .paginate() for efficient cursor-based pagination
- */
-export const getSentRequests = query({
-  args: {
-    paginationOpts: paginationOptsValidator,
-  },
-  handler: async (ctx, args) => {
-    const profile = await getCurrentProfile(ctx);
-    if (!profile) {
-      return { page: [], isDone: true, continueCursor: "" };
-    }
-
-    // Get pending requests where current user is the userId (sender)
-    const result = await ctx.db
-      .query("friends")
-      .withIndex("by_user", (q) => q.eq("userId", profile._id))
-      .filter((q) => q.eq(q.field("status"), "pending"))
-      .order("desc")
-      .paginate(args.paginationOpts);
-
-    // Return friend IDs for easy lookup
-    return {
-      ...result,
-      page: result.page.map((request) => request.friendId),
-    };
-  },
-});
 

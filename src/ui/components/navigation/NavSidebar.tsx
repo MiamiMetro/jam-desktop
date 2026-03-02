@@ -261,7 +261,7 @@ export default function NavSidebar() {
                     <span className={`transition-colors duration-200 ${active ? "text-primary" : ""}`}>
                       {item.icon}
                     </span>
-                    <span className="flex-1">{item.label}</span>
+                    <span className="flex-1 text-left">{item.label}</span>
                   </button>
                 }
               />

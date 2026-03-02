@@ -1,8 +1,7 @@
 import { Presence } from "@convex-dev/presence";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
+import { mutation } from "./_generated/server";
 import { requireAuth } from "./helpers";
 import { checkRateLimit } from "./rateLimiter";
 
@@ -17,7 +16,6 @@ export const presenceStatusValidator = v.union(
 
 const MIN_HEARTBEAT_INTERVAL_MS = 5_000;
 const MAX_HEARTBEAT_INTERVAL_MS = 120_000;
-const DEFAULT_LIST_LIMIT = 512;
 
 const presence = new Presence(components.presence);
 
@@ -29,13 +27,6 @@ function clampHeartbeatInterval(interval: number | undefined) {
     MIN_HEARTBEAT_INTERVAL_MS,
     Math.min(MAX_HEARTBEAT_INTERVAL_MS, Math.floor(interval))
   );
-}
-
-function clampListLimit(limit: number | undefined) {
-  if (limit === undefined) {
-    return DEFAULT_LIST_LIMIT;
-  }
-  return Math.max(1, Math.min(10_000, Math.floor(limit)));
 }
 
 export const heartbeat = mutation({
@@ -92,39 +83,3 @@ export const setMyStatus = mutation({
   },
 });
 
-export const listOnlineUserIds = query({
-  args: {
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const limit = clampListLimit(args.limit);
-    const users = await presence.listRoom(ctx, GLOBAL_PRESENCE_ROOM_ID, true, limit);
-    return users.map(({ userId }) => userId as Id<"profiles">);
-  },
-});
-
-export const listOnlineByUserIds = query({
-  args: {
-    userIds: v.array(v.id("profiles")),
-  },
-  handler: async (ctx, args) => {
-    if (args.userIds.length === 0) {
-      return [] as Id<"profiles">[];
-    }
-
-    const uniqueUserIds = new Map<string, Id<"profiles">>();
-    for (const userId of args.userIds) {
-      uniqueUserIds.set(String(userId), userId);
-    }
-
-    const onlineUserIds: Id<"profiles">[] = [];
-    for (const [userIdString, userId] of uniqueUserIds.entries()) {
-      const rooms = await presence.listUser(ctx, userIdString, true, 1);
-      if (rooms.some((room) => room.roomId === GLOBAL_PRESENCE_ROOM_ID && room.online)) {
-        onlineUserIds.push(userId);
-      }
-    }
-
-    return onlineUserIds;
-  },
-});

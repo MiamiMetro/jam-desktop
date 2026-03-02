@@ -51,11 +51,13 @@ async function formatPost(
     isLiked = !!likeLock;
   }
 
+  const isDeleted = post.deletedAt != null;
+
   return {
     id: post._id,
     author_id: post.authorId,
-    text: post.text ?? "",
-    audio_url: resolvePublicMediaUrl({
+    text: isDeleted ? "" : (post.text ?? ""),
+    audio_url: isDeleted ? null : resolvePublicMediaUrl({
       url: post.audioUrl,
       objectKey: post.audioObjectKey,
     }),
@@ -66,62 +68,10 @@ async function formatPost(
     likes_count: likesCount,
     comments_count: commentsCount,
     is_liked: isLiked,
+    deleted_at: post.deletedAt ?? null,
   };
 }
 
-async function deletePostLikesInBatches(
-  ctx: MutationCtx,
-  postId: Id<"posts">
-): Promise<void> {
-  let cursor: string | null = null;
-  let isDone = false;
-
-  while (!isDone) {
-    const page = await ctx.db
-      .query("post_likes")
-      .withIndex("by_post", (q) => q.eq("postId", postId))
-      .paginate({ cursor, numItems: 100 });
-
-    for (const like of page.page) {
-      await releaseUniqueLock(
-        ctx,
-        "post_like",
-        `${like.postId}:${like.userId}`
-      );
-      await ctx.db.delete(like._id);
-    }
-
-    cursor = page.continueCursor;
-    isDone = page.isDone;
-  }
-}
-
-async function deleteCommentLikesInBatches(
-  ctx: MutationCtx,
-  commentId: Id<"comments">
-): Promise<void> {
-  let cursor: string | null = null;
-  let isDone = false;
-
-  while (!isDone) {
-    const page = await ctx.db
-      .query("comment_likes")
-      .withIndex("by_comment", (q) => q.eq("commentId", commentId))
-      .paginate({ cursor, numItems: 100 });
-
-    for (const like of page.page) {
-      await releaseUniqueLock(
-        ctx,
-        "comment_like",
-        `${like.commentId}:${like.userId}`
-      );
-      await ctx.db.delete(like._id);
-    }
-
-    cursor = page.continueCursor;
-    isDone = page.isDone;
-  }
-}
 
 /**
  * Create a new post
@@ -301,7 +251,7 @@ export const remove = mutation({
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
-    
+
     // Rate limit: 10 deletes per minute
     await checkRateLimit(ctx, "deleteAction", profile._id);
 
@@ -314,26 +264,14 @@ export const remove = mutation({
       throw new Error("You can only delete your own posts");
     }
 
-    await deletePostLikesInBatches(ctx, args.postId);
-
-    let cursor: string | null = null;
-    let isDone = false;
-    while (!isDone) {
-      const page = await ctx.db
-        .query("comments")
-        .withIndex("by_post", (q) => q.eq("postId", args.postId))
-        .paginate({ cursor, numItems: 100 });
-
-      for (const comment of page.page) {
-        await deleteCommentLikesInBatches(ctx, comment._id);
-        await ctx.db.delete(comment._id);
-      }
-
-      cursor = page.continueCursor;
-      isDone = page.isDone;
-    }
-
-    await ctx.db.delete(args.postId);
+    // Soft delete: mark deleted and clear content. The post document is kept so
+    // existing links remain resolvable. Feed/profile show a placeholder.
+    await ctx.db.patch(args.postId, {
+      deletedAt: Date.now(),
+      text: undefined,
+      audioUrl: undefined,
+      audioObjectKey: undefined,
+    });
 
     return { message: "Post deleted successfully" };
   },

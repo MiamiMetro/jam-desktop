@@ -23,7 +23,7 @@ import {
 import { useAuthStore } from "@/stores/authStore";
 import { useProfileCatalog, useUpdateProfile, useUser } from "@/hooks/useUsers";
 import { useR2Upload } from "@/hooks/useR2Upload";
-import { useUserPosts, useToggleLike, type FrontendPost } from "@/hooks/usePosts";
+import { useUserPosts, useToggleLike, useDeletePost, type FrontendPost } from "@/hooks/usePosts";
 import { useFriends, useRequestFriend, useSentFriendRequests, useDeleteFriend } from "@/hooks/useFriends";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
@@ -66,6 +66,7 @@ function Profile() {
   const requestFriendMutation = useRequestFriend();
   const deleteFriendMutation = useDeleteFriend();
   const toggleLikeMutation = useToggleLike();
+  const deletePostMutation = useDeletePost();
   const updateProfileMutation = useUpdateProfile();
   const { hasPendingRequest } = useSentFriendRequests();
 
@@ -588,9 +589,11 @@ function Profile() {
                           post={post}
                           communityName={null}
                           isGuest={isGuest}
+                          currentUsername={currentUser?.username}
                           onAuthorClick={(u) => navigate(`/profile/${u}`)}
                           onPostClick={(pid) => navigate(`/post/${pid}`, { state: { backgroundLocation: location } })}
                           onLike={handleLikePost}
+                          onDelete={(postId) => deletePostMutation.mutate(postId)}
                           formatTimeAgo={formatTimeAgo}
                         />
                       </div>

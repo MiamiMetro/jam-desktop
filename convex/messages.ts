@@ -592,18 +592,22 @@ export const getByConversationPaginated = query({
     const nextCursor =
       hasMore && data.length > 0 ? data[data.length - 1]._creationTime : null;
 
-    const formattedMessages = data.reverse().map((msg) => ({
-      id: msg._id,
-      conversation_id: msg.conversationId,
-      sender_id: msg.senderId,
-      text: msg.text ?? "",
-      audio_url: resolvePublicMediaUrl({
-        url: msg.audioUrl,
-        objectKey: msg.audioObjectKey,
-      }),
-      created_at: new Date(msg._creationTime).toISOString(),
-      _creationTime: msg._creationTime,
-    }));
+    const formattedMessages = data.reverse().map((msg) => {
+      const isDeleted = msg.deletedAt != null;
+      return {
+        id: msg._id,
+        conversation_id: msg.conversationId,
+        sender_id: msg.senderId,
+        text: isDeleted ? "" : (msg.text ?? ""),
+        audio_url: isDeleted ? null : resolvePublicMediaUrl({
+          url: msg.audioUrl,
+          objectKey: msg.audioObjectKey,
+        }),
+        deleted_at: msg.deletedAt ?? null,
+        created_at: new Date(msg._creationTime).toISOString(),
+        _creationTime: msg._creationTime,
+      };
+    });
 
     const participantPage = await ctx.db
       .query("conversation_participants")
@@ -727,7 +731,12 @@ export const remove = mutation({
     }
 
     const conversationId = message.conversationId;
-    await ctx.db.delete(args.messageId);
+    await ctx.db.patch(args.messageId, {
+      deletedAt: Date.now(),
+      text: undefined,
+      audioUrl: undefined,
+      audioObjectKey: undefined,
+    });
 
     const conversation = await ctx.db.get(conversationId);
     if (conversation && conversation.lastMessageId === args.messageId) {
@@ -737,6 +746,7 @@ export const remove = mutation({
           q.eq("conversationId", conversationId)
         )
         .order("desc")
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
         .first();
 
       if (latestRemainingMessage) {

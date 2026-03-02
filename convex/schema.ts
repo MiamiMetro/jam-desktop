@@ -48,6 +48,8 @@ export default defineSchema({
     // Atomic sequence counter for generating unique comment paths
     // Guarantees no duplicate paths even under high concurrency
     nextCommentSequence: v.optional(v.number()),
+    // Soft delete: set when post is deleted, used for placeholder rendering
+    deletedAt: v.optional(v.number()),
   })
     .index("by_author", ["authorId"]),
 
@@ -68,6 +70,8 @@ export default defineSchema({
     // Atomic sequence counter for generating unique reply paths
     // Guarantees no duplicate paths even under high concurrency
     nextReplySequence: v.optional(v.number()),
+    // Soft delete: set when comment is deleted, used for placeholder rendering
+    deletedAt: v.optional(v.number()),
   })
     .index("by_post", ["postId"])
     .index("by_post_and_path", ["postId", "path"])
@@ -202,6 +206,7 @@ export default defineSchema({
     text: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
     audioObjectKey: v.optional(v.string()),
+    deletedAt: v.optional(v.number()),
   })
     .index("by_conversation_time", ["conversationId"])
     .index("by_sender", ["senderId"]),

@@ -84,13 +84,15 @@ interface UIMessage {
   audio_url?: string | null;
   timestamp?: string;
   _creationTime?: number;
+  isDeleted?: boolean;
 }
 
 function convertMessage(message: {
   id: string;
   sender_id: string;
   text?: string;
-  audio_url?: string;
+  audio_url?: string | null;
+  deleted_at?: number | null;
   created_at: string;
   _creationTime?: number;
 }): UIMessage {
@@ -102,6 +104,7 @@ function convertMessage(message: {
     audio_url: message.audio_url || null,
     timestamp: message.created_at,
     _creationTime: message._creationTime,
+    isDeleted: message.deleted_at != null,
   };
 }
 
@@ -608,6 +611,17 @@ export const useMarkAsRead = () => {
     },
     mutateAsync: async (conversationId: string) => {
       return await markAsRead({ conversationId: conversationId as Id<"conversations"> });
+    },
+  };
+};
+
+export const useDeleteMessage = () => {
+  const deleteMessage = useMutation(api.messages.remove);
+  return {
+    mutate: (messageId: string) => {
+      deleteMessage({ messageId: messageId as Id<"messages"> }).catch((error) =>
+        console.error("Failed to delete message:", error)
+      );
     },
   };
 };
