@@ -20,15 +20,12 @@ export function RoomCard({ room, onClick, variant = "grid" }: RoomCardProps) {
         onClick={() => onClick?.(room.id)}
         className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-200 relative overflow-hidden ${
           isFull
-            ? "opacity-60 hover:opacity-80 hover:bg-foreground/[0.03]"
+            ? "glass-solid opacity-60 hover:opacity-80"
             : isActive
-              ? "glass-subtle ring-1 ring-primary/10 hover:ring-primary/30"
-              : "hover:bg-foreground/[0.03]"
+              ? "glass-strong ring-1 ring-primary/20 hover:ring-primary/40"
+              : "glass-solid hover:glass-strong hover:ring-1 hover:ring-primary/20"
         }`}
       >
-        {isActive && !isFull && (
-          <div className="absolute inset-0 bg-gradient-primary-tr pointer-events-none" />
-        )}
         <div className="relative flex items-center gap-3 flex-1 min-w-0">
           <Hash className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
           <span className="text-sm font-semibold truncate flex-shrink min-w-0">{room.name}</span>

@@ -28,7 +28,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     if (this.state.hasError) {
       if (this.props.fallback) return this.props.fallback;
       return (
-        <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-12">
+        <div className="flex-1 flex flex-col">
+          <div className="page-header caption-safe shrink-0 min-h-11" />
+          <div className="flex-1 flex items-center justify-center text-center px-6 py-12">
           <div className="rounded-xl glass-strong px-10 py-8 flex flex-col items-center gap-3 max-w-sm">
             <div className="text-3xl">:(</div>
             <h2 className="text-base font-heading font-semibold">Something went wrong</h2>
@@ -48,6 +50,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             >
               Go home
             </button>
+          </div>
           </div>
         </div>
       );

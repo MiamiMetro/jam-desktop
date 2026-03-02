@@ -115,15 +115,6 @@ export default function NavSidebar() {
 
 
 
-  const toggleTheme = useCallback(() => {
-    const currentTheme =
-      theme === "system"
-        ? window.matchMedia("(prefers-color-scheme: dark)").matches
-          ? "dark"
-          : "light"
-        : theme;
-    setTheme(currentTheme === "dark" ? "light" : "dark");
-  }, [theme, setTheme]);
 
   const syncPresenceStatus = useCallback(
     async (status: PresenceStatus): Promise<boolean> => {
@@ -398,10 +389,19 @@ export default function NavSidebar() {
                   <SettingsIcon className="h-4 w-4 mr-2" />
                   Settings
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={toggleTheme}>
-                  {isDark ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}
-                  {isDark ? "Light Mode" : "Dark Mode"}
-                </DropdownMenuItem>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    {isDark ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}
+                    Theme
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuRadioGroup value={theme} onValueChange={(v) => setTheme(v as "light" | "dark" | "system")}>
+                      <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => useAuthStore.getState().logout()}>
                   <LogOut className="h-4 w-4 mr-2" />
