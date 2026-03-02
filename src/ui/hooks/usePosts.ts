@@ -395,3 +395,56 @@ export const useUserPosts = (username: string) => {
     refetch: () => {},
   };
 };
+
+export const useReplies = (parentId: string | null) => {
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.comments.getRepliesPaginated,
+    parentId ? { parentId: parentId as Id<"comments"> } : "skip",
+    { initialNumItems: 10 }
+  );
+
+  const flags = getPaginatedStatusFlags(status);
+
+  return {
+    data: results.map(convertComment),
+    ...flags,
+    fetchNextPage: () => loadMore(10),
+  };
+};
+
+export const useCreateReply = () => {
+  const replyMutation = useMutation(api.comments.reply);
+  const { user } = useAuthStore();
+  const { uploadFile } = useR2Upload();
+  const [isPending, setIsPending] = useState(false);
+
+  const run = async (variables: { parentId: string; content: string; audioFile?: File | null }) => {
+    if (!user) throw new Error("User not authenticated");
+    setIsPending(true);
+    try {
+      let audioUrl: string | undefined;
+      if (variables.audioFile) {
+        const uploaded = await uploadFile("audio", variables.audioFile);
+        audioUrl = uploaded.url;
+      }
+      const result = await replyMutation({
+        parentId: variables.parentId as Id<"comments">,
+        text: variables.content || undefined,
+        audioUrl,
+      });
+      return convertComment(result);
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return {
+    mutate: (variables: { parentId: string; content: string; audioFile?: File | null }, options?: FriendMutationOptions) => {
+      run(variables)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
+    },
+    mutateAsync: run,
+    isPending,
+  };
+};

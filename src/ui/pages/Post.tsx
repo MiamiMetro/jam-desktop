@@ -23,6 +23,7 @@ import { LoadingState } from "@/components/LoadingState";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { ComposePost } from "@/components/ComposePost";
 import { AutoLinkedText } from "@/components/AutoLinkedText";
+import { CommentRow } from "@/components/CommentRow";
 
 function Post() {
   const { id } = useParams<{ id: string }>();
@@ -30,7 +31,8 @@ function Post() {
   const { isGuest, user } = useAuthStore();
   const { data: post, isLoading } = usePost(id || "");
   const commentsQuery = useComments(id || "");
-  const comments = (commentsQuery.data || []) as FrontendComment[];
+  const allComments = (commentsQuery.data || []) as FrontendComment[];
+  const comments = allComments.filter((c) => (c.depth ?? 0) === 0);
   const { isLoading: commentsLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = commentsQuery;
 
   const createCommentMutation = useCreateComment();
@@ -285,88 +287,17 @@ function Post() {
           ) : (
             <>
               <div className="divide-y divide-border/30">
-                {comments.map((comment) => {
-                  const isOwn = !isGuest && user?.username === comment.author.username;
-                  return (
-                  <div key={comment.id} className="flex gap-3 px-6 py-3 hover:bg-muted/10 transition-all group">
-                    {comment.isDeleted ? (
-                      <p className="text-sm italic text-muted-foreground/60 py-1">
-                        ♪ this note was removed
-                        <span className="not-italic ml-2 text-xs text-muted-foreground/40">
-                          • <Timestamp date={comment.timestamp}>{formatTimeAgo(comment.timestamp)}</Timestamp>
-                        </span>
-                      </p>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/profile/${comment.author.username}`)}
-                          className="shrink-0 p-0 m-0 border-0 bg-transparent cursor-pointer hover:opacity-80 transition-opacity self-start"
-                          aria-label={`Go to ${comment.author.username}'s profile`}
-                        >
-                          <Avatar size="sm" className="pointer-events-none ring-1 ring-border">
-                            <AvatarImage src={comment.author.avatar || ""} alt={comment.author.username} />
-                            <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-                              {comment.author.username.substring(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                        </button>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <button
-                              onClick={() => navigate(`/profile/${comment.author.username}`)}
-                              className="font-semibold text-xs hover:underline cursor-pointer"
-                            >
-                              {comment.author.username}
-                            </button>
-                            <Timestamp date={comment.timestamp} className="text-[11px] text-muted-foreground">
-                              {formatTimeAgo(comment.timestamp)}
-                            </Timestamp>
-                          </div>
-                          {comment.content && (
-                            <AutoLinkedText text={comment.content} className="text-sm whitespace-pre-wrap wrap-break-word leading-relaxed" linkClassName="text-blue-500 hover:text-blue-600 underline" />
-                          )}
-                          {comment.audioFile && (
-                            <AudioPlayer
-                              postId={comment.id}
-                              audioFile={comment.audioFile}
-                              authorName={comment.author.username}
-                              variant="comment"
-                            />
-                          )}
-                          <div className="flex items-center gap-4 mt-1.5">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleLikeComment(comment.id);
-                              }}
-                              className={`flex items-center gap-1 text-xs transition-all cursor-pointer active:scale-90 ${
-                                comment.isLiked
-                                  ? "text-red-500 hover:text-red-600"
-                                  : "text-muted-foreground hover:text-foreground"
-                              }`}
-                            >
-                              <Heart className={`h-3 w-3 ${comment.isLiked ? "fill-current" : ""}`} />
-                              <span>{comment.likes || 0}</span>
-                            </button>
-                            {isOwn && (
-                              <button
-                                type="button"
-                                onClick={() => deleteCommentMutation.mutate(comment.id)}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive cursor-pointer"
-                                title="Delete comment"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  );
-                })}
+                {comments.map((comment) => (
+                  <CommentRow
+                    key={comment.id}
+                    comment={comment}
+                    isGuest={isGuest}
+                    currentUsername={user?.username}
+                    postId={id || ""}
+                    onLikeComment={handleLikeComment}
+                    onDeleteComment={(cid) => deleteCommentMutation.mutate(cid)}
+                  />
+                ))}
               </div>
               <div className="p-4">
                 <LoadMoreButton

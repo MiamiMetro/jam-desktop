@@ -18,6 +18,7 @@ import { formatDuration } from "@/lib/postUtils";
 
 interface ComposePostProps {
   placeholder?: string;
+  initialContent?: string;
   onSubmit: (content: string, audioFile: File | null) => void | Promise<void>;
   onGuestAction?: () => void;
   submitButtonText?: string;
@@ -31,8 +32,9 @@ interface ComposePostProps {
 
 const MAX_POST_LENGTH = 1000;
 
-export function ComposePost({ 
+export function ComposePost({
   placeholder = "What's on your mind? Share a message or upload audio...",
+  initialContent = "",
   onSubmit,
   onGuestAction,
   submitButtonText = "Post",
@@ -46,7 +48,7 @@ export function ComposePost({
   const navigate = useNavigate();
   const { isGuest, user } = useAuthStore();
   const [newPost, setNewPost] = useState({
-    content: "",
+    content: initialContent,
     audioFile: null as File | null,
   });
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -143,7 +145,7 @@ export function ComposePost({
         <button
           type="button"
           onClick={() => user && navigate(`/profile/${user.username}`)}
-          className="flex-shrink-0 p-0 m-0 border-0 bg-transparent cursor-pointer hover:opacity-80 transition-opacity self-start"
+          className="shrink-0 p-0 m-0 border-0 bg-transparent cursor-pointer hover:opacity-80 transition-opacity self-start"
           aria-label="Go to profile"
         >
           <Avatar size="lg" className="pointer-events-none">
@@ -161,7 +163,7 @@ export function ComposePost({
               setSubmitError(null);
               setNewPost({ ...newPost, content: e.target.value });
             }}
-            className="resize-none border-border w-full overflow-wrap-anywhere transition-all duration-200 focus:min-h-[120px]"
+            className="resize-none border-border w-full overflow-wrap-anywhere transition-all duration-200 focus:min-h-30"
             style={{ minHeight: newPost.content ? textareaMinHeight : "60px" }}
             rows={newPost.content ? textareaRows : 2}
             maxLength={maxLength}
@@ -189,7 +191,7 @@ export function ComposePost({
               </Button>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <Music className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <Music className="h-4 w-4 text-muted-foreground shrink-0" />
                   <span className="text-sm font-medium truncate">Voice Recording</span>
                 </div>
                 <div className="flex items-center gap-2">
