@@ -14,14 +14,14 @@ import { Timestamp } from "@/components/Timestamp";
 import { AutoLinkedText } from "@/components/AutoLinkedText";
 
 import type { FrontendPost } from '@/hooks/usePosts';
+import { getCommunityColors } from '@/lib/communityColors';
 
 interface PostCardProps {
   post: FrontendPost;
-  communityName?: string | null;
   isGuest?: boolean;
   currentUsername?: string;
   onAuthorClick?: (username: string) => void;
-  onCommunityClick?: (communityId: string) => void;
+  onCommunityClick?: (handle: string) => void;
   onPostClick?: (postId: string) => void;
   onLike?: (postId: string) => void;
   onDelete?: (postId: string) => void;
@@ -30,7 +30,6 @@ interface PostCardProps {
 
 export function PostCard({
   post,
-  communityName,
   isGuest = false,
   currentUsername,
   onAuthorClick,
@@ -40,6 +39,7 @@ export function PostCard({
   onDelete,
   formatTimeAgo,
 }: PostCardProps) {
+  const communityColors = getCommunityColors(post.communityThemeColor);
   const isOwn = !isGuest && !!currentUsername && currentUsername === post.author.username;
   const [copied, setCopied] = useState(false);
 
@@ -89,22 +89,13 @@ export function PostCard({
             >
               {post.author.username}
             </button>
-            {post.isGlobal ? (
-              <Tooltip>
-                <TooltipTrigger className="flex items-center">
-                  <span className="text-xs leading-none px-2 py-1 rounded bg-primary/10 text-primary cursor-default">
-                    Global
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>Visible to everyone</TooltipContent>
-              </Tooltip>
-            ) : communityName ? (
+            {post.communityHandle ? (
               <button
-                onClick={() => post.community && onCommunityClick?.(post.community)}
-                className="text-xs px-2 py-0.5 rounded bg-primary/8 text-primary/80 hover:bg-primary/12 transition-colors flex items-center gap-1 cursor-pointer"
+                onClick={(e) => { e.stopPropagation(); onCommunityClick?.(post.communityHandle!); }}
+                className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer transition-colors ${communityColors.badgeBg} ${communityColors.text}`}
               >
                 <HashIcon className="h-3 w-3" />
-                From {communityName}
+                {post.communityHandle}
               </button>
             ) : null}
             <Timestamp date={post.timestamp} className="text-xs text-muted-foreground">

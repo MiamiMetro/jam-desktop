@@ -1,5 +1,5 @@
 // SearchInput.tsx — Debounced real-time search input with glass styling
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Search, X } from "lucide-react";
 import { useDebouncedValue } from "@tanstack/react-pacer";
@@ -21,16 +21,19 @@ export function SearchInput({
 }: SearchInputProps) {
   const [input, setInput] = useState(value);
   const [debounced] = useDebouncedValue(input, { wait: debounceMs });
+  const onSearchRef = useRef(onSearch);
+  onSearchRef.current = onSearch;
 
   // Sync external value changes (e.g. URL param clears)
   useEffect(() => {
     setInput(value);
   }, [value]);
 
-  // Fire onSearch when debounced value changes
+  // Fire onSearch when debounced value changes — use ref to avoid infinite loops
+  // when onSearch is a new function reference on every parent render
   useEffect(() => {
-    onSearch(debounced);
-  }, [debounced, onSearch]);
+    onSearchRef.current(debounced);
+  }, [debounced]);
 
   const handleClear = () => {
     setInput("");

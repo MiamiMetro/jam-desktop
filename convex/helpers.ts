@@ -16,11 +16,17 @@ export const MAX_LENGTHS = {
   BIO: 500,
   PROFILE_TAG: 24,
   URL: 2048,
+  COMMUNITY_NAME: 50,
+  COMMUNITY_HANDLE: 30,
+  COMMUNITY_DESCRIPTION: 500,
+  COMMUNITY_TAG: 30,
 } as const;
 
 /** Minimum lengths for user-generated content */
 export const MIN_LENGTHS = {
   USERNAME: 3,
+  COMMUNITY_HANDLE: 2,
+  COMMUNITY_NAME: 2,
 } as const;
 
 export const MAX_COUNTS = {
@@ -110,6 +116,39 @@ export function validateUsername(username: string | undefined): void {
       "USERNAME_INVALID_CHARS: Username can only contain letters, numbers, and underscores, and must start with a letter or number"
     );
   }
+}
+
+/**
+ * Validate and normalize a community handle:
+ * - Length: 2-30 characters
+ * - Allowed: lowercase letters (a-z), numbers (0-9), hyphens (-), underscores (_)
+ * - Must start and end with a letter or number (no leading/trailing hyphens or underscores)
+ * - Returns the normalized (lowercased, trimmed) handle
+ */
+export function validateCommunityHandle(handle: string | undefined): string {
+  if (!handle) {
+    throw new Error("HANDLE_REQUIRED: Community handle is required");
+  }
+
+  const normalized = handle.trim().toLowerCase();
+
+  if (normalized.length < MIN_LENGTHS.COMMUNITY_HANDLE) {
+    throw new Error(`HANDLE_TOO_SHORT: Handle must be at least ${MIN_LENGTHS.COMMUNITY_HANDLE} characters`);
+  }
+
+  if (normalized.length > MAX_LENGTHS.COMMUNITY_HANDLE) {
+    throw new Error(`HANDLE_TOO_LONG: Handle exceeds maximum length of ${MAX_LENGTHS.COMMUNITY_HANDLE} characters`);
+  }
+
+  // Must start and end with letter/number; allows hyphens and underscores in the middle
+  const handleRegex = /^[a-z0-9][a-z0-9_-]*[a-z0-9]$|^[a-z0-9]{1,2}$/;
+  if (!handleRegex.test(normalized)) {
+    throw new Error(
+      "HANDLE_INVALID: Handle can only contain lowercase letters, numbers, hyphens, and underscores, and must start and end with a letter or number"
+    );
+  }
+
+  return normalized;
 }
 
 /**
@@ -292,7 +331,8 @@ export type UniqueLockScope =
   | "username"
   | "dm_pair"
   | "post_like"
-  | "comment_like";
+  | "comment_like"
+  | "community_handle";
 
 export async function getUniqueLock(
   ctx: QueryCtx | MutationCtx,

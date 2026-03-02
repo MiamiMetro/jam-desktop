@@ -53,6 +53,17 @@ async function formatPost(
 
   const isDeleted = post.deletedAt != null;
 
+  // Look up community data if post belongs to one
+  let communityHandle: string | null = null;
+  let communityThemeColor: string | null = null;
+  if (post.communityId) {
+    const community = await ctx.db.get(post.communityId);
+    if (community) {
+      communityHandle = community.handle;
+      communityThemeColor = community.themeColor;
+    }
+  }
+
   return {
     id: post._id,
     author_id: post.authorId,
@@ -69,6 +80,9 @@ async function formatPost(
     comments_count: commentsCount,
     is_liked: isLiked,
     deleted_at: post.deletedAt ?? null,
+    community_id: post.communityId ?? null,
+    community_handle: communityHandle,
+    community_theme_color: communityThemeColor,
   };
 }
 
@@ -81,10 +95,11 @@ export const create = mutation({
   args: {
     text: v.optional(v.string()),
     audio_url: v.optional(v.string()),
+    community_id: v.optional(v.id("communities")),
   },
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
-    
+
     // Rate limit: 5 posts per minute
     await checkRateLimit(ctx, "createPost", profile._id);
 
@@ -92,13 +107,26 @@ export const create = mutation({
     const text = sanitizeText(args.text);
     const audioUrl = args.audio_url;
     const audioObjectKey = extractManagedMediaObjectKeyFromUrl(audioUrl);
-    
+
     validateTextLength(text, MAX_LENGTHS.POST_TEXT, "Post text");
     validateUrl(audioUrl);
 
     // Text or audio must be provided
     if (!text && !audioUrl) {
       throw new Error("Post must have either text or audio");
+    }
+
+    // If posting to a community, verify membership
+    if (args.community_id) {
+      const membership = await ctx.db
+        .query("community_members")
+        .withIndex("by_community_and_profile", (q) =>
+          q.eq("communityId", args.community_id!).eq("profileId", profile._id)
+        )
+        .first();
+      if (!membership) {
+        throw new Error("COMMUNITY_MEMBER_REQUIRED: You must be a member to post in this community");
+      }
     }
 
     let nextAudioUrl = audioUrl;
@@ -121,10 +149,21 @@ export const create = mutation({
       text: text,
       audioUrl: nextAudioUrl,
       audioObjectKey: nextAudioObjectKey,
+      communityId: args.community_id,
       likesCount: 0,
       commentsCount: 0,
       nextCommentSequence: 0, // Initialize atomic counter for comment path generation
     });
+
+    // Increment community postsCount
+    if (args.community_id) {
+      const community = await ctx.db.get(args.community_id);
+      if (community) {
+        await ctx.db.patch(args.community_id, {
+          postsCount: (community.postsCount ?? 0) + 1,
+        });
+      }
+    }
 
     const post = await ctx.db.get(postId);
     if (!post) {
@@ -353,6 +392,40 @@ export const toggleLike = mutation({
     // Return updated post (refetch to get updated count)
     const updatedPost = await ctx.db.get(args.postId);
     return await formatPost(ctx, updatedPost!, profile._id);
+  },
+});
+
+/**
+ * Get posts for a specific community using native Convex pagination
+ */
+export const getCommunityPostsPaginated = query({
+  args: {
+    communityId: v.id("communities"),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const currentProfile = await getCurrentProfile(ctx);
+    const result = await ctx.db
+      .query("posts")
+      .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    const uniqueAuthorIds = [...new Set(result.page.map((post) => post.authorId))];
+    const authorEntries = await Promise.all(
+      uniqueAuthorIds.map(async (authorId) => [authorId, await ctx.db.get(authorId)] as const)
+    );
+    const authorMap = new Map(authorEntries);
+
+    const page = await Promise.all(
+      result.page.map((post) =>
+        formatPost(ctx, post, currentProfile?._id, {
+          author: authorMap.get(post.authorId) ?? null,
+        })
+      )
+    );
+
+    return { ...result, page };
   },
 });
 

@@ -11,6 +11,7 @@
 import type * as auth from "../auth.js";
 import type * as blocks from "../blocks.js";
 import type * as comments from "../comments.js";
+import type * as communities from "../communities.js";
 import type * as crons from "../crons.js";
 import type * as friends from "../friends.js";
 import type * as helpers from "../helpers.js";
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   blocks: typeof blocks;
   comments: typeof comments;
+  communities: typeof communities;
   crons: typeof crons;
   friends: typeof friends;
   helpers: typeof helpers;

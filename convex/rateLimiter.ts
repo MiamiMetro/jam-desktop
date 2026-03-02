@@ -1,4 +1,4 @@
-import { RateLimiter, MINUTE } from "@convex-dev/rate-limiter";
+import { RateLimiter, MINUTE, HOUR } from "@convex-dev/rate-limiter";
 import { components } from "./_generated/api";
 import type { MutationCtx } from "./_generated/server";
 
@@ -114,6 +114,38 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
     period: MINUTE,
     capacity: 3,
   },
+
+  // Community creation: 5 per hour (users can own max 3)
+  createCommunity: {
+    kind: "token bucket",
+    rate: 5,
+    period: HOUR,
+    capacity: 2,
+  },
+
+  // Community updates: 10 per minute
+  updateCommunity: {
+    kind: "token bucket",
+    rate: 10,
+    period: MINUTE,
+    capacity: 3,
+  },
+
+  // Join community: 20 per minute
+  joinCommunity: {
+    kind: "token bucket",
+    rate: 20,
+    period: MINUTE,
+    capacity: 5,
+  },
+
+  // Moderation actions (promote/demote/remove): 10 per minute
+  communityModAction: {
+    kind: "token bucket",
+    rate: 10,
+    period: MINUTE,
+    capacity: 3,
+  },
 });
 
 /**
@@ -132,7 +164,11 @@ export type RateLimitName =
   | "createProfile"
   | "general"
   | "uploadInit"
-  | "presenceStatus";
+  | "presenceStatus"
+  | "createCommunity"
+  | "updateCommunity"
+  | "joinCommunity"
+  | "communityModAction";
 
 /**
  * Helper to check rate limit and throw a user-friendly error

@@ -4,7 +4,6 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useAuthStore } from "@/stores/authStore";
 import { usePosts, useCreatePost, useToggleLike, useDeletePost } from "@/hooks/usePosts";
-import { useCommunities } from "@/hooks/useCommunities";
 import { useJams } from "@/hooks/useJams";
 import { PostCard } from "@/components/PostCard";
 import { ComposePost } from "@/components/ComposePost";
@@ -32,7 +31,6 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
   const location = useLocation();
   const { isGuest, user } = useAuthStore();
   const { data: posts = [], isLoading: postsLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = usePosts();
-  const { data: communities = [] } = useCommunities();
   const { data: rooms = [] } = useJams();
   const createPostMutation = useCreatePost();
   const toggleLikeMutation = useToggleLike();
@@ -70,14 +68,8 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
     }
   };
 
-  const getCommunityName = (communityId?: string) => {
-    if (!communityId) return null;
-    const community = communities.find(c => c.id === communityId);
-    return community?.name || communityId;
-  };
-
-  const handleCommunityClick = (communityId: string) => {
-    navigate(`/community/${communityId}`);
+  const handleCommunityClick = (handle: string) => {
+    navigate(`/community/${handle}`);
   };
 
   const handlePostClick = (postId: string) => {
@@ -156,7 +148,6 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
             >
               {virtualizer.getVirtualItems().map((virtualRow) => {
                 const post = posts[virtualRow.index];
-                const communityName = getCommunityName(post.community);
 
                 return (
                   <div
@@ -175,7 +166,6 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
                     <div>
                       <PostCard
                         post={post}
-                        communityName={communityName}
                         isGuest={isGuest}
                         currentUsername={user?.username}
                         onAuthorClick={handleAuthorClick}

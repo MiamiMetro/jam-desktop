@@ -587,7 +587,6 @@ function Profile() {
                       <div key={post.id} className="hover:bg-foreground/[0.03] transition-colors">
                         <PostCard
                           post={post}
-                          communityName={null}
                           isGuest={isGuest}
                           currentUsername={currentUser?.username}
                           onAuthorClick={(u) => navigate(`/profile/${u}`)}

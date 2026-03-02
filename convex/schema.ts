@@ -42,6 +42,8 @@ export default defineSchema({
     text: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
     audioObjectKey: v.optional(v.string()),
+    // Optional community association
+    communityId: v.optional(v.id("communities")),
     // Denormalized counts for O(1) read performance
     likesCount: v.optional(v.number()),
     commentsCount: v.optional(v.number()),
@@ -51,7 +53,8 @@ export default defineSchema({
     // Soft delete: set when post is deleted, used for placeholder rendering
     deletedAt: v.optional(v.number()),
   })
-    .index("by_author", ["authorId"]),
+    .index("by_author", ["authorId"])
+    .index("by_community", ["communityId"]),
 
   // Comments table - threaded comments with path-based ordering
   // Path format: "0001.0002.0003" enables efficient tree operations
@@ -153,6 +156,42 @@ export default defineSchema({
     .index("by_blocker", ["blockerId"])
     .index("by_blocked", ["blockedId"])
     .index("by_blocker_and_blocked", ["blockerId", "blockedId"]),
+
+  // Communities table
+  communities: defineTable({
+    name: v.string(),
+    handle: v.string(), // unique, lowercase slug
+    description: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
+    avatarObjectKey: v.optional(v.string()),
+    bannerUrl: v.optional(v.string()),
+    bannerObjectKey: v.optional(v.string()),
+    themeColor: v.string(), // key from predefined palette (amber, purple, etc.)
+    tags: v.array(v.string()), // max 5, from predefined list
+    ownerId: v.id("profiles"),
+    membersCount: v.number(),
+    postsCount: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_handle", ["handle"])
+    .index("by_owner", ["ownerId"])
+    .index("by_created_at", ["createdAt"])
+    .searchIndex("search_communities", {
+      searchField: "name",
+      filterFields: ["themeColor"],
+    }),
+
+  // Community members table - tracks membership and roles
+  community_members: defineTable({
+    communityId: v.id("communities"),
+    profileId: v.id("profiles"),
+    role: v.union(v.literal("owner"), v.literal("mod"), v.literal("member")),
+    joinedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_profile", ["profileId"])
+    .index("by_community_and_profile", ["communityId", "profileId"])
+    .index("by_community_and_role", ["communityId", "role"]),
 
   // DM lookup table - provides practical uniqueness for 1:1 conversations
   // Uses _creationTime for canonical selection (no custom timestamp needed)

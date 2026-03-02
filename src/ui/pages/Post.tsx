@@ -15,7 +15,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { usePost, useComments, useCreateComment, useToggleLike, useToggleCommentLike, usePostLikes, useDeleteComment, useDeletePost, type FrontendComment } from "@/hooks/usePosts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
-import { useCommunities } from "@/hooks/useCommunities";
+import { getCommunityColors } from "@/lib/communityColors";
 import { formatTimeAgo } from "@/lib/postUtils";
 import { Timestamp } from "@/components/Timestamp";
 import { EmptyState } from "@/components/EmptyState";
@@ -40,8 +40,6 @@ function Post() {
   const toggleCommentLikeMutation = useToggleCommentLike();
   const deleteCommentMutation = useDeleteComment();
   const deletePostMutation = useDeletePost();
-  const { data: communities = [] } = useCommunities();
-
   const [copied, setCopied] = useState(false);
   const [likersOpen, setLikersOpen] = useState(false);
   const likersQuery = usePostLikes(likersOpen ? (id ?? null) : null);
@@ -60,8 +58,8 @@ function Post() {
     navigate(`/profile/${username}`);
   };
 
-  const handleCommunityClick = (communityId: string) => {
-    navigate(`/community/${communityId}`);
+  const handleCommunityClick = (handle: string) => {
+    navigate(`/community/${handle}`);
   };
 
   const handleLikePost = async () => {
@@ -91,12 +89,6 @@ function Post() {
     });
   };
 
-  const getCommunityName = (communityId?: string) => {
-    if (!communityId) return null;
-    const community = communities.find(c => c.id === communityId);
-    return community?.name || communityId;
-  };
-
   if (isLoading) {
     return (
       <div className="p-6">
@@ -112,8 +104,6 @@ function Post() {
       </div>
     );
   }
-
-  const communityName = getCommunityName(post.community);
 
   return (
     <div className="flex flex-col h-full">
@@ -167,17 +157,13 @@ function Post() {
                   >
                     {post.author.username}
                   </button>
-                  {post.isGlobal ? (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                      Global
-                    </span>
-                  ) : communityName ? (
+                  {post.communityHandle ? (
                     <button
-                      onClick={() => post.community && handleCommunityClick(post.community)}
-                      className="text-xs px-2 py-0.5 rounded-full glass-solid hover:bg-foreground/6 transition-colors flex items-center gap-1"
+                      onClick={() => handleCommunityClick(post.communityHandle!)}
+                      className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 cursor-pointer transition-colors ${getCommunityColors(post.communityThemeColor).badgeBg} ${getCommunityColors(post.communityThemeColor).text}`}
                     >
                       <HashIcon className="h-3 w-3" />
-                      {communityName}
+                      {post.communityHandle}
                     </button>
                   ) : null}
                   <Timestamp date={post.timestamp} className="text-xs text-muted-foreground">

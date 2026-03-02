@@ -1,141 +1,364 @@
-import { useState, useEffect } from 'react';
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
+import { useState } from "react";
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
+import type { FunctionReturnType } from "convex/server";
+import { useR2Upload } from "@/hooks/useR2Upload";
 
-// Community type - keeping local since Convex backend doesn't have communities yet
-export type Community = {
-  id: string;
-  name: string;
-  description: string;
-  category: string[];
-  activeCount: number;
-  totalMembers: number;
-  isLive: boolean;
-  recentPosts: any[];
-  recentJam?: any;
+// Community type inferred from Convex backend
+type CommunityQueryReturn = FunctionReturnType<typeof api.communities.getByHandle>;
+export type Community = NonNullable<CommunityQueryReturn>;
+
+type MutationOptions = {
+  onSuccess?: () => void;
+  onError?: (error: Error) => void;
 };
 
-// Mock communities data
-const mockCommunities: Community[] = [
-  {
-    id: "lofi",
-    name: "LoFi Beats",
-    description: "A place for chill vibes and relaxed jamming",
-    category: ["LoFi", "Chill", "Study"],
-    activeCount: 23,
-    totalMembers: 450,
-    isLive: true,
-    recentPosts: [],
-  },
-  {
-    id: "rock",
-    name: "Rock & Roll",
-    description: "A place for rockers to jam and collaborate",
-    category: ["Rock", "Metal", "Alternative"],
-    activeCount: 18,
-    totalMembers: 320,
-    isLive: true,
-    recentPosts: [],
-  },
-  {
-    id: "electronic",
-    name: "Electronic Music",
-    description: "A place for EDM and electronic producers",
-    category: ["Electronic", "EDM", "Techno"],
-    activeCount: 31,
-    totalMembers: 580,
-    isLive: true,
-    recentPosts: [],
-  },
-  {
-    id: "jazz",
-    name: "Jazz Lounge",
-    description: "A place for smooth jazz and improvisation",
-    category: ["Jazz", "Smooth", "Improvisation"],
-    activeCount: 12,
-    totalMembers: 210,
-    isLive: false,
-    recentPosts: [],
-  },
-  {
-    id: "hiphop",
-    name: "Hip Hop Cypher",
-    description: "A place for freestyle and beats",
-    category: ["Hip Hop", "Rap", "Beats"],
-    activeCount: 27,
-    totalMembers: 520,
-    isLive: true,
-    recentPosts: [],
-  },
-];
+// ============================================
+// Queries
+// ============================================
 
-export const useCommunities = (filters?: { category?: string; search?: string }) => {
-  const [data, setData] = useState<Community[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+export const useCommunities = (filters?: { tag?: string; search?: string }) => {
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.communities.listPaginated,
+    { tag: filters?.tag, search: filters?.search },
+    { initialNumItems: 20 }
+  );
 
-  useEffect(() => {
-    // Simulate async fetch
-    const timer = setTimeout(() => {
-      let filtered = [...mockCommunities];
-      
-      if (filters?.category) {
-        filtered = filtered.filter(comm => 
-          comm.category.some(cat => cat.toLowerCase().includes(filters.category!.toLowerCase()))
-        );
-      }
-      
-      if (filters?.search) {
-        const searchLower = filters.search.toLowerCase();
-        filtered = filtered.filter(comm => 
-          comm.name.toLowerCase().includes(searchLower) ||
-          comm.description.toLowerCase().includes(searchLower)
-        );
-      }
-      
-      setData(filtered);
-      setIsLoading(false);
-    }, 100);
-
-    return () => clearTimeout(timer);
-  }, [filters?.category, filters?.search]);
-
-  return { data, isLoading, error: null };
+  return {
+    data: results as Community[],
+    isLoading: status === "LoadingFirstPage",
+    hasNextPage: status === "CanLoadMore",
+    isFetchingNextPage: status === "LoadingMore",
+    fetchNextPage: () => loadMore(20),
+  };
 };
 
-export const useCommunity = (id: string) => {
-  const [data, setData] = useState<Community | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+export const useCommunity = (handle: string) => {
+  const result = useQuery(
+    api.communities.getByHandle,
+    handle ? { handle } : "skip"
+  );
 
-  useEffect(() => {
-    if (!id) {
-      setData(null);
-      setIsLoading(false);
-      return;
-    }
+  return {
+    data: result ?? null,
+    isLoading: result === undefined && !!handle,
+  };
+};
 
-    const timer = setTimeout(() => {
-      const community = mockCommunities.find(comm => comm.id === id) || null;
-      setData(community);
-      setIsLoading(false);
-    }, 100);
+export const useCommunityById = (communityId: string) => {
+  const result = useQuery(
+    api.communities.getById,
+    communityId ? { communityId: communityId as Id<"communities"> } : "skip"
+  );
 
-    return () => clearTimeout(timer);
-  }, [id]);
-
-  return { data, isLoading, error: null };
+  return {
+    data: result ?? null,
+    isLoading: result === undefined && !!communityId,
+  };
 };
 
 export const useJoinedCommunities = () => {
-  const [data, setData] = useState<Community[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.communities.getJoined,
+    {},
+    { initialNumItems: 50 }
+  );
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      // Mock: return first 3 communities as "joined"
-      setData(mockCommunities.slice(0, 3));
-      setIsLoading(false);
-    }, 100);
+  return {
+    data: results as Community[],
+    isLoading: status === "LoadingFirstPage",
+    hasNextPage: status === "CanLoadMore",
+    fetchNextPage: () => loadMore(50),
+  };
+};
 
-    return () => clearTimeout(timer);
-  }, []);
+export const useMemberRole = (communityId: string) => {
+  const result = useQuery(
+    api.communities.getMemberRole,
+    communityId ? { communityId: communityId as Id<"communities"> } : "skip"
+  );
 
-  return { data, isLoading, error: null };
+  return result ?? null;
+};
+
+export const useCommunityMembers = (communityId: string) => {
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.communities.getMembersPaginated,
+    communityId ? { communityId: communityId as Id<"communities"> } : "skip",
+    { initialNumItems: 30 }
+  );
+
+  return {
+    data: results,
+    isLoading: status === "LoadingFirstPage",
+    hasNextPage: status === "CanLoadMore",
+    fetchNextPage: () => loadMore(30),
+  };
+};
+
+export const useSearchCommunityMembers = (communityId: string, username: string) => {
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.communities.searchMembersPaginated,
+    communityId && username.length >= 2
+      ? { communityId: communityId as Id<"communities">, username }
+      : "skip",
+    { initialNumItems: 20 }
+  );
+
+  return {
+    data: results,
+    isLoading: status === "LoadingFirstPage",
+    hasNextPage: status === "CanLoadMore",
+    fetchNextPage: () => loadMore(20),
+  };
+};
+
+export const useCommunityCreatedCount = () => {
+  const result = useQuery(api.communities.getCreatedCount, {});
+  return result ?? 0;
+};
+
+// ============================================
+// Mutations
+// ============================================
+
+export const useCreateCommunity = () => {
+  const createMutation = useMutation(api.communities.create);
+  const { uploadFile } = useR2Upload();
+  const [isPending, setIsPending] = useState(false);
+
+  const run = async (variables: {
+    name: string;
+    handle: string;
+    description?: string;
+    themeColor: string;
+    tags: string[];
+    avatarFile?: File | null;
+    bannerFile?: File | null;
+  }) => {
+    setIsPending(true);
+    try {
+      let avatarUrl: string | undefined;
+      let bannerUrl: string | undefined;
+
+      if (variables.avatarFile) {
+        const uploaded = await uploadFile("avatar", variables.avatarFile);
+        avatarUrl = uploaded.url;
+      }
+      if (variables.bannerFile) {
+        const uploaded = await uploadFile("banner", variables.bannerFile);
+        bannerUrl = uploaded.url;
+      }
+
+      return await createMutation({
+        name: variables.name,
+        handle: variables.handle,
+        description: variables.description,
+        themeColor: variables.themeColor,
+        tags: variables.tags,
+        avatar_url: avatarUrl,
+        banner_url: bannerUrl,
+      });
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return {
+    mutate: (variables: Parameters<typeof run>[0], options?: MutationOptions) => {
+      run(variables)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
+    },
+    mutateAsync: run,
+    isPending,
+  };
+};
+
+export const useUpdateCommunity = () => {
+  const updateMutation = useMutation(api.communities.update);
+  const { uploadFile } = useR2Upload();
+  const [isPending, setIsPending] = useState(false);
+
+  const run = async (variables: {
+    communityId: string;
+    name?: string;
+    description?: string;
+    themeColor?: string;
+    tags?: string[];
+    avatarFile?: File | null;
+    bannerFile?: File | null;
+    avatarUrl?: string;
+    bannerUrl?: string;
+  }) => {
+    setIsPending(true);
+    try {
+      let avatarUrl = variables.avatarUrl;
+      let bannerUrl = variables.bannerUrl;
+
+      if (variables.avatarFile) {
+        const uploaded = await uploadFile("avatar", variables.avatarFile);
+        avatarUrl = uploaded.url;
+      }
+      if (variables.bannerFile) {
+        const uploaded = await uploadFile("banner", variables.bannerFile);
+        bannerUrl = uploaded.url;
+      }
+
+      return await updateMutation({
+        communityId: variables.communityId as Id<"communities">,
+        name: variables.name,
+        description: variables.description,
+        themeColor: variables.themeColor,
+        tags: variables.tags,
+        avatar_url: avatarUrl,
+        banner_url: bannerUrl,
+      });
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return {
+    mutate: (variables: Parameters<typeof run>[0], options?: MutationOptions) => {
+      run(variables)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
+    },
+    mutateAsync: run,
+    isPending,
+  };
+};
+
+export const useJoinCommunity = () => {
+  const joinMutation = useMutation(api.communities.join);
+  const [isPending, setIsPending] = useState(false);
+
+  const run = async (communityId: string) => {
+    setIsPending(true);
+    try {
+      return await joinMutation({ communityId: communityId as Id<"communities"> });
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return {
+    mutate: (communityId: string, options?: MutationOptions) => {
+      run(communityId)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
+    },
+    mutateAsync: run,
+    isPending,
+  };
+};
+
+export const useLeaveCommunity = () => {
+  const leaveMutation = useMutation(api.communities.leave);
+  const [isPending, setIsPending] = useState(false);
+
+  const run = async (communityId: string) => {
+    setIsPending(true);
+    try {
+      return await leaveMutation({ communityId: communityId as Id<"communities"> });
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return {
+    mutate: (communityId: string, options?: MutationOptions) => {
+      run(communityId)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
+    },
+    mutateAsync: run,
+    isPending,
+  };
+};
+
+export const usePromoteMod = () => {
+  const promoteMutation = useMutation(api.communities.promoteMod);
+  const [isPending, setIsPending] = useState(false);
+
+  const run = async (communityId: string, profileId: string) => {
+    setIsPending(true);
+    try {
+      return await promoteMutation({
+        communityId: communityId as Id<"communities">,
+        profileId: profileId as Id<"profiles">,
+      });
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return {
+    mutate: (args: { communityId: string; profileId: string }, options?: MutationOptions) => {
+      run(args.communityId, args.profileId)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
+    },
+    mutateAsync: (args: { communityId: string; profileId: string }) =>
+      run(args.communityId, args.profileId),
+    isPending,
+  };
+};
+
+export const useDemoteMod = () => {
+  const demoteMutation = useMutation(api.communities.demoteMod);
+  const [isPending, setIsPending] = useState(false);
+
+  const run = async (communityId: string, profileId: string) => {
+    setIsPending(true);
+    try {
+      return await demoteMutation({
+        communityId: communityId as Id<"communities">,
+        profileId: profileId as Id<"profiles">,
+      });
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return {
+    mutate: (args: { communityId: string; profileId: string }, options?: MutationOptions) => {
+      run(args.communityId, args.profileId)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
+    },
+    mutateAsync: (args: { communityId: string; profileId: string }) =>
+      run(args.communityId, args.profileId),
+    isPending,
+  };
+};
+
+export const useRemoveMember = () => {
+  const removeMutation = useMutation(api.communities.removeMember);
+  const [isPending, setIsPending] = useState(false);
+
+  const run = async (communityId: string, profileId: string) => {
+    setIsPending(true);
+    try {
+      return await removeMutation({
+        communityId: communityId as Id<"communities">,
+        profileId: profileId as Id<"profiles">,
+      });
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return {
+    mutate: (args: { communityId: string; profileId: string }, options?: MutationOptions) => {
+      run(args.communityId, args.profileId)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
+    },
+    mutateAsync: (args: { communityId: string; profileId: string }) =>
+      run(args.communityId, args.profileId),
+    isPending,
+  };
 };

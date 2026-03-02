@@ -25,8 +25,9 @@ export interface FrontendPost {
   isLiked?: boolean;
   shares?: number;
   comments?: number;
-  community?: string;
-  isGlobal?: boolean;
+  communityId?: string | null;
+  communityHandle?: string | null;
+  communityThemeColor?: string | null;
   isDeleted?: boolean;
 }
 
@@ -79,8 +80,9 @@ function convertPost(post: Post): FrontendPost {
     isLiked: post.is_liked || false,
     shares: 0,
     comments: post.comments_count || 0,
-    community: undefined,
-    isGlobal: true,
+    communityId: post.community_id ?? null,
+    communityHandle: post.community_handle ?? null,
+    communityThemeColor: post.community_theme_color ?? null,
     isDeleted,
   };
 }
@@ -140,11 +142,16 @@ export const usePosts = () => {
 };
 
 export const useCommunityPosts = (communityId: string) => {
-  void communityId;
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.posts.getCommunityPostsPaginated,
+    communityId ? { communityId: communityId as Id<"communities"> } : "skip",
+    { initialNumItems: 20 }
+  );
+  const flags = getPaginatedStatusFlags(status);
   return {
-    data: [] as FrontendPost[],
-    isLoading: false,
-    error: null,
+    data: results.map(convertPost),
+    ...flags,
+    fetchNextPage: () => loadMore(20),
     refetch: () => {},
   };
 };
@@ -158,7 +165,7 @@ export const useGlobalPosts = () => {
   const flags = getPaginatedStatusFlags(status);
 
   return {
-    data: results.map(convertPost).filter((post) => post.isGlobal === true),
+    data: results.map(convertPost).filter((post) => !post.communityId),
     ...flags,
     fetchNextPage: () => loadMore(20),
     refetch: () => {},
@@ -236,7 +243,7 @@ export const useCreatePost = () => {
   const { uploadFile } = useR2Upload();
   const [isPending, setIsPending] = useState(false);
 
-  const run = async (variables: { content: string; audioFile?: File | null }) => {
+  const run = async (variables: { content: string; audioFile?: File | null; communityId?: string | null }) => {
     setIsPending(true);
     try {
       let audioUrl: string | undefined;
@@ -247,6 +254,7 @@ export const useCreatePost = () => {
       const result = await createPost({
         text: variables.content || undefined,
         audio_url: audioUrl,
+        community_id: variables.communityId ? (variables.communityId as Id<"communities">) : undefined,
       });
       return convertPost(result);
     } finally {
@@ -255,7 +263,7 @@ export const useCreatePost = () => {
   };
 
   return {
-    mutate: (variables: { content: string; audioFile?: File | null }, options?: FriendMutationOptions) => {
+    mutate: (variables: { content: string; audioFile?: File | null; communityId?: string | null }, options?: FriendMutationOptions) => {
       run(variables)
         .then(() => options?.onSuccess?.())
         .catch((error) => options?.onError?.(error as Error));

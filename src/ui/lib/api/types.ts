@@ -29,6 +29,10 @@ export type Message = MessagesQueryReturn["data"][number];
 type ConversationsQueryReturn = FunctionReturnType<typeof api.messages.getConversationsPaginated>;
 export type Conversation = ConversationsQueryReturn["page"][number];
 
+// Infer Community type from community queries (Convex format - single source of truth)
+type CommunityQueryReturn = FunctionReturnType<typeof api.communities.getByHandle>;
+export type CommunityItem = NonNullable<CommunityQueryReturn>;
+
 // Re-export Convex utility types for direct use
 // Note: TypeScript may warn these are unused, but they ARE used via re-export throughout the codebase
 export type { Doc, Id } from "../../../../convex/_generated/dataModel";
