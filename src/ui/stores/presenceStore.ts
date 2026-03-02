@@ -6,9 +6,11 @@ interface PresenceState {
   manualStatus: PresenceStatus;
   currentStatus: PresenceStatus;
   roomToken: string | null;
+  isStatusChanging: boolean;
   setManualStatus: (status: PresenceStatus) => void;
   setCurrentStatus: (status: PresenceStatus) => void;
   setRoomToken: (roomToken: string | null) => void;
+  setIsStatusChanging: (changing: boolean) => void;
 }
 
 const PRESENCE_STATUS_STORAGE_KEY = "presenceManualStatus";
@@ -25,6 +27,7 @@ export const usePresenceStore = create<PresenceState>((set) => ({
   manualStatus: getInitialManualStatus(),
   currentStatus: getInitialManualStatus(),
   roomToken: null,
+  isStatusChanging: false,
   setManualStatus: (status) => {
     localStorage.setItem(PRESENCE_STATUS_STORAGE_KEY, status);
     set({ manualStatus: status });
@@ -34,5 +37,8 @@ export const usePresenceStore = create<PresenceState>((set) => ({
   },
   setRoomToken: (roomToken) => {
     set({ roomToken });
+  },
+  setIsStatusChanging: (changing) => {
+    set({ isStatusChanging: changing });
   },
 }));

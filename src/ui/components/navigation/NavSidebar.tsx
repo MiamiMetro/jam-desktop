@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AvatarBadge, AvatarGroup } from "@/components/ui/avatar";
 import { Logo } from "@/components/Logo";
+import { Spinner } from "@/components/ui/spinner";
 import { api } from "../../../../convex/_generated/api";
 import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -93,6 +94,10 @@ export default function NavSidebar() {
   const manualPresenceStatus = usePresenceStore((state) => state.manualStatus);
   const setManualPresenceStatus = usePresenceStore((state) => state.setManualStatus);
   const setCurrentPresenceStatus = usePresenceStore((state) => state.setCurrentStatus);
+  const isStatusChanging = usePresenceStore((state) => state.isStatusChanging);
+  const setIsStatusChanging = usePresenceStore((state) => state.setIsStatusChanging);
+
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const { data: friends = [] } = useFriends();
   const { data: onlineUsers = [] } = useOnlineUsers();
@@ -121,12 +126,14 @@ export default function NavSidebar() {
   }, [theme, setTheme]);
 
   const syncPresenceStatus = useCallback(
-    async (status: PresenceStatus) => {
-      if (isGuest || !user) return;
+    async (status: PresenceStatus): Promise<boolean> => {
+      if (isGuest || !user) return false;
       try {
         await setMyPresenceStatus({ status });
+        return true;
       } catch (error) {
         console.error("Failed to update presence status:", error);
+        return false;
       }
     },
     [isGuest, setMyPresenceStatus, user]
@@ -211,9 +218,10 @@ export default function NavSidebar() {
   }, [clearIdleTimer, isGuest, setCurrentPresenceStatus, setManualPresenceStatus]);
 
   useEffect(() => {
-    if (isGuest || !user) return;
-    void syncPresenceStatus(effectivePresenceStatus);
-  }, [effectivePresenceStatus, isGuest, syncPresenceStatus, user?.id]);
+    if (!statusError) return;
+    const timer = setTimeout(() => setStatusError(null), 3000);
+    return () => clearTimeout(timer);
+  }, [statusError]);
 
   return (
     <div className="w-[220px] min-w-[220px] surface-elevated flex flex-col h-full select-none relative z-10">
@@ -345,7 +353,11 @@ export default function NavSidebar() {
                 </DropdownMenuItem>
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>
-                    <Activity className="h-4 w-4 mr-2" />
+                    {isStatusChanging ? (
+                      <Spinner className="h-4 w-4 mr-2" />
+                    ) : (
+                      <Activity className="h-4 w-4 mr-2" />
+                    )}
                     Status
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
@@ -353,20 +365,33 @@ export default function NavSidebar() {
                       value={effectivePresenceStatus}
                       onValueChange={(value) => {
                         const nextStatus = value as PresenceStatus;
-                        setManualPresenceStatus(nextStatus);
-                        if (nextStatus !== "online") {
-                          clearIdleTimer();
-                        } else {
-                          scheduleAutoAway();
-                        }
-                        setIsAutoAway(false);
-                        void syncPresenceStatus(nextStatus);
+                        if (isStatusChanging) return;
+                        setIsStatusChanging(true);
+                        setStatusError(null);
+                        (async () => {
+                          const ok = await syncPresenceStatus(nextStatus);
+                          if (ok) {
+                            setManualPresenceStatus(nextStatus);
+                            if (nextStatus !== "online") {
+                              clearIdleTimer();
+                            } else {
+                              scheduleAutoAway();
+                            }
+                            setIsAutoAway(false);
+                          } else {
+                            setStatusError("Too fast! Wait a bit.");
+                          }
+                          setIsStatusChanging(false);
+                        })();
                       }}
                     >
-                      <DropdownMenuRadioItem value="online">Online</DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="away">Away</DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="busy">Busy</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="online" disabled={isStatusChanging}>Online</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="away" disabled={isStatusChanging}>Away</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="busy" disabled={isStatusChanging}>Busy</DropdownMenuRadioItem>
                     </DropdownMenuRadioGroup>
+                    {statusError && (
+                      <p className="px-2 py-1 text-xs text-destructive">{statusError}</p>
+                    )}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
                 <DropdownMenuItem onClick={() => navigate("/settings")}>
