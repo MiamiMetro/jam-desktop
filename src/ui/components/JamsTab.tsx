@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useJams, useMyRoom, useCreateRoom, useUpdateRoom, useActivateRoom, useDeactivateRoom } from "@/hooks/useJams";
-import { Avatar, AvatarFallback, AvatarImage, AvatarBadge } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { RoomCard } from "@/components/RoomCard";
@@ -33,12 +33,6 @@ function getPresenceRingClass(status: PresenceStatus) {
   if (status === "busy") return "ring-red-500/30";
   if (status === "away") return "ring-amber-500/30";
   return "ring-green-500/30";
-}
-
-function getPresenceBadgeClass(status: PresenceStatus) {
-  if (status === "busy") return "bg-red-500";
-  if (status === "away") return "bg-amber-500";
-  return "bg-green-500";
 }
 
 function JamsTab({ onGuestAction }: JamsTabProps) {
