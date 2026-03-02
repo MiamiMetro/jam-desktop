@@ -323,8 +323,8 @@ function Profile() {
         </div>
         <div className="h-28 animate-shimmer flex-shrink-0" />
         <div className="flex-1 flex min-h-0">
-          <div className="w-[320px] min-w-[320px] border-r border-border p-5">
-            <div className="-mt-14 h-24 w-24 rounded-full animate-shimmer ring-2 ring-background mb-4" />
+          <div className="w-[320px] min-w-[320px] border-r border-border px-5 pt-5">
+            <div className="-mt-14 h-30 w-30 rounded-full border-4 border-background ring-2 ring-primary/30 animate-shimmer mb-4" />
             <div className="h-6 w-36 rounded animate-shimmer mb-2" />
             <div className="h-4 w-48 rounded animate-shimmer mb-4" />
           </div>

@@ -130,7 +130,7 @@ function CommunitiesTab() {
                         <span className="text-xs text-muted-foreground">
                           {community.members_count} member{community.members_count !== 1 ? "s" : ""}
                         </span>
-                        {community.tags?.slice(0, 2).map((tag: string) => (
+                        {community.tags?.slice(0, 5).map((tag: string) => (
                           <span
                             key={tag}
                             className={`text-[10px] px-1.5 py-0.5 rounded-full ${colors.badgeBg} ${colors.text}`}
