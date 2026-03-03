@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useAuthStore } from "@/stores/authStore";
 import { usePosts, useCreatePost, useToggleLike, useDeletePost } from "@/hooks/usePosts";
-import { useJams } from "@/hooks/useJams";
+import { useActiveRooms } from "@/hooks/useRooms";
 import { PostCard } from "@/components/PostCard";
 import { ComposePost } from "@/components/ComposePost";
 import { EmptyState } from "@/components/EmptyState";
@@ -31,7 +31,7 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
   const location = useLocation();
   const { isGuest, user } = useAuthStore();
   const { data: posts = [], isLoading: postsLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = usePosts();
-  const { data: rooms = [] } = useJams();
+  const { data: rooms = [] } = useActiveRooms();
   const createPostMutation = useCreatePost();
   const toggleLikeMutation = useToggleLike();
   const deletePostMutation = useDeletePost();
@@ -199,7 +199,7 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
         {/* Active Jams */}
         {(() => {
-          const activeRooms = rooms.filter(r => r.isEnabled).slice(0, 3);
+          const activeRooms = rooms.slice(0, 3);
           if (activeRooms.length === 0) return null;
           return (
             <div>
@@ -210,7 +210,7 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
                 {activeRooms.map(room => (
                   <button
                     key={room.id}
-                    onClick={() => navigate(`/jam/${room.id}`)}
+                    onClick={() => navigate(`/jam/${room.handle}`)}
                     className="w-full flex items-center gap-3 p-2.5 rounded-lg glass-solid hover:glass-strong transition-all duration-200 cursor-pointer text-left hover:ring-1 hover:ring-primary/20"
                   >
                     <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -224,7 +224,7 @@ function FeedTab({ onGuestAction }: FeedTabProps) {
                         )}
                         <span className="flex items-center gap-1">
                           <Users className="h-3 w-3" />
-                          {room.participants}
+                          {room.participant_count}
                         </span>
                       </div>
                     </div>

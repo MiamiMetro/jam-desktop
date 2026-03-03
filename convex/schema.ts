@@ -193,6 +193,34 @@ export default defineSchema({
     .index("by_community_and_profile", ["communityId", "profileId"])
     .index("by_community_and_role", ["communityId", "role"]),
 
+  // Jam rooms — one per user, handle-based URLs
+  // Presence tracked via @convex-dev/presence rooms ("room:{roomId}")
+  rooms: defineTable({
+    hostId: v.id("profiles"),
+    handle: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    genre: v.optional(v.string()),
+    maxPerformers: v.number(),
+    isPrivate: v.boolean(),
+    isActive: v.boolean(),
+    streamUrl: v.optional(v.string()),
+    status: v.union(v.literal("idle"), v.literal("live")),
+    communityId: v.optional(v.id("communities")),
+    lastActiveAt: v.number(),
+  })
+    .index("by_host", ["hostId"])
+    .index("by_handle", ["handle"])
+    .index("by_active", ["isActive"]),
+
+  // Room chat messages — live chat, latest 30 only
+  room_messages: defineTable({
+    roomId: v.id("rooms"),
+    senderId: v.id("profiles"),
+    text: v.string(),
+  })
+    .index("by_room", ["roomId"]),
+
   // DM lookup table - provides practical uniqueness for 1:1 conversations
   // Uses _creationTime for canonical selection (no custom timestamp needed)
   dm_keys: defineTable({

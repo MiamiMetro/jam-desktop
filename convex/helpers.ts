@@ -20,6 +20,10 @@ export const MAX_LENGTHS = {
   COMMUNITY_HANDLE: 30,
   COMMUNITY_DESCRIPTION: 500,
   COMMUNITY_TAG: 30,
+  ROOM_NAME: 50,
+  ROOM_HANDLE: 30,
+  ROOM_DESCRIPTION: 500,
+  ROOM_MESSAGE: 300,
 } as const;
 
 /** Minimum lengths for user-generated content */
@@ -27,6 +31,8 @@ export const MIN_LENGTHS = {
   USERNAME: 3,
   COMMUNITY_HANDLE: 2,
   COMMUNITY_NAME: 2,
+  ROOM_HANDLE: 2,
+  ROOM_NAME: 2,
 } as const;
 
 export const MAX_COUNTS = {
@@ -141,6 +147,38 @@ export function validateCommunityHandle(handle: string | undefined): string {
   }
 
   // Must start and end with letter/number; allows hyphens and underscores in the middle
+  const handleRegex = /^[a-z0-9][a-z0-9_-]*[a-z0-9]$|^[a-z0-9]{1,2}$/;
+  if (!handleRegex.test(normalized)) {
+    throw new Error(
+      "HANDLE_INVALID: Handle can only contain lowercase letters, numbers, hyphens, and underscores, and must start and end with a letter or number"
+    );
+  }
+
+  return normalized;
+}
+
+/**
+ * Validate and normalize a room handle:
+ * - Length: 2-30 characters
+ * - Allowed: lowercase letters (a-z), numbers (0-9), hyphens (-), underscores (_)
+ * - Must start and end with a letter or number (no leading/trailing hyphens or underscores)
+ * - Returns the normalized (lowercased, trimmed) handle
+ */
+export function validateRoomHandle(handle: string | undefined): string {
+  if (!handle) {
+    throw new Error("HANDLE_REQUIRED: Room handle is required");
+  }
+
+  const normalized = handle.trim().toLowerCase();
+
+  if (normalized.length < MIN_LENGTHS.ROOM_HANDLE) {
+    throw new Error(`HANDLE_TOO_SHORT: Handle must be at least ${MIN_LENGTHS.ROOM_HANDLE} characters`);
+  }
+
+  if (normalized.length > MAX_LENGTHS.ROOM_HANDLE) {
+    throw new Error(`HANDLE_TOO_LONG: Handle exceeds maximum length of ${MAX_LENGTHS.ROOM_HANDLE} characters`);
+  }
+
   const handleRegex = /^[a-z0-9][a-z0-9_-]*[a-z0-9]$|^[a-z0-9]{1,2}$/;
   if (!handleRegex.test(normalized)) {
     throw new Error(
@@ -332,7 +370,8 @@ export type UniqueLockScope =
   | "dm_pair"
   | "post_like"
   | "comment_like"
-  | "community_handle";
+  | "community_handle"
+  | "room_handle";
 
 export async function getUniqueLock(
   ctx: QueryCtx | MutationCtx,

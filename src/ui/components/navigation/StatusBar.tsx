@@ -1,8 +1,9 @@
 // StatusBar.tsx — Bottom bar showing current room info & post audio mini-player
+import { useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Hash, Users, LogOut, Play, Pause, Volume2, VolumeX, Music, X } from "lucide-react";
+import { Hash, Users, LogOut, Play, Pause, Volume2, VolumeX, Music, X, MessageCircle } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
-import { useJam } from "@/hooks/useJams";
+import { useRoom, useRoomMessages } from "@/hooks/useRooms";
 import { usePlayer } from "@/contexts/PlayerContext";
 import { usePostAudio } from "@/contexts/PostAudioContext";
 import { formatDuration } from "@/lib/postUtils";
@@ -10,26 +11,38 @@ import { formatDuration } from "@/lib/postUtils";
 export default function StatusBar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const currentJamRoomId = useUIStore((s) => s.currentJamRoomId);
-  const setCurrentJamRoomId = useUIStore((s) => s.setCurrentJamRoomId);
-  const { data: room } = useJam(currentJamRoomId || "");
+  const currentJamRoomHandle = useUIStore((s) => s.currentJamRoomHandle);
+  const setCurrentJamRoomHandle = useUIStore((s) => s.setCurrentJamRoomHandle);
+  const { data: room } = useRoom(currentJamRoomHandle || undefined);
   const player = usePlayer();
   const postAudio = usePostAudio();
 
   const isOnRoomPage = location.pathname.startsWith("/jam/");
 
-  const showJamRoom = currentJamRoomId && room && !isOnRoomPage;
+  // Unread chat badge — track last seen count when on room page
+  const { data: messages = [] } = useRoomMessages(room?.id);
+  const lastSeenCount = useRef(0);
+
+  useEffect(() => {
+    if (isOnRoomPage) {
+      lastSeenCount.current = messages.length;
+    }
+  }, [isOnRoomPage, messages.length]);
+
+  const unreadCount = isOnRoomPage ? 0 : Math.max(0, messages.length - lastSeenCount.current);
+
+  const showJamRoom = currentJamRoomHandle && room && !isOnRoomPage;
   const showPostAudio = postAudio.currentTrack && !postAudio.isCurrentTrackVisible;
 
   // Hide when nothing to show
   if (!showJamRoom && !showPostAudio) return null;
 
   const handleLeave = () => {
-    setCurrentJamRoomId(null);
+    setCurrentJamRoomHandle(null);
   };
 
   const handleGoToRoom = () => {
-    navigate(`/jam/${currentJamRoomId}`);
+    navigate(`/jam/${currentJamRoomHandle}`);
   };
 
   const handleHlsPlayPause = () => {
@@ -66,13 +79,19 @@ export default function StatusBar() {
             <span className="font-semibold truncate max-w-40 text-muted-foreground group-hover:text-foreground transition-colors">
               {room!.name}
             </span>
+            {unreadCount > 0 && (
+              <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold shrink-0 animate-in fade-in duration-200">
+                <MessageCircle className="h-2.5 w-2.5" />
+                {unreadCount}
+              </span>
+            )}
           </button>
 
           <span className="w-px h-3.5 bg-border/50" />
 
           <span className="flex items-center gap-1 text-muted-foreground shrink-0">
             <Users className="h-3 w-3" />
-            <span className="tabular-nums">{room!.participants}/{room!.maxParticipants}</span>
+            <span className="tabular-nums">{room!.participant_count}</span>
           </span>
 
           {room!.genre && (
@@ -81,7 +100,7 @@ export default function StatusBar() {
             </span>
           )}
 
-          {room!.streamUrl && (
+          {room!.stream_url && (
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={handleHlsPlayPause}

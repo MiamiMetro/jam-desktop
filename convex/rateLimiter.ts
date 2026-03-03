@@ -146,6 +146,62 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
     period: MINUTE,
     capacity: 3,
   },
+
+  // Room creation: 3 per hour (users can own max 1)
+  roomCreate: {
+    kind: "token bucket",
+    rate: 3,
+    period: HOUR,
+    capacity: 1,
+  },
+
+  // Room updates: 10 per minute
+  roomUpdate: {
+    kind: "token bucket",
+    rate: 10,
+    period: MINUTE,
+    capacity: 3,
+  },
+
+  // Room activate/deactivate: 10 per minute
+  roomToggle: {
+    kind: "token bucket",
+    rate: 10,
+    period: MINUTE,
+    capacity: 3,
+  },
+
+  // Guest room heartbeat: 6 per minute per session (1 every 10s, some slack)
+  guestRoomHeartbeat: {
+    kind: "token bucket",
+    rate: 6,
+    period: MINUTE,
+    capacity: 2,
+  },
+
+  // Room stream/status updates (server-facing): 10 per minute
+  roomServerUpdate: {
+    kind: "token bucket",
+    rate: 10,
+    period: MINUTE,
+    capacity: 3,
+  },
+
+  // Room chat messages: 30 per minute with burst of 5
+  roomMessageSend: {
+    kind: "token bucket",
+    rate: 30,
+    period: MINUTE,
+    capacity: 5,
+  },
+
+  // Room delete: 3 per hour
+  roomDelete: {
+    kind: "token bucket",
+    rate: 3,
+    period: HOUR,
+    capacity: 1,
+  },
 });
 
 /**
@@ -168,7 +224,14 @@ export type RateLimitName =
   | "createCommunity"
   | "updateCommunity"
   | "joinCommunity"
-  | "communityModAction";
+  | "communityModAction"
+  | "roomCreate"
+  | "roomUpdate"
+  | "roomToggle"
+  | "guestRoomHeartbeat"
+  | "roomServerUpdate"
+  | "roomMessageSend"
+  | "roomDelete";
 
 /**
  * Helper to check rate limit and throw a user-friendly error

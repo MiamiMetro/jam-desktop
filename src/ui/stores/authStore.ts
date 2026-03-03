@@ -3,6 +3,7 @@ import { authClient } from '@/lib/auth-client';
 import type { User } from '@/lib/api/types';
 import { useConvexAuthStore } from '@/hooks/useConvexAuth';
 import { useProfileStore } from '@/hooks/useEnsureProfile';
+import { useUIStore } from './uiStore';
 
 interface AuthState {
   isGuest: boolean;
@@ -30,6 +31,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   setPendingProfile: (profile) => set({ pendingProfile: profile }),
   login: (user) => set({ user, isGuest: false }),
   logout: async () => {
+    useUIStore.getState().setCurrentJamRoomHandle(null);
     await authClient.signOut();
     useConvexAuthStore.getState().setIsAuthSet(false);
     useProfileStore.getState().setProfileReady(false);

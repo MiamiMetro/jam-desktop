@@ -13,20 +13,23 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Globe, Lock, Minus, Plus } from "lucide-react";
+import { ROOM_GENRES } from "@/hooks/useRooms";
 
 export interface RoomFormData {
+  handle: string;
   name: string;
   description: string;
   genre: string;
-  maxParticipants: number;
+  maxPerformers: number;
   isPrivate: boolean;
 }
 
 const EMPTY_FORM: RoomFormData = {
+  handle: "",
   name: "",
   description: "",
   genre: "",
-  maxParticipants: 8,
+  maxPerformers: 5,
   isPrivate: false,
 };
 
@@ -59,6 +62,22 @@ function RoomFormBody({
   return (
     <>
       <div className="space-y-4 py-2">
+        {isCreate && (
+          <div className="space-y-1.5">
+            <Label htmlFor="room-handle" className="text-xs font-medium text-muted-foreground">Handle</Label>
+            <div className="flex items-center gap-0">
+              <span className="px-3 py-2 text-xs text-muted-foreground bg-muted/30 border border-r-0 border-transparent rounded-l-md">jam/</span>
+              <Input
+                id="room-handle"
+                placeholder="chill-vibes"
+                value={form.handle}
+                onChange={(e) => setForm({ ...form, handle: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') })}
+                className="bg-muted/50 border-transparent focus:bg-background focus:border-border rounded-l-none"
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground/60">Permanent URL handle. Letters, numbers, hyphens, underscores.</p>
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label htmlFor="room-name" className="text-xs font-medium text-muted-foreground">Room Name</Label>
           <Input
@@ -80,36 +99,43 @@ function RoomFormBody({
             className="bg-muted/50 border-transparent focus:bg-background focus:border-border resize-none"
           />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="room-genre" className="text-xs font-medium text-muted-foreground">Genre <span className="text-muted-foreground/50">(Optional)</span></Label>
-            <Input
-              id="room-genre"
-              placeholder="e.g., Lo-Fi, Jazz"
-              value={form.genre}
-              onChange={(e) => setForm({ ...form, genre: e.target.value })}
-              className="bg-muted/50 border-transparent focus:bg-background focus:border-border"
-            />
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium text-muted-foreground">Genre <span className="text-muted-foreground/50">(Optional)</span></Label>
+          <div className="flex gap-1.5 flex-wrap">
+            {ROOM_GENRES.map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => setForm({ ...form, genre: form.genre === g ? "" : g })}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-200 cursor-pointer ${
+                  form.genre === g
+                    ? "bg-primary/20 text-primary ring-1 ring-primary/30"
+                    : "glass-solid text-muted-foreground hover:text-foreground hover:ring-1 hover:ring-primary/20"
+                }`}
+              >
+                {g}
+              </button>
+            ))}
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">Max Participants</Label>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setForm({ ...form, maxParticipants: Math.max(2, form.maxParticipants - 1) })}
-                className="h-9 w-9 flex items-center justify-center rounded-md bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              >
-                <Minus className="h-3.5 w-3.5" />
-              </button>
-              <span className="w-8 text-center text-sm font-medium tabular-nums">{form.maxParticipants}</span>
-              <button
-                type="button"
-                onClick={() => setForm({ ...form, maxParticipants: Math.min(20, form.maxParticipants + 1) })}
-                className="h-9 w-9 flex items-center justify-center rounded-md bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-            </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium text-muted-foreground">Max Performers</Label>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, maxPerformers: Math.max(2, form.maxPerformers - 1) })}
+              className="h-9 w-9 flex items-center justify-center rounded-md bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <span className="w-8 text-center text-sm font-medium tabular-nums">{form.maxPerformers}</span>
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, maxPerformers: Math.min(7, form.maxPerformers + 1) })}
+              className="h-9 w-9 flex items-center justify-center rounded-md bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -140,7 +166,7 @@ function RoomFormBody({
             <Lock className={`h-4 w-4 flex-shrink-0 ${form.isPrivate ? "text-primary" : ""}`} />
             <div className="text-left">
               <p className="text-sm font-medium">Private</p>
-              <p className="text-[11px] text-muted-foreground/60">Invite only</p>
+              <p className="text-[11px] text-muted-foreground/60">Friends only</p>
             </div>
           </button>
         </div>
@@ -151,7 +177,7 @@ function RoomFormBody({
         </DialogClose>
         <Button
           onClick={() => onSubmit(form)}
-          disabled={!form.name.trim() || isPending}
+          disabled={!form.name.trim() || (isCreate && !form.handle.trim()) || isPending}
         >
           {submitLabel}
         </Button>

@@ -15,22 +15,22 @@ export default function MainContent() {
 
   // Jam room persistence — keep JamRoom mounted when navigating away
   const jamRoomMatch = location.pathname.match(/^\/jam\/(.+)$/);
-  const urlRoomId = jamRoomMatch ? jamRoomMatch[1] : null;
+  const urlRoomHandle = jamRoomMatch ? jamRoomMatch[1] : null;
 
-  const currentJamRoomId = useUIStore((s) => s.currentJamRoomId);
-  const setCurrentJamRoomId = useUIStore((s) => s.setCurrentJamRoomId);
+  const currentJamRoomHandle = useUIStore((s) => s.currentJamRoomHandle);
+  const setCurrentJamRoomHandle = useUIStore((s) => s.setCurrentJamRoomHandle);
 
-  const jamRoomId = urlRoomId || currentJamRoomId;
+  const jamRoomHandle = urlRoomHandle || currentJamRoomHandle;
 
-  // Only set the store when ENTERING a room (URL changes to a new room ID).
+  // Only set the store when ENTERING a room (URL changes to a new room handle).
   // Don't re-set when store was explicitly cleared by leave handler.
-  const prevUrlRoomId = useRef<string | null>(null);
+  const prevUrlRoomHandle = useRef<string | null>(null);
   useEffect(() => {
-    if (urlRoomId && urlRoomId !== prevUrlRoomId.current) {
-      setCurrentJamRoomId(urlRoomId);
+    if (urlRoomHandle && urlRoomHandle !== prevUrlRoomHandle.current) {
+      setCurrentJamRoomHandle(urlRoomHandle);
     }
-    prevUrlRoomId.current = urlRoomId;
-  }, [urlRoomId, setCurrentJamRoomId]);
+    prevUrlRoomHandle.current = urlRoomHandle;
+  }, [urlRoomHandle, setCurrentJamRoomHandle]);
 
   useScrollRestoration(scrollContainerRef as React.RefObject<HTMLElement>);
 
@@ -55,12 +55,12 @@ export default function MainContent() {
         </div>
 
         {/* JamRoom — kept mounted when active, hidden when on other pages */}
-        {jamRoomId && (
+        {jamRoomHandle && (
           <div
             className="absolute inset-0 overflow-hidden"
             style={{ display: isOnJamRoute ? "block" : "none" }}
           >
-            <JamRoom roomId={jamRoomId} />
+            <JamRoom roomHandle={jamRoomHandle} />
           </div>
         )}
       </div>

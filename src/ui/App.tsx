@@ -23,7 +23,7 @@ function RootRedirect() {
   return <Navigate to={returnPath || "/jams"} replace />;
 }
 
-// Empty placeholder for /jam/:id route — JamRoom is rendered separately for persistence
+// Empty placeholder for /jam/:handle route — JamRoom is rendered separately for persistence
 function JamRouteSlot() {
   return null;
 }
@@ -55,9 +55,9 @@ function App() {
   const location = useLocation();
   const backgroundLocation = (location.state as any)?.backgroundLocation;
 
-  // Clear jam room ID on app startup
+  // Clear jam room handle on app startup
   useEffect(() => {
-    useUIStore.getState().setCurrentJamRoomId(null);
+    useUIStore.getState().setCurrentJamRoomHandle(null);
   }, []);
 
   return (
@@ -74,7 +74,7 @@ function App() {
             <Route path="/profile/:username" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/post/:id" element={<Post />} />
-            <Route path="/jam/:id" element={<JamRouteSlot />} />
+            <Route path="/jam/:handle" element={<JamRouteSlot />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
