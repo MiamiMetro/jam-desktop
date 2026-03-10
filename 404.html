@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>jam-desktop</title>
+  <link rel="icon" type="image/svg+xml" href="/jam-desktop/assets/logo-sidebar-dark-DBOlLIzb.svg" />
+  <script>
+    // Apply theme class BEFORE CSS paints to prevent flash (FOUC)
+    (function() {
+      var theme = localStorage.getItem('theme') || 'system';
+      if (theme === 'system') {
+        var isLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+        document.documentElement.classList.add(isLight ? 'light' : 'dark');
+      } else {
+        document.documentElement.classList.add(theme);
+      }
+    })();
+  </script>
+  <script type="module" crossorigin src="/jam-desktop/assets/index-BID8gK0m.js"></script>
+  <link rel="modulepreload" crossorigin href="/jam-desktop/assets/react-vendor-lLv-rTrD.js">
+  <link rel="modulepreload" crossorigin href="/jam-desktop/assets/query-vendor-i9TbIfmS.js">
+  <link rel="stylesheet" crossorigin href="/jam-desktop/assets/index-2eAtP0NI.css">
+</head>
+
+<body>
+  <div id="root"></div>
+</body>
+
+</html>
