@@ -25,6 +25,9 @@ import { useProfileCatalog, useUpdateProfile, useUser } from "@/hooks/useUsers";
 import { useR2Upload } from "@/hooks/useR2Upload";
 import { useUserPosts, useToggleLike, useDeletePost, type FrontendPost } from "@/hooks/usePosts";
 import { useFriends, useRequestFriend, useSentFriendRequests, useDeleteFriend } from "@/hooks/useFriends";
+import { useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
 import { PostCard } from "@/components/PostCard";
@@ -62,6 +65,10 @@ function Profile() {
     isFetchingNextPage: isLoadingMoreFriends,
   } = useFriends(undefined, profileUser?.id);
   const { data: currentUserFriends = [] } = useFriends();
+  const friendsCount = useQuery(
+    api.friends.getCount,
+    profileUser ? { userId: profileUser.id as Id<"profiles"> } : "skip"
+  );
 
   const requestFriendMutation = useRequestFriend();
   const deleteFriendMutation = useDeleteFriend();
@@ -453,7 +460,7 @@ function Profile() {
                   : "text-muted-foreground hover:text-foreground border-b-transparent"
               }`}
             >
-              <span className="font-semibold text-primary">{profileUserFriends.length}</span>
+              <span className="font-semibold text-primary">{friendsCount ?? profileUserFriends.length}</span>
               <span>Friends</span>
             </button>
           </div>
@@ -572,7 +579,7 @@ function Profile() {
               }`}
             >
               Friends
-              <span className="ml-1.5 text-xs text-muted-foreground">({profileUserFriends.length})</span>
+              <span className="ml-1.5 text-xs text-muted-foreground">({friendsCount ?? profileUserFriends.length})</span>
             </button>
           </div>
 
