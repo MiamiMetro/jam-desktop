@@ -35,4 +35,3 @@ dist-ssr
 *.sw?
 
 resources/client
-docs
