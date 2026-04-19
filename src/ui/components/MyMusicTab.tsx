@@ -1,9 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Disc3,
   Upload,
   Play,
   Pause,
+  Volume2,
+  VolumeX,
   Trash2,
   Music,
   FileAudio,
@@ -50,20 +52,34 @@ function TrackRow({
   const trackId = `mytrack-${track.id}`;
   const isActive = audioCtx.currentTrack?.id === trackId;
   const isPlaying = isActive && audioCtx.isPlaying;
+  const { registerPlayer, unregisterPlayer } = audioCtx;
+
+  useEffect(() => {
+    registerPlayer(trackId);
+    return () => unregisterPlayer(trackId);
+  }, [registerPlayer, unregisterPlayer, trackId]);
 
   const handlePlay = () => {
-    if (!track.audio_url) return;
+    const audioUrl = track.audio_url?.trim();
+    if (!audioUrl) return;
     if (!isActive) {
       audioCtx.play({
         id: trackId,
-        url: track.audio_url,
+        url: audioUrl,
         title: track.title,
         author: track.owner?.username || "You",
-        sourceType: "post",
+        sourceType: "my-track",
       });
     } else {
       audioCtx.togglePlayPause();
     }
+  };
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isActive) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    audioCtx.seek((x / rect.width) * 100);
   };
 
   return (
@@ -76,6 +92,7 @@ function TrackRow({
     >
       {/* Play/Pause Button */}
       <button
+        type="button"
         onClick={handlePlay}
         disabled={!track.audio_url}
         className={`shrink-0 h-9 w-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
@@ -106,20 +123,52 @@ function TrackRow({
             {formatFileSize(track.file_size)}
           </span>
         </div>
+        {isActive && audioCtx.playbackError && (
+          <p className="text-[11px] text-destructive mt-1 truncate">
+            {audioCtx.playbackError}
+          </p>
+        )}
       </div>
 
-      {/* Progress bar for active track */}
+      {/* Active track controls */}
       {isActive && (
-        <div className="w-24 h-1 bg-muted-foreground/20 rounded-full overflow-hidden shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <div
-            className="h-full bg-primary transition-all duration-200"
-            style={{ width: `${audioCtx.progress}%` }}
+            className="w-24 h-1 bg-muted-foreground/20 rounded-full overflow-hidden cursor-pointer"
+            onClick={handleSeek}
+          >
+            <div
+              className="h-full bg-primary transition-all duration-200"
+              style={{ width: `${audioCtx.progress}%` }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={audioCtx.toggleMute}
+            className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+          >
+            {audioCtx.volume === 0 ? (
+              <VolumeX className="h-3.5 w-3.5" />
+            ) : (
+              <Volume2 className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={audioCtx.volume}
+            onChange={(e) => audioCtx.setVolume(parseFloat(e.target.value))}
+            aria-label="Track volume"
+            className="w-16 h-1 accent-primary cursor-pointer"
           />
         </div>
       )}
 
       {/* Delete Button */}
       <button
+        type="button"
         onClick={() => onDelete(track.id)}
         disabled={isDeleting}
         className="shrink-0 h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer disabled:opacity-40"
