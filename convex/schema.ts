@@ -315,7 +315,11 @@ export default defineSchema({
     instrument: v.string(),
     experience: v.string(),
     message: v.optional(v.string()),
+    status: v.optional(
+      v.union(v.literal("pending"), v.literal("accepted"), v.literal("rejected"))
+    ),
     createdAt: v.number(),
+    reviewedAt: v.optional(v.number()),
   })
     .index("by_listing", ["listingId"])
     .index("by_applicant", ["applicantId"])
@@ -334,4 +338,3 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId", "createdAt"]),
 });
-

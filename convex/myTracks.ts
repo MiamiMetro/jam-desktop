@@ -10,7 +10,10 @@ import {
   validateTextLength,
   sanitizeText,
 } from "./helpers";
-import { extractManagedMediaObjectKeyFromUrl } from "./mediaService";
+import {
+  extractManagedMediaObjectKeyFromUrl,
+  resolvePublicMediaUrl,
+} from "./mediaService";
 import { consumeReadyUploadSessionByPublicUrl } from "./uploadSessions";
 import { checkRateLimit } from "./rateLimiter";
 
@@ -35,7 +38,10 @@ async function formatTrack(
     id: track._id,
     owner: ownerProfile ? formatPublicProfileIdentity(ownerProfile) : null,
     title: track.title,
-    audio_url: track.audioUrl ?? "",
+    audio_url: resolvePublicMediaUrl({
+      url: track.audioUrl,
+      objectKey: track.audioObjectKey,
+    }),
     duration: track.duration,
     file_size: track.fileSize,
     content_type: track.contentType,

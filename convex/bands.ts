@@ -76,7 +76,11 @@ async function formatApplication(
     instrument: application.instrument,
     experience: application.experience,
     message: application.message ?? "",
+    status: application.status ?? "pending",
     created_at: new Date(application.createdAt).toISOString(),
+    reviewed_at: application.reviewedAt
+      ? new Date(application.reviewedAt).toISOString()
+      : null,
   };
 }
 
@@ -507,12 +511,90 @@ export const apply = mutation({
       instrument,
       experience,
       message,
+      status: "pending",
       createdAt: Date.now(),
     });
 
     // Increment applications count (denormalized)
     await ctx.db.patch(args.listingId, {
       applicationsCount: listing.applicationsCount + 1,
+    });
+
+    return { success: true };
+  },
+});
+
+/**
+ * Accept a pending application (listing owner only)
+ * Accepted applications increase the listing's current member count.
+ */
+export const acceptApplication = mutation({
+  args: { applicationId: v.id("band_applications") },
+  handler: async (ctx, args) => {
+    const profile = await requireAuth(ctx);
+    await checkRateLimit(ctx, "bandListingAction", profile._id);
+
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) {
+      throw new Error("APPLICATION_NOT_FOUND: Application not found");
+    }
+
+    const listing = await ctx.db.get(application.listingId);
+    if (!listing) {
+      throw new Error("Listing not found");
+    }
+    if (listing.ownerId !== profile._id) {
+      throw new Error("UNAUTHORIZED: Only the listing owner can review applications");
+    }
+    if ((application.status ?? "pending") !== "pending") {
+      throw new Error("APPLICATION_ALREADY_REVIEWED: This application has already been reviewed");
+    }
+    if (listing.currentMembers >= listing.maxMembers) {
+      throw new Error("BAND_FULL: This band is already at capacity");
+    }
+
+    const nextMembers = listing.currentMembers + 1;
+    await ctx.db.patch(args.applicationId, {
+      status: "accepted",
+      reviewedAt: Date.now(),
+    });
+    await ctx.db.patch(application.listingId, {
+      currentMembers: nextMembers,
+      status: nextMembers >= listing.maxMembers ? "closed" : listing.status,
+    });
+
+    return { success: true };
+  },
+});
+
+/**
+ * Reject a pending application (listing owner only)
+ */
+export const rejectApplication = mutation({
+  args: { applicationId: v.id("band_applications") },
+  handler: async (ctx, args) => {
+    const profile = await requireAuth(ctx);
+    await checkRateLimit(ctx, "bandListingAction", profile._id);
+
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) {
+      throw new Error("APPLICATION_NOT_FOUND: Application not found");
+    }
+
+    const listing = await ctx.db.get(application.listingId);
+    if (!listing) {
+      throw new Error("Listing not found");
+    }
+    if (listing.ownerId !== profile._id) {
+      throw new Error("UNAUTHORIZED: Only the listing owner can review applications");
+    }
+    if ((application.status ?? "pending") !== "pending") {
+      throw new Error("APPLICATION_ALREADY_REVIEWED: This application has already been reviewed");
+    }
+
+    await ctx.db.patch(args.applicationId, {
+      status: "rejected",
+      reviewedAt: Date.now(),
     });
 
     return { success: true };
