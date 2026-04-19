@@ -315,10 +315,15 @@ export default defineSchema({
     instrument: v.string(),
     experience: v.string(),
     message: v.optional(v.string()),
+    status: v.optional(
+      v.union(v.literal("pending"), v.literal("accepted"), v.literal("rejected"))
+    ),
+    respondedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_listing", ["listingId"])
     .index("by_applicant", ["applicantId"])
+    .index("by_applicant_and_status", ["applicantId", "status"])
     .index("by_listing_and_applicant", ["listingId", "applicantId"]),
 
   // My tracks — personal music library uploads
@@ -334,4 +339,3 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId", "createdAt"]),
 });
-

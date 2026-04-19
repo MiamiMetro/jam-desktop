@@ -11,6 +11,9 @@ export type BandListing = ListingQueryReturn["page"][number];
 type ApplicationQueryReturn = FunctionReturnType<typeof api.bands.getMyApplicationsPaginated>;
 export type BandApplication = ApplicationQueryReturn["page"][number];
 
+type MyBandsReturn = FunctionReturnType<typeof api.bands.getMyBandsPaginated>;
+export type MyBand = MyBandsReturn["page"][number];
+
 type UserBandListingsReturn = FunctionReturnType<typeof api.bands.getByUserPaginated>;
 export type UserBandListing = UserBandListingsReturn["page"][number];
 
@@ -94,6 +97,22 @@ export const useMyBandApplications = () => {
 
   return {
     data: results as BandApplication[],
+    isLoading: status === "LoadingFirstPage",
+    hasNextPage: status === "CanLoadMore",
+    isFetchingNextPage: status === "LoadingMore",
+    fetchNextPage: () => loadMore(20),
+  };
+};
+
+export const useMyBands = () => {
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.bands.getMyBandsPaginated,
+    {},
+    { initialNumItems: 20 }
+  );
+
+  return {
+    data: results as MyBand[],
     isLoading: status === "LoadingFirstPage",
     hasNextPage: status === "CanLoadMore",
     isFetchingNextPage: status === "LoadingMore",
@@ -222,6 +241,36 @@ export const useApplyToBand = () => {
         instrument: variables.instrument,
         experience: variables.experience,
         message: variables.message,
+      });
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return {
+    mutate: (variables: Parameters<typeof run>[0], options?: MutationOptions) => {
+      run(variables)
+        .then(() => options?.onSuccess?.())
+        .catch((error) => options?.onError?.(error as Error));
+    },
+    mutateAsync: run,
+    isPending,
+  };
+};
+
+export const useRespondToBandApplication = () => {
+  const respondMutation = useMutation(api.bands.respondToApplication);
+  const [isPending, setIsPending] = useState(false);
+
+  const run = async (variables: {
+    applicationId: string;
+    response: "accepted" | "rejected";
+  }) => {
+    setIsPending(true);
+    try {
+      return await respondMutation({
+        applicationId: variables.applicationId as Id<"band_applications">,
+        response: variables.response,
       });
     } finally {
       setIsPending(false);

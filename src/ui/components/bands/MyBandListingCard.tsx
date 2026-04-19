@@ -1,18 +1,49 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, X, XCircle } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, X, XCircle } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { useBandApplications, useCloseBandListing, useDeleteBandListing, type BandListing } from "@/hooks/useBands";
+import {
+  useBandApplications,
+  useCloseBandListing,
+  useDeleteBandListing,
+  useRespondToBandApplication,
+  type BandListing,
+} from "@/hooks/useBands";
 import { LoadMoreButton } from "@/components/LoadMoreButton";
 
 interface MyBandListingCardProps {
   listing: BandListing;
 }
 
+type ApplicationStatus = "pending" | "accepted" | "rejected";
+type ApplicationResponse = "accepted" | "rejected";
+
+const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
+  pending: "Pending",
+  accepted: "Accepted",
+  rejected: "Rejected",
+};
+
+const APPLICATION_STATUS_STYLES: Record<ApplicationStatus, string> = {
+  pending: "bg-amber-500/15 text-amber-500",
+  accepted: "bg-green-500/15 text-green-400",
+  rejected: "bg-destructive/10 text-destructive",
+};
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 export function MyBandListingCard({ listing }: MyBandListingCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [respondingApplication, setRespondingApplication] = useState<{
+    id: string;
+    response: ApplicationResponse;
+  } | null>(null);
   const closeMutation = useCloseBandListing();
   const deleteMutation = useDeleteBandListing();
+  const respondMutation = useRespondToBandApplication();
   const {
     data: applications,
     isLoading: appsLoading,
@@ -34,6 +65,21 @@ export function MyBandListingCard({ listing }: MyBandListingCardProps) {
       await deleteMutation.mutateAsync(listing.id);
     } catch {
       // Error handling is implicit
+    }
+  };
+
+  const handleRespond = async (
+    applicationId: string,
+    response: ApplicationResponse
+  ) => {
+    setActionError(null);
+    setRespondingApplication({ id: applicationId, response });
+    try {
+      await respondMutation.mutateAsync({ applicationId, response });
+    } catch (error: unknown) {
+      setActionError(getErrorMessage(error, "Failed to update application."));
+    } finally {
+      setRespondingApplication(null);
     }
   };
 
@@ -114,26 +160,71 @@ export function MyBandListingCard({ listing }: MyBandListingCardProps) {
             <p className="text-xs text-muted-foreground py-2 text-center">No applications yet</p>
           ) : (
             <div className="space-y-2.5 py-1">
-              {applications.map((app) => (
-                <div key={app.id} className="flex gap-3 py-2 border-b border-border/20 last:border-0">
-                  <Avatar size="sm" className="shrink-0 mt-0.5">
-                    <AvatarImage src={app.applicant?.avatar_url || ""} alt={app.applicant?.username || ""} />
-                    <AvatarFallback className="bg-muted text-muted-foreground text-[10px]">
-                      {app.applicant?.username?.substring(0, 2).toUpperCase() || "?"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-xs font-medium truncate">{app.applicant?.username || "Unknown"}</span>
-                      <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">{app.instrument}</span>
+              {applications.map((app) => {
+                const status = (app.status ?? "pending") as ApplicationStatus;
+                const isPending = status === "pending";
+                const isAccepting =
+                  respondingApplication?.id === app.id &&
+                  respondingApplication.response === "accepted" &&
+                  respondMutation.isPending;
+                const isRejecting =
+                  respondingApplication?.id === app.id &&
+                  respondingApplication.response === "rejected" &&
+                  respondMutation.isPending;
+
+                return (
+                  <div key={app.id} className="flex gap-3 py-2 border-b border-border/20 last:border-0">
+                    <Avatar size="sm" className="shrink-0 mt-0.5">
+                      <AvatarImage src={app.applicant?.avatar_url || ""} alt={app.applicant?.username || ""} />
+                      <AvatarFallback className="bg-muted text-muted-foreground text-[10px]">
+                        {app.applicant?.username?.substring(0, 2).toUpperCase() || "?"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-xs font-medium truncate">{app.applicant?.username || "Unknown"}</span>
+                        <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">{app.instrument}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${APPLICATION_STATUS_STYLES[status]}`}>
+                          {APPLICATION_STATUS_LABELS[status]}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-0.5">{app.experience}</p>
+                      {app.message && (
+                        <p className="text-xs text-muted-foreground/70 italic">"{app.message}"</p>
+                      )}
+                      {isPending && (
+                        <div className="flex items-center gap-1.5 mt-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            onClick={() => handleRespond(app.id, "accepted")}
+                            disabled={respondMutation.isPending}
+                            className="h-6 text-xs text-green-400 hover:text-green-300 hover:bg-green-500/10"
+                          >
+                            <Check className="h-3 w-3 mr-0.5" />
+                            {isAccepting ? "Saving..." : "Accept"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            onClick={() => handleRespond(app.id, "rejected")}
+                            disabled={respondMutation.isPending}
+                            className="h-6 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <XCircle className="h-3 w-3 mr-0.5" />
+                            {isRejecting ? "Saving..." : "Reject"}
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                    <p className="text-xs text-muted-foreground mb-0.5">{app.experience}</p>
-                    {app.message && (
-                      <p className="text-xs text-muted-foreground/70 italic">"{app.message}"</p>
-                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
+              {actionError && (
+                <p className="text-xs text-destructive py-1">{actionError}</p>
+              )}
               <LoadMoreButton
                 hasNextPage={hasNextPage}
                 isFetchingNextPage={false}

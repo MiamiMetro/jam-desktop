@@ -30,6 +30,7 @@ export const BAND_SEEKING_ROLES = [
 export type BandSeekingRole = (typeof BAND_SEEKING_ROLES)[number];
 
 const MAX_ACTIVE_LISTINGS = 3;
+const BAND_APPLICATION_STATUSES = ["accepted", "rejected"] as const;
 
 function normalizeRegion(region: string) {
   return region.trim().toLowerCase();
@@ -76,7 +77,40 @@ async function formatApplication(
     instrument: application.instrument,
     experience: application.experience,
     message: application.message ?? "",
+    status: application.status ?? "pending",
+    responded_at: application.respondedAt
+      ? new Date(application.respondedAt).toISOString()
+      : null,
     created_at: new Date(application.createdAt).toISOString(),
+  };
+}
+
+async function formatJoinedBand(
+  ctx: QueryCtx | MutationCtx,
+  application: Doc<"band_applications">
+) {
+  const listing = await ctx.db.get(application.listingId);
+  if (!listing) return null;
+
+  return {
+    membership_role: "member" as const,
+    listing: await formatListing(ctx, listing),
+    application: await formatApplication(ctx, application),
+    joined_at: application.respondedAt
+      ? new Date(application.respondedAt).toISOString()
+      : null,
+  };
+}
+
+async function formatOwnedBand(
+  ctx: QueryCtx | MutationCtx,
+  listing: Doc<"band_listings">
+) {
+  return {
+    membership_role: "owner" as const,
+    listing: await formatListing(ctx, listing),
+    application: null,
+    joined_at: new Date(listing.createdAt).toISOString(),
   };
 }
 
@@ -95,6 +129,7 @@ export const listPaginated = query({
     search: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const currentProfile = await getCurrentProfile(ctx);
     const hasSearch = args.search && args.search.trim().length > 0;
     const normalizedRegion = args.region?.trim()
       ? normalizeRegion(args.region)
@@ -115,8 +150,11 @@ export const listPaginated = query({
           return query;
         })
         .paginate(args.paginationOpts);
+      const visibleListings = currentProfile
+        ? result.page.filter((listing) => listing.ownerId !== currentProfile._id)
+        : result.page;
       const page = await Promise.all(
-        result.page.map((listing) => formatListing(ctx, listing))
+        visibleListings.map((listing) => formatListing(ctx, listing))
       );
       return { ...result, page };
     }
@@ -157,8 +195,11 @@ export const listPaginated = query({
         .paginate(args.paginationOpts);
     }
 
+    const visibleListings = currentProfile
+      ? result.page.filter((listing) => listing.ownerId !== currentProfile._id)
+      : result.page;
     const page = await Promise.all(
-      result.page.map((listing) => formatListing(ctx, listing))
+      visibleListings.map((listing) => formatListing(ctx, listing))
     );
 
     return { ...result, page };
@@ -297,6 +338,159 @@ export const getMyApplicationsPaginated = query({
     );
 
     return { ...result, page };
+  },
+});
+
+/**
+ * Get bands the current user owns or joined via accepted applications (paginated)
+ */
+export const getJoinedBandsPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const currentProfile = await getCurrentProfile(ctx);
+    if (!currentProfile) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
+    const ownedListings = await ctx.db
+      .query("band_listings")
+      .withIndex("by_owner", (q) => q.eq("ownerId", currentProfile._id))
+      .collect();
+
+    const acceptedApplications = await ctx.db
+      .query("band_applications")
+      .withIndex("by_applicant_and_status", (q) =>
+        q.eq("applicantId", currentProfile._id).eq("status", "accepted")
+      )
+      .collect();
+
+    const memberEntries = (
+      await Promise.all(
+        acceptedApplications.map(async (application) => {
+          const listing = await ctx.db.get(application.listingId);
+          if (!listing || listing.ownerId === currentProfile._id) return null;
+          return {
+            kind: "member" as const,
+            application,
+            sortAt: application.respondedAt ?? application.createdAt,
+          };
+        })
+      )
+    ).filter(
+      (entry): entry is NonNullable<typeof entry> => entry !== null
+    );
+
+    const entries = [
+      ...ownedListings.map((listing) => ({
+        kind: "owner" as const,
+        listing,
+        sortAt: listing.createdAt,
+      })),
+      ...memberEntries,
+    ].sort((a, b) => b.sortAt - a.sortAt);
+
+    const start = args.paginationOpts.cursor
+      ? Number.parseInt(args.paginationOpts.cursor, 10)
+      : 0;
+    const safeStart = Number.isFinite(start) && start > 0 ? start : 0;
+    const end = safeStart + args.paginationOpts.numItems;
+    const entriesPage = entries.slice(safeStart, end);
+
+    const page = await Promise.all(
+      entriesPage.map((entry) =>
+        entry.kind === "owner"
+          ? formatOwnedBand(ctx, entry.listing)
+          : formatJoinedBand(ctx, entry.application)
+      )
+    );
+
+    const visiblePage = page.filter(
+      (band): band is NonNullable<typeof band> => band !== null
+    );
+    const isDone = end >= entries.length;
+
+    return {
+      page: visiblePage,
+      isDone,
+      continueCursor: isDone ? "" : String(end),
+    };
+  },
+});
+
+export const getMyBandsPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const currentProfile = await getCurrentProfile(ctx);
+    if (!currentProfile) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
+    const ownedListings = await ctx.db
+      .query("band_listings")
+      .withIndex("by_owner", (q) => q.eq("ownerId", currentProfile._id))
+      .collect();
+
+    const acceptedApplications = await ctx.db
+      .query("band_applications")
+      .withIndex("by_applicant_and_status", (q) =>
+        q.eq("applicantId", currentProfile._id).eq("status", "accepted")
+      )
+      .collect();
+
+    const memberEntries = (
+      await Promise.all(
+        acceptedApplications.map(async (application) => {
+          const listing = await ctx.db.get(application.listingId);
+          if (!listing || listing.ownerId === currentProfile._id) return null;
+          return {
+            kind: "member" as const,
+            application,
+            sortAt: application.respondedAt ?? application.createdAt,
+          };
+        })
+      )
+    ).filter(
+      (entry): entry is NonNullable<typeof entry> => entry !== null
+    );
+
+    const entries = [
+      ...ownedListings.map((listing) => ({
+        kind: "owner" as const,
+        listing,
+        sortAt: listing.createdAt,
+      })),
+      ...memberEntries,
+    ].sort((a, b) => b.sortAt - a.sortAt);
+
+    const start = args.paginationOpts.cursor
+      ? Number.parseInt(args.paginationOpts.cursor, 10)
+      : 0;
+    const safeStart = Number.isFinite(start) && start > 0 ? start : 0;
+    const end = safeStart + args.paginationOpts.numItems;
+    const entriesPage = entries.slice(safeStart, end);
+
+    const page = await Promise.all(
+      entriesPage.map((entry) =>
+        entry.kind === "owner"
+          ? formatOwnedBand(ctx, entry.listing)
+          : formatJoinedBand(ctx, entry.application)
+      )
+    );
+
+    const visiblePage = page.filter(
+      (band): band is NonNullable<typeof band> => band !== null
+    );
+    const isDone = end >= entries.length;
+
+    return {
+      page: visiblePage,
+      isDone,
+      continueCursor: isDone ? "" : String(end),
+    };
   },
 });
 
@@ -507,6 +701,7 @@ export const apply = mutation({
       instrument,
       experience,
       message,
+      status: "pending",
       createdAt: Date.now(),
     });
 
@@ -516,5 +711,61 @@ export const apply = mutation({
     });
 
     return { success: true };
+  },
+});
+
+/**
+ * Accept or reject a band application (listing owner only)
+ */
+export const respondToApplication = mutation({
+  args: {
+    applicationId: v.id("band_applications"),
+    response: v.union(v.literal("accepted"), v.literal("rejected")),
+  },
+  handler: async (ctx, args) => {
+    const profile = await requireAuth(ctx);
+    await checkRateLimit(ctx, "bandListingAction", profile._id);
+
+    if (!(BAND_APPLICATION_STATUSES as readonly string[]).includes(args.response)) {
+      throw new Error("INVALID_RESPONSE: Invalid application response");
+    }
+
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) throw new Error("Application not found");
+
+    const listing = await ctx.db.get(application.listingId);
+    if (!listing) throw new Error("Listing not found");
+    if (listing.ownerId !== profile._id) {
+      throw new Error("UNAUTHORIZED: Only the listing owner can respond to applications");
+    }
+
+    const currentStatus = application.status ?? "pending";
+    if (currentStatus !== "pending") {
+      throw new Error("ALREADY_RESPONDED: This application has already been reviewed");
+    }
+
+    if (args.response === "accepted" && listing.currentMembers >= listing.maxMembers) {
+      throw new Error("BAND_FULL: This band already has the maximum number of members");
+    }
+
+    const respondedAt = Date.now();
+
+    await ctx.db.patch(args.applicationId, {
+      status: args.response,
+      respondedAt,
+    });
+
+    if (args.response === "accepted") {
+      const nextMembers = listing.currentMembers + 1;
+      await ctx.db.patch(listing._id, {
+        currentMembers: nextMembers,
+        status: nextMembers >= listing.maxMembers ? "closed" : listing.status,
+      });
+    }
+
+    const updatedApplication = await ctx.db.get(args.applicationId);
+    if (!updatedApplication) throw new Error("Failed to update application");
+
+    return await formatApplication(ctx, updatedApplication);
   },
 });
